@@ -10,7 +10,8 @@
     if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', mode);
     const button = document.getElementById('theme-toggle');
-    if (button) { button.textContent = icons[mode]; button.title = labels[mode]; button.setAttribute('aria-label', labels[mode]); }
+    const tr = typeof t === 'function' ? t : text => text;
+    if (button) { button.textContent = tr(icons[mode]); button.title = tr(labels[mode]); button.setAttribute('aria-label', tr(labels[mode])); }
   }
   apply(stored());
   window.kilowatchTheme = {

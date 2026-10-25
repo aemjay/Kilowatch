@@ -2,7 +2,7 @@
 // DOM unit tests with synthetic API replies. No browser, network or real accounts.
 const assert = require('node:assert/strict');
 const {test} = require('node:test');
-const {readFileSync} = require('node:fs');
+const {existsSync,readFileSync} = require('node:fs');
 const {join} = require('node:path');
 const {Script} = require('node:vm');
 const {JSDOM, VirtualConsole} = require('jsdom');
@@ -35,9 +35,16 @@ async function harness(options={}) {
     url:'http://kilowatch.test/#'+(options.page||'settings'),runScripts:'outside-only',virtualConsole:vc});
   const w=dom.window;
   w.setInterval=()=>0;
+  // jsdom meldet en-US: Sprache festlegen, damit die deutschen Erwartungen gelten.
+  w.localStorage.setItem('kilowatch-language',options.language||'de');
   w.URL.createObjectURL=()=> 'blob:http://kilowatch.test/synthetic';
   w.URL.revokeObjectURL=()=>{};
   w.fetch=async(path,config={})=>{
+    if(path.startsWith('/i18n/')){
+      const file=join(root,path);
+      const catalog=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{};
+      return {ok:true,status:200,json:async()=>structuredClone(catalog)};
+    }
     const body=config.body?JSON.parse(config.body):null;
     calls.push({path,method:config.method||'GET',body,headers:config.headers});
     let data={ok:true},status=200;
@@ -68,7 +75,7 @@ async function harness(options={}) {
     else if(path==='/api/bridge/test')data={protocol:'SML',endpoint:'/node_data.json',resolved_addresses:['192.168.1.10'],has_import:true};
     return {ok:status===200,status,json:async()=>structuredClone(data),blob:async()=>new w.Blob(['synthetic-image'],{type:'image/png'})};
   };
-  for(const name of ['theme.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
+  for(const name of ['theme.js','i18n.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
     !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
