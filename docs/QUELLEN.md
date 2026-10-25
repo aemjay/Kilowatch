@@ -32,3 +32,12 @@ FQDN-Verhalten wird mit wechselnden simulierten DNS-Antworten getestet. Ob die e
 ## Börsenpreise
 
 [aWATTar/tado° DE API](https://energy.tado.com/services/api): veröffentlichte Börsenwerte mit Millisekunden-Zeitstempeln und Einheit EUR/MWh. Daraus werden keine vollständigen Vertragspreise abgeleitet.
+
+## Strommix und CO₂
+
+[Energy-Charts API](https://api.energy-charts.info/) des Fraunhofer ISE, Daten unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), Quellenangabe „Energy-Charts.info“ in der Oberfläche:
+
+- `co2eq`: CO₂-Äquivalente in g/kWh je Viertelstunde für das gewählte Land. Veröffentlichte Werte erscheinen mit etwa 8 bis 12 Stunden Verzögerung. Die mitgelieferte Prognosereihe springt an der Übergangsstelle teils um ein Vielfaches (z. B. Niederlande 132 → 16 g/kWh) und wird deshalb nicht verwendet. Die Methodik beschreibt die Schnittstelle nicht. Ein Abgleich mit dem veröffentlichten Erzeugungsmix (`public_power`) passt zu Lebenszyklus-Faktoren (inklusive Vorketten), nicht zu reinen Verbrennungsemissionen; Kilowatch weist die Werte deshalb als Schätzung der Quelle aus.
+- `public_power`: Reihe „Renewable share of load“ (Anteil erneuerbarer Erzeugung an der Last) je Viertelstunde.
+
+Die Bilanz multipliziert den Netzbezug jeder Viertelstunde mit dem gemessenen Wert derselben Viertelstunde. Einspeisung wird nicht gegengerechnet, Bezug ohne veröffentlichten Wert wird getrennt ausgewiesen. Meldet die Schnittstelle `deprecated`, zeigt Kilowatch einen Hinweis.

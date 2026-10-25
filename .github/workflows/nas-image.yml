@@ -228,5 +228,7 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Kilowatch ${TAG#v}" --generate-notes "${CREATE_ARGS[@]}"
+            # Schemastand für den Update-Hinweis ("Update ändert die Datenbank"); GitHub stellt ihn den erzeugten Notizen voran.
+            SCHEMA="$(python3 -c 'from app.storage import SCHEMA_VERSION; print(SCHEMA_VERSION)')"
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Kilowatch ${TAG#v}" --notes "<!-- schema: $SCHEMA -->" --generate-notes "${CREATE_ARGS[@]}"
           fi

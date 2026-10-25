@@ -27,6 +27,7 @@ from .network import local_request
 from .discovery import Discovery, suggestions
 from .market import Market
 from .updates import Updates
+from .grid import COUNTRIES, Grid
 from . import insights
 from .i18n import CURRENCIES, LANGUAGES, UserError, translate_error
 
@@ -71,6 +72,14 @@ class SettingsUpdate(StrictModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     language: str | None = None
     currency: str | None = None
+    grid_country: str | None = None
+
+    @field_validator("grid_country")
+    @classmethod
+    def valid_grid_country(cls, v):
+        if v is not None and v not in ("", *COUNTRIES):
+            raise ValueError("Land für den Strommix wird nicht unterstützt.")
+        return v
 
     @field_validator("language")
     @classmethod
@@ -242,6 +251,7 @@ def create_app(config=None):
     discovery = Discovery()
     market = Market(store, config.demo)
     updates = Updates(store, config.update_repository, config.demo)
+    grid = Grid(store, config.demo)
     sessions, attempts = {}, {}
     # Setup-Code zusätzlich als Datei im Datenordner, damit er ohne Container-Protokoll in der
     # File Station lesbar ist. Wer den Ordner lesen kann, hätte auch Zugriff auf das Protokoll.
@@ -278,7 +288,7 @@ def create_app(config=None):
             from .demo import seed
             await asyncio.to_thread(seed, store)
         tasks = [asyncio.create_task(collector.run()), asyncio.create_task(notifier.run()),
-                 asyncio.create_task(updates.run())] if not config.testing else []
+                 asyncio.create_task(updates.run()), asyncio.create_task(grid.run())] if not config.testing else []
         yield
         for task in tasks:
             task.cancel()
@@ -294,6 +304,7 @@ def create_app(config=None):
     app.state.config = config
     app.state.auth, app.state.vault, app.state.notifier = auth, vault, notifier
     app.state.updates = updates
+    app.state.grid = grid
 
     def language(request):
         """Sprache der Anfrage (Kopfzeile der Oberfläche), sonst die gespeicherte Einstellung."""
@@ -414,6 +425,8 @@ def create_app(config=None):
             vault.update({"bridge_password": password})
         store.update_settings(values)
         collector.wakeup.set()
+        if "grid_country" in values:
+            grid.wakeup.set()
         return {"ok": True, "password_configured": bool(get_password())}
 
     @app.delete("/api/credentials/bridge")
@@ -527,7 +540,8 @@ def create_app(config=None):
         monthly_kwh = store.state("budget", {}).get("monthly_kwh")
         targets = {"daily_kwh": monthly_kwh * 12 / 365.25 if monthly_kwh else None}
         return {"summary": a.summary(s, e), "previous": previous, "series": a.series(s, e),
-                "gaps": store.gap_rows(s, e), "timezone": a.zone, "targets": targets}
+                "gaps": store.gap_rows(s, e), "timezone": a.zone, "targets": targets,
+                "co2": grid.balance(store.bucket_rows(s, e), s, e)}
 
     @app.get("/api/analysis")
     def analysis(start: str | None = None, end: str | None = None, hours: int | None = None):

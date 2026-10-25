@@ -21,7 +21,7 @@ def seed(store, now=None):
     if store.latest():
         return
     now = now or time.time()
-    store.update_settings({"max_gap_seconds": 1000, "name": "Beispielhaushalt"})
+    store.update_settings({"max_gap_seconds": 1000, "name": "Beispielhaushalt", "grid_country": "de"})
     with store.transaction():
         store.conn.execute("INSERT OR REPLACE INTO tariffs VALUES(?,?,?,?,?,?)", ("2020-01-01", "Beispieltarif", "fixed", .32, 12.9, .08))
     start = int((now - 35 * 86400) // 900) * 900

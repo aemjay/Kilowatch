@@ -15,7 +15,7 @@ DEFAULTS = {
     "max_gap_seconds": 90, "max_power_w": 100000,
     "raw_retention_days": 90, "minute_retention_days": 1095,
     "high_load_w": 3000, "name": "Mein Zuhause",
-    "language": "", "currency": "EUR",
+    "language": "", "currency": "EUR", "grid_country": "",
 }
 
 
@@ -23,10 +23,16 @@ def _spot_prices(conn):
     conn.execute("CREATE TABLE IF NOT EXISTS spot_prices(start INTEGER PRIMARY KEY,end INTEGER NOT NULL,eur_mwh REAL NOT NULL)")
 
 
+def _grid_intensity(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS grid_intensity(country TEXT NOT NULL,start INTEGER NOT NULL,g_kwh REAL,"
+                 "renewable_share REAL,PRIMARY KEY(country,start))")
+
+
 # Geordnete Schemaänderungen. Nur hinzufügen (Tabellen, Spalten, Indizes); Entfernen
 # frühestens in der nächsten Hauptversion. Jede Stufe läuft in einer eigenen Transaktion.
 MIGRATIONS = [
     (2, _spot_prices),
+    (3, _grid_intensity),
 ]
 SCHEMA_VERSION = max([1] + [target for target, _ in MIGRATIONS])
 
