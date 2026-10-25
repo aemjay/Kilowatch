@@ -116,3 +116,21 @@ def test_cheaper_flat_price_shows_negative_paired_difference(seeded):
     start, end = midnight("2026-10-01", "Europe/Berlin"), midnight("2026-10-08", "Europe/Berlin")
     result = insights.simulate(a, start, end, {"mode": "fixed", "eur_kwh": .22, "base_month": 12.9, "feedin_eur_kwh": .08})
     assert result["difference_eur"] == pytest.approx(-0.10 * result["priced_kwh"], rel=1e-6)
+
+
+def test_household_reference_follows_stromspiegel_table():
+    from app.insights import household_reference
+    assert household_reference({"household_persons": 0}) is None
+    assert household_reference({"household_persons": 2, "household_type": "apartment", "household_hot_water": False})["annual_kwh"] == 1900
+    assert household_reference({"household_persons": 4, "household_type": "house", "household_hot_water": False})["annual_kwh"] == 3800
+    assert household_reference({"household_persons": 5, "household_type": "house", "household_hot_water": True})["annual_kwh"] == 6000
+    assert "Stromspiegel" in household_reference({"household_persons": 1})["source"]
+
+
+def test_household_settings_are_validated_and_offered_as_reference(authenticated):
+    assert authenticated.get("/api/overview").json()["targets"]["household"] is None
+    assert authenticated.put("/api/settings", json={"household_persons": 6}).status_code in (400, 422)
+    assert authenticated.put("/api/settings", json={"household_type": "castle"}).status_code in (400, 422)
+    assert authenticated.put("/api/settings", json={"household_persons": 3, "household_type": "house", "household_hot_water": True}).status_code == 200
+    assert authenticated.get("/api/overview").json()["targets"]["household"]["annual_kwh"] == 4100
+    assert authenticated.get("/api/budget").json()["reference"]["annual_kwh"] == 4100

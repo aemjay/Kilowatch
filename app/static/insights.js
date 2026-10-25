@@ -79,8 +79,15 @@ function budgetStatus(data) {
     lines.push(stat(t('Hochrechnung Jahr'),`${unit(a.annual_eur,'€',0)} (${unit(a.low_eur,'€',0)} – ${unit(a.high_eur,'€',0)})`));
     if(a.abschlag_year_eur!=null)lines.push(stat(t('12 × Abschlag'),unit(a.abschlag_year_eur,'€',0)+' · '+(a.difference_eur>0?t('voraussichtlich Nachzahlung ca. {amount}',{amount:unit(a.difference_eur,'€',0)}):t('voraussichtlich Guthaben ca. {amount}',{amount:unit(-a.difference_eur,'€',0)}))));
   } else lines.push(stat(t('Hochrechnung Jahr'),a.reason?t(a.reason):t('Noch nicht möglich')));
+  const ref=data.reference;
+  if(ref){
+    // Vergleich der eigenen Hochrechnung mit dem typischen Haushalt gleicher Größe.
+    const share=a.available&&a.annual_kwh?a.annual_kwh/ref.annual_kwh-1:null;
+    lines.push(stat(t('Typischer Haushalt pro Jahr'),unit(ref.annual_kwh,'kWh',0)+(share==null?'':' · '+(share>=0?t('du liegst {percent} % darüber',{percent:number(share*100,0)}):t('du liegst {percent} % darunter',{percent:number(-share*100,0)})))));
+  }
   const note=a.available?`<p class="copy-footnote">${esc(t(a.method))} ${esc(t('Grundlage: {count} vollständig erfasste Tage',{count:a.valid_days}))}${a.full_year?'':esc(t(' (weniger als ein Jahr)'))}.</p>`:'';
-  return `<div class="stats-list">${lines.join('')}</div>${note}`;
+  const refNote=ref?`<p class="copy-footnote">${esc(t('{household} laut {source}; Gesamtverbrauch, mit eigener PV liegt der Netzbezug darunter.',{household:householdText(ref),source:ref.source}))}</p>`:'';
+  return `<div class="stats-list">${lines.join('')}</div>${note}${refNote}`;
 }
 
 async function mountBudget() {
@@ -88,7 +95,7 @@ async function mountBudget() {
   const data=await api('/api/budget').catch(error=>{toast(error.message,true);return null;});
   if(!data||!slot.isConnected||$('#budget-slot')!==slot)return;
   const s=data.settings,value=v=>v==null?'':esc(v);
-  const form=`<form id="budget-form"><div class="form-grid"><label>${t('Monatsbudget (€)')}<input name="monthly_eur" type="number" step="1" min="1" value="${value(s.monthly_eur)}" placeholder="${esc(t('optional'))}"></label><label>${t('Monatsziel Bezug (kWh)')}<input name="monthly_kwh" type="number" step="1" min="1" value="${value(s.monthly_kwh)}" placeholder="${esc(t('optional'))}"></label><label>${t('Monatlicher Abschlag (€)')}<input name="abschlag_eur" type="number" step=".01" min="1" value="${value(s.abschlag_eur)}" placeholder="${esc(t('optional'))}"></label></div><div class="form-actions"><button type="submit" class="secondary">${t('Speichern')}</button></div></form>`;
+  const form=`<form id="budget-form"><div class="form-grid"><label>${t('Monatsbudget (€)')}<input name="monthly_eur" type="number" step="1" min="1" value="${value(s.monthly_eur)}" placeholder="${esc(t('optional'))}"></label><label>${t('Monatsziel Bezug (kWh)')}<input name="monthly_kwh" type="number" step="1" min="1" value="${value(s.monthly_kwh)}" placeholder="${esc(t('optional'))}">${data.reference?`<small>${esc(t('Typischer Haushalt: etwa {value} pro Monat',{value:unit(data.reference.annual_kwh/12,'kWh',0)}))}</small>`:''}</label><label>${t('Monatlicher Abschlag (€)')}<input name="abschlag_eur" type="number" step=".01" min="1" value="${value(s.abschlag_eur)}" placeholder="${esc(t('optional'))}"></label></div><div class="form-actions"><button type="submit" class="secondary">${t('Speichern')}</button></div></form>`;
   slot.innerHTML=panel(t('Budget & Abschlag'),'',budgetStatus(data)+'<div class="divider"></div>'+form+`<p class="copy-footnote">${t('Eine Benachrichtigung bei erreichtem Monatsbudget lässt sich unter Benachrichtigungen einschalten.')}</p>`);
   $('#budget-form').addEventListener('submit',safely(async event=>{event.preventDefault();const v=Object.fromEntries(new FormData(event.target));const body={};for(const key of ['monthly_eur','monthly_kwh','abschlag_eur'])body[key]=v[key]===''?null:Number(v[key]);await api('/api/budget','PUT',body);toast(t('Budget gespeichert.'));await mountBudget();}));
 }

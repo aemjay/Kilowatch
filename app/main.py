@@ -73,6 +73,16 @@ class SettingsUpdate(StrictModel):
     language: str | None = None
     currency: str | None = None
     grid_country: str | None = None
+    household_persons: int | None = Field(default=None, ge=0, le=5)
+    household_type: str | None = None
+    household_hot_water: bool | None = None
+
+    @field_validator("household_type")
+    @classmethod
+    def valid_household_type(cls, v):
+        if v is not None and v not in ("apartment", "house"):
+            raise ValueError("Wohnform muss Wohnung oder Haus sein.")
+        return v
 
     @field_validator("grid_country")
     @classmethod
@@ -538,7 +548,8 @@ def create_app(config=None):
         previous = a.summary(previous_start, previous_end) if previous_end > previous_start else None
         # Referenzwert für Tagesbalken: Monatsziel als durchschnittlicher Tagesanteil.
         monthly_kwh = store.state("budget", {}).get("monthly_kwh")
-        targets = {"daily_kwh": monthly_kwh * 12 / 365.25 if monthly_kwh else None}
+        targets = {"daily_kwh": monthly_kwh * 12 / 365.25 if monthly_kwh else None,
+                   "household": insights.household_reference(store.settings())}
         return {"summary": a.summary(s, e), "previous": previous, "series": a.series(s, e),
                 "gaps": store.gap_rows(s, e), "timezone": a.zone, "targets": targets,
                 "co2": grid.balance(store.bucket_rows(s, e), s, e)}
@@ -572,7 +583,8 @@ def create_app(config=None):
         saved = store.state("budget", {})
         a, now = Analytics(store), time.time()
         return {"settings": Budget(**saved).model_dump(), "month": insights.month_budget(a, now, saved),
-                "annual": insights.annual_projection(a, now, saved.get("abschlag_eur"))}
+                "annual": insights.annual_projection(a, now, saved.get("abschlag_eur")),
+                "reference": insights.household_reference(store.settings())}
 
     @app.put("/api/budget")
     def save_budget(data: Budget):

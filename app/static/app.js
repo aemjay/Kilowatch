@@ -103,7 +103,8 @@ function powerPanel(data) {
     // Der laufende Tag oder Monat ist unvollständig und würde Ø und Trend nach unten ziehen.
     : {chart:'energy-'+data.series.group, data:Date.now()/1000-data.summary.end<300?data.series.energy.slice(0,-1):data.series.energy, field:'import_kwh', xField:'ts', byCount:true,
        window:data.series.group==='day'?7:3, windowLabel:data.series.group==='day'?t('7 Tage'):t('3 Monate'),
-       references:data.series.group==='day'?[{key:'target', label:t('Tagesziel {value}',{value:unit(data.targets?.daily_kwh,'kWh',1)}), value:data.targets?.daily_kwh??null}]:[]};
+       references:[...(data.series.group==='day'?[{key:'target', label:t('Tagesziel {value}',{value:unit(data.targets?.daily_kwh,'kWh',1)}), value:data.targets?.daily_kwh??null}]:[]),
+         ...householdReference(data.targets?.household, data.series.group)]};
   const overlays = buildOverlays(spec);
   const chart = overlayToggles(spec) + (isShort ? lineChart(data.series.power,'power_w','W','ts',{start:data.summary.start,end:data.summary.end,overlays}) : barChart(data.series.energy,'import_kwh','kWh',overlays));
   return panel(isShort?t('So fließt dein Strom.'):t('Dein Verbrauch im Verlauf.'),raw?t('Einzelne Messwerte im Abfrageintervall · positive Werte = Bezug'):isShort?t('Mittlere Netzleistung je Zeitabschnitt · positive Werte = Bezug'):t('Verbrauch aus den Zählerständen · zeitlich zugeordnete Energie'),chart+`<div class="chart-note"><span>${isShort?t('Leere Stellen zeigen fehlende Messdaten.'):t('Nicht zeitlich zuordenbare Lückenenergie ist separat ausgewiesen.')}</span><span>${isShort?t('ZEIT'):t('DATUM')}</span></div>`,`<div class="legend"><span><i></i>${isShort?t('Netzleistung'):t('Netzbezug')}</span></div>`);
@@ -122,6 +123,19 @@ function updateLiveParts() {
   const powerNode=$('#live-power'); if(powerNode)powerNode.textContent=number(valid?live.reading.power_w:null,0);
   const ageNode=$('#live-age'); if(ageNode)ageNode.textContent=live.reading?t('Letzte Messung vor {seconds} s',{seconds:number(live.age_seconds,0)}):t('Noch keine Messung');
 }
+
+// Vergleichswert eines typischen Haushalts (Stromspiegel) als Text, z. B. „2 Personen in einer Wohnung“.
+function householdText(ref) {
+  const where=ref.type==='house'?t('{count} Person(en) im Haus',{count:ref.persons}):t('{count} Person(en) in einer Wohnung',{count:ref.persons});
+  return where+(ref.hot_water?t(' mit elektrischem Warmwasser'):'');
+}
+// Referenzlinie für Tages- oder Monatsbalken: Jahreswert des typischen Haushalts anteilig.
+function householdReference(ref, group) {
+  if(!ref)return [];
+  const value=group==='day'?ref.annual_kwh/365.25:ref.annual_kwh/12;
+  return [{key:'household', label:t('Typischer Haushalt {value}',{value:unit(value,'kWh',1)}), value}];
+}
+function householdShare(ref, seconds) { return ref ? ref.annual_kwh*seconds/(365.25*86400) : null; }
 
 const GRID_COUNTRIES={de:tk('Deutschland'),nl:tk('Niederlande'),no:tk('Norwegen'),se:tk('Schweden')};
 
@@ -149,7 +163,9 @@ function renderDashboard(data) {
   const reading=live.reading;
   const flow=`<div class="flow"><div class="flow-end"><div class="flow-icon">♧</div><small>${t('STROMNETZ')}</small></div><div class="flow-line"></div><div class="flow-end"><div class="flow-icon">⌂</div><small>${t('ZU HAUSE')}</small></div></div><div class="stats-list">${stat(t('Bezug im Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Einspeisung'),unit(s.export_kwh,'kWh',2))}${stat(t('Bezugszähler'),unit(reading?.import_kwh,'kWh',3))}${stat(t('Einspeisezähler'),unit(reading?.export_kwh,'kWh',3))}</div><div class="divider"></div>${coverage(s)}<p id="live-age" class="copy-footnote">${reading?t('Letzte Messung vor {seconds} s',{seconds:number(live.age_seconds,0)}):t('Noch keine Messung')}</p>`;
   const quality=panel(t('Datenqualität'),'',`<div class="insight"><span class="insight-icon">◉</span><div><h3>${s.coverage>.98?t('Dein Zeitraum ist gut erfasst.'):t('Deine Historie entsteht ab jetzt.')}</h3><p>${esc(totalNote(s))}. ${s.crossing_gaps?t('Eine Lücke reicht über die Zeitraumgrenze. Ihre Energiemenge bleibt außerhalb dieser Summe.'):''}</p></div></div>`);
-  const compare=panel(t('Vorperiode'),'',p?`<div class="stats-list">${stat(t('Ausgewählter Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Vorperiode'),unit(p.import_kwh,'kWh',2))}${stat(t('Abdeckung der Vorperiode'),unit(p.coverage*100,'%',1))}${stat(t('Vergleich bis'),localTime(p.end,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}</div>`:empty(t('Vergleich noch nicht verfügbar.')));
+  const household=data.targets?.household;
+  const typical=household?`<div class="divider"></div><div class="stats-list">${stat(t('Typischer Haushalt im Zeitraum'),unit(householdShare(household,s.end-s.start),'kWh',2))}</div><p class="copy-footnote">${esc(t('{household} laut {source}; Gesamtverbrauch, mit eigener PV liegt der Netzbezug darunter.',{household:householdText(household),source:household.source}))}</p>`:'';
+  const compare=panel(t('Vorperiode'),'',(p?`<div class="stats-list">${stat(t('Ausgewählter Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Vorperiode'),unit(p.import_kwh,'kWh',2))}${stat(t('Abdeckung der Vorperiode'),unit(p.coverage*100,'%',1))}${stat(t('Vergleich bis'),localTime(p.end,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}</div>`:empty(t('Vergleich noch nicht verfügbar.')))+typical);
   $('#page-dashboard').innerHTML=cards+`<div class="grid-main"><div>${powerPanel(data)}${quality}</div><div>${panel(t('Bezug und Einspeisung'),'',flow)}${co2Panel(data.co2)}${compare}</div></div>`;
   mountOverlayToggles($('#page-dashboard'),()=>renderDashboard(overview));
 }
