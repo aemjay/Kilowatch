@@ -63,13 +63,13 @@ async function harness(options={}) {
     }else if(path==='/api/notifications')data=notes;
     else if(path==='/api/discovery/network')data={suggestions:[{network:'192.168.1.0/24',reason:'Synthetic network'}]};
     else if(path==='/api/discovery/scan')data={network:body.network,checked:254,devices:[{ip:'192.168.1.10',host:'bridge.fritz.box',fqdn:'bridge.fritz.box'}]};
-    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null},co2:options.co2??null,
+    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null,household:options.household??null},co2:options.co2??null,
       series:{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:i*60,power_w:i===30?4000:300+i,seconds:60}))}};
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
     else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market};
     else if(path==='/api/market/refresh'){market={rows:[{start:1800,end:5400,ct_kwh:-5}],fetched_at:2000000000,error:''};data=market;}
     else if(path==='/api/budget'&&config.method==='PUT'){budget.settings=body;}
-    else if(path==='/api/budget')data=budget;
+    else if(path==='/api/budget')data={...budget,reference:options.household??null};
     else if(path==='/api/simulate')data={energy_cost_eur:10,base_cost_eur:2,feedin_eur:0,total_eur:12,actual_total_eur:13,priced_share:.5,average_eur_kwh:.3,comparable:false,paired_share:.5,difference_eur:-1.25,spot_weighted_ct:9,spot_time_average_ct:8};
     else if(path==='/api/updates')data={enabled:false,current:'1.0.0',repository:'example/kilowatch',checked_at:null,error:'',available:false};
     else if(path==='/api/credentials/bridge'){saved.password_configured=false;saved.enabled=false;saved.setup_required=true;}
@@ -343,5 +343,21 @@ test('dashboard shows the CO2 balance with source and the settings choose the gr
   assert.equal(w.document.querySelector('#grid-form [name="grid_country"]').value,'de');
   input(w,'grid-form','grid_country','');submit(w,'grid-form');
   await until(()=>h.calls.some(c=>c.method==='PUT'&&c.body?.grid_country===''));
+  assert.deepEqual(h.errors,[]);
+});
+
+test('typical household reference appears in budget, comparison and settings',async t=>{
+  const household={annual_kwh:2700,persons:2,type:'house',hot_water:false,source:'Stromspiegel für Deutschland (co2online), Stand 05/2025'};
+  const h=await harness({page:'costs',household,settings:{setup_required:false,household_persons:2,household_type:'house'}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#budget-form'));
+  const costs=w.document.querySelector('#page-costs').textContent;
+  assert.match(costs,/Typischer Haushalt pro Jahr2\.700 kWh/);
+  assert.match(costs,/Typischer Haushalt: etwa 225 kWh pro Monat/);
+  assert.match(costs,/2 Personen im Haus laut Stromspiegel/);
+  w.document.querySelector('[data-page="settings"]').click();
+  await until(()=>!!w.document.querySelector('#household-form'));
+  input(w,'household-form','household_persons','4');input(w,'household-form','household_hot_water','true');submit(w,'household-form');
+  await until(()=>h.calls.some(c=>c.method==='PUT'&&c.body?.household_persons===4));
+  assert.deepEqual(h.calls.find(c=>c.body?.household_persons===4).body,{household_persons:4,household_type:'house',household_hot_water:true});
   assert.deepEqual(h.errors,[]);
 });

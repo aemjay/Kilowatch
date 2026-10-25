@@ -41,3 +41,17 @@ FQDN-Verhalten wird mit wechselnden simulierten DNS-Antworten getestet. Ob die e
 - `public_power`: Reihe „Renewable share of load“ (Anteil erneuerbarer Erzeugung an der Last) je Viertelstunde.
 
 Die Bilanz multipliziert den Netzbezug jeder Viertelstunde mit dem gemessenen Wert derselben Viertelstunde. Einspeisung wird nicht gegengerechnet, Bezug ohne veröffentlichten Wert wird getrennt ausgewiesen. Meldet die Schnittstelle `deprecated`, zeigt Kilowatch einen Hinweis.
+
+## Vergleichswerte typischer Haushalte
+
+[Stromspiegel für Deutschland (co2online), Stand 13.05.2025](https://www.stromspiegel.de/stromverbrauch-verstehen/stromverbrauch-im-haushalt/): durchschnittlicher Jahresverbrauch in kWh.
+
+| Personen | Wohnung | Wohnung, Warmwasser elektrisch | Haus | Haus, Warmwasser elektrisch |
+|---|---|---|---|---|
+| 1 | 1.200 | 1.600 | 1.800 | 2.100 |
+| 2 | 1.900 | 2.500 | 2.700 | 3.200 |
+| 3 | 2.400 | 3.500 | 3.500 | 4.100 |
+| 4 | 2.600 | 4.000 | 3.800 | 4.700 |
+| 5 | 3.100 | 5.000 | 4.500 | 6.000 |
+
+Elektrische Heizung, Wärmepumpe und E-Auto sind nicht enthalten. Die Werte beschreiben den gesamten Haushaltsstrom; mit eigener PV ist der gemessene Netzbezug niedriger. Für die Niederlande, Norwegen und Schweden fand sich keine vergleichbare, nach Haushaltsgröße aufgeschlüsselte Primärquelle; die Oberfläche weist darauf hin.

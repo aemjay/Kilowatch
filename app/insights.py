@@ -220,3 +220,24 @@ def annual_projection(analytics, now, abschlag_eur):
         result["abschlag_year_eur"] = abschlag_eur * 12
         result["difference_eur"] = annual_eur - abschlag_eur * 12
     return result
+
+
+# Durchschnittlicher Jahresverbrauch deutscher Haushalte in kWh nach Wohnform, Personen und Warmwasser
+# (Stromspiegel für Deutschland, co2online, Stand 05/2025). Gilt für den gesamten Haushaltsstrom;
+# mit eigener PV liegt der gemessene Netzbezug darunter.
+STROMSPIEGEL = {
+    ("apartment", False): (1200, 1900, 2400, 2600, 3100),
+    ("apartment", True): (1600, 2500, 3500, 4000, 5000),
+    ("house", False): (1800, 2700, 3500, 3800, 4500),
+    ("house", True): (2100, 3200, 4100, 4700, 6000),
+}
+REFERENCE_SOURCE = "Stromspiegel für Deutschland (co2online), Stand 05/2025"
+
+
+def household_reference(settings):
+    persons = settings.get("household_persons") or 0
+    if not 1 <= persons <= 5:
+        return None
+    kind, hot_water = settings.get("household_type", "apartment"), bool(settings.get("household_hot_water"))
+    return {"annual_kwh": STROMSPIEGEL[(kind, hot_water)][persons - 1], "persons": persons, "type": kind,
+            "hot_water": hot_water, "source": REFERENCE_SOURCE}

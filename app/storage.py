@@ -16,6 +16,7 @@ DEFAULTS = {
     "raw_retention_days": 90, "minute_retention_days": 1095,
     "high_load_w": 3000, "name": "Mein Zuhause",
     "language": "", "currency": "EUR", "grid_country": "",
+    "household_persons": 0, "household_type": "apartment", "household_hot_water": False,
 }
 
 

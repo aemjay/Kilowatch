@@ -21,6 +21,7 @@ Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer)
 | Verlauf | Letzte Stunde (Einzelwerte im Abfrageintervall), letzte 6 Stunden (Minutenwerte), Tag, Woche, Monat, Jahr, eigener Zeitraum, Vorperioden und Messlücken |
 | Analyse | Stunden-Heatmap, Tagesprofile, Nachtgrundlast und deren Entwicklung samt Kosten pro Jahr, Lastdauerlinie, Spitzen, Einspeiseprofil und Monatsprognose |
 | Kosten | Einzeltarif oder HT/NT nach Uhrzeit, Tarifwechsel, Grundpreis, Einspeisevergütung, dynamische Bruttopreise per CSV, Tarifsimulation (Fest, HT/NT, Börsenpreis + Aufschlag), Monatsbudget und Abschlags-Hochrechnung, optionale Börsenpreise |
+| Vergleichswerte | Optional: typischer Haushalt gleicher Größe (Personen, Wohnung oder Haus, Warmwasser) als Referenzlinie in Tages- und Monatsbalken, im Zeitraumvergleich, beim Monatsziel und in der Jahreshochrechnung (Stromspiegel für Deutschland) |
 | Strommix und CO₂ | Optional für Deutschland, Niederlande, Norwegen und Schweden: CO₂-Bilanz des Netzbezugs aus gemessener Netzintensität je Viertelstunde, Ökostromanteil im Netz und aktueller Wert (Quelle: Energy-Charts.info, Fraunhofer ISE, CC BY 4.0) |
 | Benachrichtigungen | E-Mail über eigenen SMTP-Server; optional Signal über lokal gekoppelten Zusatzcontainer |
 | Alarmregeln | Fehlende Daten, anhaltend hohe Last, Tagesbudget, Monatsbudget, niedrige Batteriespannung und knapper Datenspeicher |
