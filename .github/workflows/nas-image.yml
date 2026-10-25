@@ -1,0 +1,104 @@
+name: Kilowatch - Tests und NAS-Image
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kilowatch-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - run: node --check app/static/app.js
+      - run: node --check app/static/configure.js
+      - run: node --check app/static/extras.js
+      - name: Compose-Dateien validieren
+        env:
+          MQTT_BIND: 127.0.0.1
+        run: |
+          docker compose -f compose.yaml config --quiet
+          docker compose -f compose.prebuilt.yaml config --quiet
+          docker compose -f compose.yaml -f compose.mqtt.yaml config --quiet
+          docker compose -f compose.yaml -f compose.signal.yaml config --quiet
+  image:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: QEMU fuer ARM64 einrichten
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: NAS-Image bauen
+        run: docker buildx build --platform linux/${{ matrix.arch }} --tag kilowatch:1.0.0 --load .
+      - name: Container mit persistentem Volume pruefen
+        run: |
+          wait_healthy() {
+            # Unter Emulation startet Python deutlich langsamer.
+            for i in $(seq 1 90); do curl -fsS http://127.0.0.1:18088/healthz >/dev/null && return 0; sleep 2; done
+            return 1
+          }
+          # Wie auf dem NAS: Daten als Ordner (gehört zunächst nicht dem App-Benutzer), Zugangsdaten im Volume.
+          mkdir -p "$RUNNER_TEMP/kilowatch-data"
+          docker volume create kilowatch-ci
+          docker run -d --name kilowatch-ci --platform linux/${{ matrix.arch }} --read-only --tmpfs /tmp:rw,size=32m --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --cap-add SETUID --cap-add SETGID --security-opt no-new-privileges -v "$RUNNER_TEMP/kilowatch-data:/data" --mount source=kilowatch-ci,target=/secrets -p 127.0.0.1:18088:8080 kilowatch:1.0.0
+          wait_healthy
+          # App-Prozess läuft nicht als root und hat keine Capabilities.
+          docker exec -i kilowatch-ci python - < tools/check_unprivileged.py
+          test -f "$RUNNER_TEMP/kilowatch-data/live/kilowatch.sqlite3"
+          ! docker exec kilowatch-ci test -e /data/live/secrets.key
+          python tools/smoke.py --seed --container kilowatch-ci
+          docker restart kilowatch-ci
+          wait_healthy
+          python tools/smoke.py --expect-persisted
+      - name: Optionalen MQTT-Broker pruefen
+        if: matrix.arch == 'amd64'
+        run: |
+          docker run -d --name kilowatch-mqtt-ci --user 1883:1883 --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,size=8m -p 127.0.0.1:11883:1883 -v "$PWD/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro" -v "$PWD/mosquitto/acl:/mosquitto/config/acl:ro" eclipse-mosquitto:2.0.22
+          python tools/mqtt_smoke.py --host 127.0.0.1 --port 11883
+      - name: Importdatei fuer Synology erzeugen
+        run: |
+          mkdir -p dist
+          docker save kilowatch:1.0.0 | gzip > dist/kilowatch-1.0.0-${{ matrix.arch }}.tar.gz
+          cd dist
+          sha256sum kilowatch-1.0.0-${{ matrix.arch }}.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kilowatch-nas-${{ matrix.arch }}
+          path: dist/
+          retention-days: 30
+          compression-level: 0
+      - name: Testcontainer aufraeumen
+        if: always()
+        run: |
+          docker logs kilowatch-ci || true
+          docker logs kilowatch-mqtt-ci || true
+          docker rm -f kilowatch-ci kilowatch-mqtt-ci || true
+          docker volume rm kilowatch-ci || true
+          sudo rm -rf "$RUNNER_TEMP/kilowatch-data" || true

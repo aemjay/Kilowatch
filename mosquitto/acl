@@ -1,0 +1,2 @@
+topic write tibber-bridge/data/publish
+topic read tibber-bridge/data/receive

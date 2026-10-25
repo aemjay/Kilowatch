@@ -1,0 +1,33 @@
+# Für das aus GitHub Actions importierte NAS-Image. Enthält bewusst keinen Build.
+name: kilowatch
+services:
+  kilowatch:
+    image: kilowatch:1.0.0
+    # Leer = Plattform des Hosts. Wird von tools/setup.py in .env gesetzt.
+    platform: ${KILOWATCH_PLATFORM:-}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8088}:8080"
+    environment:
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      PUID: ${PUID:-10001}
+      PGID: ${PGID:-10001}
+      TZ: Europe/Berlin
+    volumes:
+      # Messdaten und tägliche Sicherungen im Projektordner (sichtbar und mitgesichert).
+      - ./data:/data
+      # Zugangsdaten bewusst getrennt in einem Docker-Volume, nicht im Projektordner.
+      - kilowatch-secrets:/secrets
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    # Nur für das Startskript (Eigentümer setzen, Benutzer wechseln); die App selbst läuft ohne.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+volumes:
+  kilowatch-secrets:
+    name: kilowatch-secrets
