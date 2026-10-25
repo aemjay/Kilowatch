@@ -5,10 +5,17 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Release v<App-Version> aus main anlegen (Tag, Images 1.2.3/1.2/1/latest, Importdateien)'
+        type: boolean
+        default: false
 permissions:
   contents: read
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/kilowatch
+  # Manuelles Release: Workflow auf main mit release=true starten (für Umgebungen ohne Tag-Push).
+  MANUAL_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/main' }}
 concurrency:
   group: kilowatch-${{ github.ref }}
   cancel-in-progress: true
@@ -135,7 +142,7 @@ jobs:
   publish:
     # Getestete Quellen als Multi-Arch-Image veröffentlichen: main → edge, Tag v1.2.3 → 1.2.3, 1.2, 1, latest.
     needs: image
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -146,7 +153,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Version lesen
-        run: echo "VERSION=$(python3 -c 'import app; print(app.__version__)')" >> "$GITHUB_ENV"
+        run: |
+          echo "VERSION=$(python3 -c 'import app; print(app.__version__)')" >> "$GITHUB_ENV"
+          if [ "$MANUAL_RELEASE" = true ]; then echo "SEMVER=v$(python3 -c 'import app; print(app.__version__)')" >> "$GITHUB_ENV"; fi
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -158,10 +167,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE }}
+          # SEMVER ist nur beim manuellen Release gesetzt; sonst gilt der Git-Tag.
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ env.SEMVER }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.SEMVER }}
+            type=semver,pattern={{major}},value=${{ env.SEMVER }}
+            type=raw,value=latest,enable=${{ env.MANUAL_RELEASE == 'true' }}
             type=edge,branch=main
           flavor: latest=auto
       - id: build
@@ -185,7 +196,7 @@ jobs:
   release:
     # Importdateien dauerhaft am GitHub-Release, für NAS ohne Internetzugang.
     needs: publish
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -207,9 +218,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Ein in der GitHub-Oberfläche angelegtes Release (samt Tag) wird nur um die Importdateien ergänzt.
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          if [ "$MANUAL_RELEASE" = true ]; then
+            # Manuell: Tag v<App-Version> auf genau dem getesteten Commit anlegen.
+            TAG="v$(python3 -c 'import app; print(app.__version__)')"
+            CREATE_ARGS=(--target "$GITHUB_SHA")
           else
-            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Kilowatch ${GITHUB_REF_NAME#v}" --generate-notes --verify-tag
+            TAG="$GITHUB_REF_NAME"
+            CREATE_ARGS=(--verify-tag)
+          fi
+          # Ein bereits angelegtes Release (samt Tag) wird nur um die Importdateien ergänzt.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Kilowatch ${TAG#v}" --generate-notes "${CREATE_ARGS[@]}"
           fi
