@@ -1,104 +1,70 @@
 # Datenmodell und Rechenregeln
 
+Wie Kilowatch aus Zählerständen Energie, Kosten und Auswertungen berechnet und was es dabei nicht behauptet.
+
 ## Datenfluss
 
 ```mermaid
 flowchart LR
-    Z[Zähler mit optischer Schnittstelle] --> P[Pulse IR]
-    P --> B[Bridge per IP oder FQDN]
+    Z[Zähler] --> P[Pulse IR] --> B[Bridge]
     B -->|HTTP im LAN| C[Collector + SML-Decoder]
     C --> D[(SQLite auf dem Host)]
-    D --> A[Analyse-API]
-    A --> W[Lokale Weboberfläche]
+    D --> A[Auswertung und API] --> W[Weboberfläche]
+    D --> N[Alarmregeln] --> E[Eigener SMTP-Server]
     B -. optional MQTT .-> M[Lokaler Mosquitto]
-    D --> N[Alarmregeln und Warteschlange]
-    N --> E[Eigener SMTP-Server]
 ```
 
-Der MQTT-Broker ist nicht der Messdaten-Eingang von Kilowatch. Er kann der Bridge als lokales Kommunikationsziel dienen. Verbrauchsdaten werden weiter über den nachgewiesenen HTTP-Pfad gelesen.
+Der MQTT-Broker ist kein Messdaten-Eingang: Die Messwerte kommen immer per HTTP von der Bridge.
 
-## Tabellen
+## Gespeicherte Daten
 
-| Tabelle | Zweck |
+| Daten | Standardaufbewahrung |
 |---|---|
-| `samples` | Zeitstempel, Leistung, beide Zählerstände, Zählerkennung, Protokoll und Qualitätsart |
-| `buckets` | additive Minuten- und Viertelstundenwerte mit Energie, erfassten Sekunden, Schätzanteilen, mittlerer Leistung und Spitzen |
-| `gaps` | Unterbrechungen einschließlich eventuell aus Zählerständen bekannter Gesamtenergie |
-| `state` | letzter Messpunkt als dauerhafte Ausgangsbasis, letzter Payload-Hash, verfügbare Register, Backup-Tag |
-| `settings` | lokale Einstellungen ohne Passwort |
-| `tariffs` | gültig-ab-Datum, Preisart, vollständiger Bruttopreis und Monatsgrundpreis |
-| `prices` | zeitlich eindeutige dynamische Brutto-Preisintervalle |
-| `spot_prices` | abgerufene Börsenpreise (EUR/MWh) als Historie für die Tarifsimulation |
-| `events` | eigene Markierungen und Notizen |
-| `issues` | Erfassungs- und Plausibilitätshinweise |
-| `notifications` | Zustellwarteschlange und Verlauf mit Betreff, Text, Versuchen und Status |
+| Einzelmessungen (`samples`) | 90 Tage, einstellbar, 0 = unbegrenzt |
+| Minutenwerte | 1095 Tage, einstellbar, 0 = unbegrenzt |
+| Viertelstunden und Lücken | dauerhaft |
+| Erfassungshinweise | 365 Tage |
+| Nachrichtenverlauf | 90 Tage (die Oberfläche zeigt die letzten 100) |
+| Datenbanksicherungen | die letzten sieben, täglich (UTC) |
 
-Die Schemaversion wird über `PRAGMA user_version` geführt. Ältere Schemata werden beim Start über geordnete Migrationen in `app/storage.py` angehoben, vorher entsteht automatisch eine Sicherung `backups/pre-migration-*`. Neuere unbekannte Schemata werden abgelehnt. Siehe [Updates](UPDATES.md). Es gibt bewusst genau einen App-Worker/Collector. Niemals mehrere Container auf dieselbe Datenbank schreiben lassen.
+Weitere Tabellen: Einstellungen, Tarife, Preisintervalle, Börsenpreise, Ereignisse und die Zustellwarteschlange. Die Schemaversion steht in `PRAGMA user_version`; ältere Schemata werden beim Start nach einer automatischen Sicherung (`backups/pre-migration-*`) angehoben, neuere lehnt die App ab ([Updates](UPDATES.md)). Es gibt genau einen App-Prozess; lass nie mehrere Container in dieselbe Datenbank schreiben. Passwort-Hash und verschlüsselte Geheimnisse liegen außerhalb der Datenbank ([Betrieb](BETRIEB.md#speicherorte)).
 
-Benachrichtigungseinstellungen und Regelzustände liegen in `state`. Die ergänzende Tabelle `notifications` wird bei Bedarf angelegt. App-Passwort-Hash und verschlüsselte Geheimnisse liegen außerhalb von SQLite, siehe [Betrieb](BETRIEB.md). Ein Datenbankbackup allein sichert diese Dateien nicht.
+## Messwerte
 
-## Einheiten und Register
+- SML wird mit `smllib` gelesen und die CRC geprüft; bei ungültiger CRC wird nichts gespeichert. Lesbare OBIS-Telegramme (W/kW, Wh/kWh) gehen ebenfalls, dann ohne CRC-Prüfung.
+- `1.8.0` ist Bezug, `2.8.0` Einspeisung. Fehlt das Totalregister, addiert Kilowatch T1 und T2 nur, wenn beide da sind, und nie Total und Tarife zusammen.
+- Netzleistung kommt aus `16.7.0` oder getrennten Registern; positiv ist Bezug, negativ Einspeisung.
+- Unterstützt ist die Kombination Pulse IR, Bridge und SML, kein Pulse P1, HAN oder KM.
 
-- SML wird mit `smllib` verarbeitet und die Transport-CRC geprüft. Bei ungültiger CRC wird kein Wert gespeichert.
-- `1.8.0` ist Bezug, `2.8.0` Einspeisung. Einheit Wh und Zehnerskalierung werden vor der Umrechnung in kWh berücksichtigt.
-- Fehlt das Totalregister, werden T1 und T2 nur dann addiert, wenn beide vorhanden sind. Total und Tarife werden nie zusammengerechnet.
-- Netzleistung kommt aus `16.7.0` oder getrennten Leistungsregistern; positive Werte sind Bezug, negative Werte Einspeisung.
-- Lesbare OBIS-Telegramme mit W/kW und Wh/kWh sind ebenfalls möglich, ausdrücklich ohne behauptete CRC-Prüfung.
-- Keine generische Unterstützung für Pulse P1, HAN oder KM. Die nachgewiesene Kombination ist Pulse IR/Bridge/SML.
+## Energie
 
-## Energieintervalle
+Zwischen zwei normalen Messpunkten gilt: **Energie = neuer Zählerstand − alter Zählerstand.** Nur wenn die Zählerstände fehlen, integriert Kilowatch die Leistung linear (Nulldurchgänge getrennt für Bezug und Einspeisung) und markiert das als Schätzung.
 
-Für zwei normale Messpunkte desselben Zählers gilt zuerst:
+- Normale Intervalle dauern höchstens 90 Sekunden (einstellbar). Ihre Energie wird anteilig auf UTC-Minuten und -Viertelstunden verteilt: Die Menge ist bekannt, ihre Verteilung innerhalb des kurzen Intervalls eine Zuordnung.
+- **Längere Unterbrechungen werden als Lücke gespeichert.** Eine positive Zählerdifferenz bleibt als bekannte Gesamtmenge erhalten, wird aber keinem Stunden- oder Preisintervall zugeschrieben. Fehlende Messdaten sind nie Nullverbrauch.
+- Doppelte oder ältere Zeitstempel und unveränderte Telegramme werden nicht erneut gebucht (nach 30 s zeigt die Oberfläche „veraltet“). Zählerwechsel, fallende Stände und Sprünge über der Leistungsgrenze (Standard 100 kW) setzen eine neue Basis und erzeugen einen Hinweis.
+- Ein fehlgeschlagener Abruf erzeugt keine Nullmessung; die Wiederholpause wächst bis 120 Sekunden. Die letzte Basis überlebt Neustarts und das Löschen alter Rohwerte. Zeitstempel ist die Uhr des Hosts, halte sie synchron.
 
-`Energie = neuer Zählerstand − alter Zählerstand`.
+## Zeit
 
-Leistung wird nur integriert, wenn das passende Registerpaar fehlt und beide Leistungswerte vorhanden sind. Die Integration ist linear zwischen den Messpunkten; bei einem Vorzeichenwechsel wird der Nulldurchgang für Bezug und Einspeisung getrennt berücksichtigt. Diese Energie ist als Schätzung markiert. Ein vorhandener unveränderter Zählerstand hat Vorrang und bedeutet zunächst Differenz null; bei grober Zählerauflösung kann Energie dadurch in späteren Intervallen erscheinen.
-
-Normale Intervalle dürfen standardmäßig maximal 90 Sekunden lang sein. Ihre Energie wird proportional zur Überlappung auf UTC-Minuten und UTC-Viertelstunden aufgeteilt. **Die Energiemenge aus Zählerständen ist bekannt, ihre Verteilung innerhalb dieses kurzen Intervalls ist eine Zeitzuordnung.** Für wechselnde Viertelstundenpreise gilt derselbe zeitliche Näherungscharakter. Es wird keine Genauigkeit einzelner Geräte oder einzelner Sekunden behauptet.
-
-Längere Intervalle werden als Lücke gespeichert. Eine positive Zählerdifferenz bleibt dabei als bekannte Gesamtmenge erhalten. Sie wird keinem Tages-/Stundenbalken und keinem dynamischen Preisintervall zugeschrieben. In der Zeitraumssumme steht diese Menge nur dann, wenn die komplette Lücke im ausgewählten Bereich liegt. Grenzüberschreitende Lücken werden gezählt und ihre Menge nicht willkürlich geteilt.
-
-Vor dem ersten Messpunkt fehlt eine Ausgangsbasis. Diese Zeit hat keine Lückenzeile, ist aber an der niedrigen Abdeckung erkennbar.
-
-## Plausibilität und Wiederanlauf
-
-- Dieselbe oder eine ältere Erfassungszeit wird nicht erneut gebucht.
-- Unveränderte komplette Telegramme werden nicht wiederholt als neue Messung gespeichert. Nach mehr als 30 Sekunden wird der Zustand als veraltet angezeigt.
-- Zählerkennungswechsel, fallende Stände und Sprünge oberhalb der maximal möglichen Energie setzen eine neue Ausgangsbasis und erzeugen einen Hinweis beziehungsweise ein ungebuchtes Lückenintervall.
-- Standard-Leistungsgrenze: 100 kW; in den Einstellungen anpassbar. Für Zählerauflösung wird bei der Sprungprüfung ein kleiner Energiepuffer berücksichtigt.
-- Ein fehlgeschlagener Abruf erzeugt keine Nullmessung. Die Wiederholpause steigt begrenzt auf maximal 120 Sekunden.
-- Die letzte Ausgangsbasis bleibt auch nach Löschung alter Rohwerte erhalten. Nach einem Neustart kann eine positive Zählerdifferenz die gesamte Unterbrechungsenergie liefern.
-- Die Abfragezeit des Hosts ist der Zeitstempel. Die Genauigkeit der Host-Uhr und ihre Synchronisierung bleiben wichtig. Die Bridge-Zeit wird nicht ungeprüft als Messzeit übernommen.
-
-## Sommer- und Winterzeit
-
-UTC-Zeitstempel sind eindeutig. Lokale Tage werden mit IANA-Zeitzone `Europe/Berlin` bestimmt und dauern bei einer Zeitumstellung 23 oder 25 Stunden. Der 25.10.2026 hat daher 100 Viertelstunden, der 29.03.2026 92.
-
-Exporte enthalten zusätzlich ISO-Zeitangaben mit UTC-Offset. In einer Stunden-Heatmap werden die beiden gleichen lokalen 02-Uhr-Stunden zusammengefasst; ihre erfassten Sekunden bleiben erhalten. Ein Monatsgrundpreis wird nach lokalen Kalendertagen und dem tatsächlichen Anteil des jeweiligen Tages verteilt, nicht pauschal nach 24 Stunden.
+UTC-Zeitstempel sind eindeutig. Lokale Tage rechnet Kilowatch in `Europe/Berlin`; sie dauern bei der Zeitumstellung 23 oder 25 Stunden (25.10.2026: 100 Viertelstunden, 29.03.2026: 92). Der Monatsgrundpreis verteilt sich nach dem tatsächlichen Tagesanteil.
 
 ## Kosten
 
-Zusätzlich zum Einzeltarif unterstützt die App zwei Preise nach lokaler Uhrzeit (HT/NT). Die Zeitfenster stehen in `state.tariff_schedules`, die Tarifhistorie bleibt in `tariffs`. Grenzen sind auf Viertelstunden ausgerichtet, passend zu den dauerhaft gespeicherten Energieintervallen. Details und Wochenendoption: [TARIFE.md](TARIFE.md). Öffentliche Börsenpreisvorschauen stehen getrennt im Zustand `market_cache` und verändern die Kostenrechnung nicht.
+Betrag = **bekannte Energiekosten + zeitanteiliger Grundpreis − Einspeiseerlös.** Fehlen Tarife, Messwerte oder Preise, ist das ein Teilbetrag; nur bei mindestens 99,5 % Bezugsabdeckung ohne Lücken und ohne fehlende Preise gilt ein Zeitraum als nahezu vollständig. Die App rechnet bei jeder Abfrage neu aus den Viertelstunden, Tarifkorrekturen ändern also keine Messdaten. Details zu Tarifen: [Tarife](TARIFE.md).
 
-Tarife gelten ab dem angegebenen lokalen Kalendertag. Ein nachfolgender Tarif beendet den vorherigen. Die Anwendung berechnet aus den dauerhaft gespeicherten Viertelstunden bei jeder Abfrage neu, sodass Tarifkorrekturen keine Messdaten verändern.
+## Auswertungen und Grenzen
 
-Bei dynamischen Tarifen braucht jedes verbrauchte Zeitintervall einen importierten vollständigen Bruttopreis. Keine Rückfallannahme auf einen Festpreis, kein automatisches Ergänzen von Steuern oder Netzentgelten. Negative Preise sind erlaubt. Fehlende Preise werden als unbepreiste Energie ausgewiesen.
+| Auswertung | Regel |
+|---|---|
+| Nachtgrundlast | 10. Perzentil der Viertelstundenmittel von 00–05 Uhr, mindestens zwölf Intervalle mit ≥ 80 % Abdeckung |
+| Grundlast-Entwicklung | wie oben je Woche (bei mehr als 120 Tagen Zeitraum je Monat); Jahreswert = Grundlast × 8766 h, Kosten mit dem Arbeitspreis der letzten sieben Tage |
+| Lastdauerlinie | ausreichend erfasste Viertelstundenmittel nach Höhe sortiert |
+| Hohe Last | Summe der Intervalle über der eingestellten Schwelle; ändert sich die Schwelle, bleibt die Vergangenheit unverändert |
+| Tagesprofile | Bezug je erfasster Stunde, getrennt nach Werktag und Wochenende |
+| Nachtauffälligkeit | Nachtmedian der letzten sieben gegen die sieben Tage davor (mind. 24 Viertelstunden je Fenster); Hinweis ab mehr als 80 W und 30 % Anstieg, keine Geräteerkennung |
+| Prognose | Mittel gleicher Wochentage aus 28 Tagen; nötig sind mindestens sieben Tage mit ≥ 98 % Abdeckung. Das Band ist heuristisch |
+| Vorperioden | gleich viele Kalendertage; laufende Zeiträume nur bis zur letzten vollen Viertelstunde |
+| CO₂-Bilanz | Bezug je Viertelstunde × gemessene Netzintensität derselben Viertelstunde; Bezug ohne veröffentlichten Wert wird getrennt ausgewiesen |
 
-Der angezeigte Betrag ist **bekannte Energiekosten + bekannter zeitanteiliger Grundpreis − bekannter Einspeiseerlös**. Bei fehlenden Tarifen, Messdaten oder Preisintervallen ist dies ein Teilbetrag. Ein Zeitraum gilt nur bei mindestens 99,5 % Bezugsabdeckung und ohne gespeicherte Lücken oder fehlende Preis-/Tarifzuordnung als nahezu vollständig. Auch dann ist es eine private Messauswertung.
-
-Die Netzanschlussmessung allein liefert weder die gesamte PV-Erzeugung noch den Hausverbrauch hinter einer PV-Anlage oder den Eigenverbrauch einer Batterie. Dafür fehlen zusätzliche Messpunkte.
-
-## Analysen und Grenzen
-
-- **Nachtgrundlast:** 10. Perzentil der Viertelstundenmittel von 00–05 Uhr, mindestens zwölf Intervalle mit jeweils ≥ 80 % Leistungsabdeckung. Das ist ein statistischer Hinweis.
-- **Lastdauerlinie:** ausreichend erfasste Viertelstundenmittel nach Höhe sortiert; x-Achse summiert die tatsächlich erfasste Dauer.
-- **Hohe Last:** aufsummierte normale Messintervalle mit mittlerer Leistung über der eingestellten Schwelle. Schwellenänderungen wirken auf neue Intervalle, historische Werte werden nicht nachträglich umklassifiziert.
-- **Tagesprofile:** gemessene Bezugsenergie pro erfasster Stunde, getrennt nach Werktagen/Wochenende. Schlechte Abdeckung kann den Eindruck verzerren und muss mitbetrachtet werden.
-- **Nachtauffälligkeit:** Vergleich der Nachtmediane der letzten sieben Tage mit den davorliegenden sieben Tagen; beide Fenster brauchen mindestens 24 ausreichend erfasste Viertelstunden im gewählten Analysebereich. Hinweis ab mehr als 80 W und mehr als 30 % Anstieg. Dieser Analysehinweis erscheint in der Oberfläche. Die separat konfigurierbaren [Alarmregeln](BENACHRICHTIGUNGEN.md) können E-Mails auslösen; eine automatische Geräteerkennung ist nicht enthalten.
-- **Prognose:** Mittel gleicher Wochentage aus 28 Tagen. Mindestens sieben Tage mit jeweils ≥ 98 % Abdeckung und ≥ 98 % Abdeckung im laufenden Monat erforderlich. Für den Rest des laufenden Tages wird dessen Anteil vereinfacht aus einem typischen Tagesverbrauch angesetzt. Das Band aus Tagesstreuung ist heuristisch und besitzt keine garantierte statistische Abdeckung. Saisonänderungen und neue Großverbraucher werden nicht vorab erkannt.
-- **Grundlast-Entwicklung:** Nachtgrundlast wie oben, je Woche (bei mehr als 120 Tagen je Monat); Punkte mit weniger als 24 erfassten Nachtviertelstunden bleiben leer. Jahreswerte = Grundlast × 8766 h, Kosten mit dem zeitlich gemittelten Arbeitspreis des aktuellen Tarifs der letzten sieben Tage. Negative Nachtwerte (Batterie, Einspeisung) zählen nicht.
-- **Einspeiseprofil:** mittlere Einspeiseleistung je Stunde aus den erfassten Einspeisesekunden. Eigenverbrauch und Autarkie lassen sich aus dem Netzanschluss allein nicht bestimmen.
-- **Tarifsimulation, Budget, Abschlag:** siehe [Tarife](TARIFE.md).
-- **Vorperioden:** gleiche Zahl lokaler Kalendertage. Eine laufende Periode wird im Vergleich nur bis zur letzten vollständigen Viertelstunde berücksichtigt. Abdeckungsunterschiede und Tage mit anderer Länge werden nicht verborgen.
-
-Diagramme reduzieren sehr große Leistungsreihen für die Darstellung. Erfasste Spitzen und Zählerenergiemengen bleiben separat erhalten. Historische Rohdaten sind nur innerhalb ihrer Aufbewahrungsdauer verfügbar.
+Aus dem Netzanschluss allein lassen sich weder die PV-Erzeugung noch Hausverbrauch hinter einer PV-Anlage, Batterie-Eigenverbrauch oder einzelne Geräte bestimmen. Diagramme dünnen sehr große Reihen nur für die Darstellung aus; Spitzen und Energiemengen bleiben separat erhalten. Rohdaten gibt es nur innerhalb ihrer Aufbewahrung.

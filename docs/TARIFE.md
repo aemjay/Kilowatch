@@ -1,65 +1,48 @@
-# Eigenen Strompreis hinterlegen
+# Tarife, Preise und Budget
 
-Die Seite **Kosten & Tarife → Deinen Tarif hinterlegen** speichert deinen Strompreis unabhängig von Tibber. Die Preisart lässt sich umschalten:
+Unter **Kosten & Tarife** hinterlegst du deinen Strompreis, unabhängig von Tibber. Alle Vertragspreise sind **brutto**. Kilowatch rechnet aus Messwerten und Preisen und liefert keine Abrechnung des Anbieters.
 
 | Preisart | Angaben |
 |---|---|
-| **1 Tarifstufe** | ein vollständiger Arbeitspreis brutto in ct/kWh |
-| **2 Tarifstufen · HT/NT** | Hochtarif, Niedertarif und lokale Uhrzeiten, zu denen NT gilt |
-| **Variabel · CSV** | vollständige zeitabhängige Bruttopreise deines Anbieters per CSV |
+| **1 Tarifstufe** | ein Arbeitspreis in ct/kWh |
+| **2 Tarifstufen (HT/NT)** | Hoch- und Niedertarif und die Uhrzeiten, zu denen NT gilt |
+| **Dynamisch** | Preise je Viertelstunde aus einer [Preisquelle](#dynamische-preise) |
 
-Für alle Arten zusätzlich **Gültig ab**, Tarifname, Grundpreis brutto in Euro/Monat und gegebenenfalls Einspeisevergütung in ct/kWh eintragen. Die App setzt keinen Preis automatisch als deinen Vertragspreis ein. Eine vorhandene Tarifzeile lässt sich mit **Bearbeiten** übernehmen; Speichern ersetzt den Tarif mit diesem Anfangsdatum. Ein neues Anfangsdatum bildet einen Tarifwechsel ab und erhält frühere Preise.
+Dazu kommen **Gültig ab**, Name, Grundpreis in €/Monat und optional Einspeisevergütung. Ein neues Anfangsdatum bildet einen Tarifwechsel ab und lässt frühere Preise unberührt; **Bearbeiten** ersetzt den Tarif mit diesem Datum.
 
-## Zwei Tarifstufen nach Uhrzeit
+## HT/NT nach Uhrzeit
 
-Beispiel ausschließlich zur Erklärung: HT 35 ct/kWh, NT 25 ct/kWh, NT von 22:00 bis 06:00. Dann wird jede erfasste Viertelstunde ab 22:00 einschließlich bis 06:00 ausschließlich mit NT bewertet; außerhalb gilt HT. Die tatsächlichen Werte und Zeiten dem eigenen Vertrag entnehmen.
+Beispiel: HT 35 ct, NT 25 ct, NT von 22:00 bis 06:00. Jede erfasste Viertelstunde in diesem Fenster zählt als NT, alle anderen als HT. Nimm die echten Werte aus deinem Vertrag.
 
-- NT darf über Mitternacht reichen oder ein Zeitfenster am selben Tag bilden.
-- Anfang und Ende müssen verschieden sein und auf 00/15/30/45 Minuten liegen. Das passt zur dauerhaft gespeicherten Viertelstundenauflösung.
-- Wahlweise gilt am Samstag und Sonntag ganztägig NT. Andernfalls gelten dieselben Uhrzeiten wie werktags.
-- Zeiten verwenden **Europe/Berlin**. Bei der Winterzeitumstellung werden beide gleich bezeichneten Stunden nach derselben lokalen Tarifregel bewertet; UTC-Zeitstempel bleiben eindeutig.
-- Feiertage und Sonderkalender werden nicht automatisch erkannt. Die Funktion ordnet Preise nach Uhrzeit zu; sie ist keine direkte Abrechnung separater T1-/T2-Zählerregister.
-- Die Rechnung verwendet die bekannten Viertelstunden-Energiemengen. Fehlende Daten und längerfristige Lücken werden weiterhin nicht erfunden oder willkürlich auf HT/NT verteilt.
+- Das NT-Fenster darf über Mitternacht reichen. Anfang und Ende müssen verschieden sein und auf 00/15/30/45 Minuten liegen. Optional gilt am Wochenende ganztägig NT.
+- Zeiten gelten in `Europe/Berlin`. Feiertage kennt Kilowatch nicht, und es ist keine Abrechnung getrennter Zählerregister.
 
-## Dynamische Tarife
+## Dynamische Preise
 
-Für einen dynamischen Vertrag einen Tarif mit der Preisart **Dynamisch** anlegen (Grundpreis und Einspeisevergütung wie gewohnt). Die Preise je Viertelstunde kommen dann aus einer Preisquelle unter **Kosten & Tarife → Dynamische Preise**:
+Lege einen Tarif mit der Preisart **Dynamisch** an und wähle unter **Dynamische Preise** die Quelle:
 
-| Preisquelle | Einrichtung | Preis je kWh |
+| Quelle | Einrichtung | Preis je kWh |
 |---|---|---|
-| **Tibber** | persönlicher API-Token von [developer.tibber.com](https://developer.tibber.com) (Anmelden → Access Token). Bei mehreren Zuhause eines auswählen. | Tibber-Gesamtpreis des eigenen Vertrags + optionaler Aufschlag |
-| **Börsenpreis + Aufschlag** | Gebotszone (z. B. DE-LU), Aufschlag netto in ct/kWh und Mehrwertsteuer aus dem Preisblatt des Anbieters | (Börsenpreis + Aufschlag) × (1 + MwSt) |
-| **CSV** | vollständige Bruttopreise je Zeitintervall importieren, siehe [API/CSV-Format](API.md) | wie importiert |
+| **Tibber** | persönlicher API-Token von [developer.tibber.com](https://developer.tibber.com), bei mehreren Zuhause eines wählen | Tibber-Gesamtpreis deines Vertrags + optionaler Aufschlag |
+| **Börsenpreis + Aufschlag** | Euro-Gebotszone (DE-LU, AT, NL, BE, FR), Aufschlag netto in ct/kWh, MwSt aus dem Preisblatt | (Börsenpreis + Aufschlag) × (1 + MwSt) |
+| **CSV** | vollständige Bruttopreise importieren ([Format](API.md#preis-csv)) | wie importiert |
 
-- Kilowatch ruft die gewählte Quelle stündlich ab, beim ersten Mal rückwirkend bis zu 31 Tage. Preise für morgen erscheinen am frühen Nachmittag. Gesendet werden nur Zeitraum bzw. die Tibber-Abfrage, keine Messwerte. Der Tibber-Token liegt verschlüsselt im Zugangsdaten-Volume und wird nie an den Browser zurückgegeben.
-- Beim Tibber-Preis ist nur einzutragen, was **nicht** im Tibber-Preis steckt, z. B. das separat abgerechnete Netzentgelt in Norwegen. Sonst 0. Der Abgleich mit einer Rechnung zeigt, ob noch etwas fehlt.
-- Die Währung von Tibber muss zur Währungseinstellung passen; sonst speichert Kilowatch nichts und zeigt einen Hinweis. Börsenpreis + Aufschlag gibt es nur für Gebotszonen in Euro.
-- Ein Quellenwechsel oder geänderter Aufschlag berechnet den Rückblick neu. Automatische Preise ersetzen im abgedeckten Zeitraum vorhandene CSV-Preise.
-- Fehlende Preise bleiben als unbepreiste Energie sichtbar. Es gibt keinen Rückfall auf Null oder einen festen Preis. Das Ergebnis ist eine nachvollziehbare Rechnung aus Messwerten und Preisen, keine Abrechnung des Anbieters.
-
-## Börsenpreisvorschau
-
-Zusätzlich kann unter **Börsenpreise ansehen** per Knopfdruck der technisch ohne Token lesbare DE-Feed von aWATTar abgerufen werden. Er liefert veröffentlichte Börsenintervalle für heute und, sobald vorhanden, morgen. Die App überträgt dabei nur die angefragten Zeitgrenzen, keine Messdaten oder Zugangsdaten. Es gibt keinen Hintergrundabruf und keinen Tibber-Tarifzwang. Erfolgreiche Antworten bleiben eine Stunde im Cache; nach Fehlern gilt eine 15-Minuten-Pause. Im Demo-Modus wird nichts abgerufen.
-
-**Börsenpreise sind keine vollständigen Vertragspreise.** Der Feed liefert EUR/MWh, die Vorschau rechnet durch 10 in ct/kWh um. Anbieteraufschläge, Netzentgelte und Steuern sind damit noch nicht vollständig erfasst. Deshalb verändert dieser Abruf weder deine Tarife noch importierte Bruttopreise und fließt nicht in die Kostenberechnung ein. Abgerufene Börsenpreise werden aber als Historie gespeichert und stehen der Tarifsimulation zur Verfügung. Negative Börsenpreise bleiben sichtbar. Ältere Cache-Daten behalten ihre tatsächlichen Zeitstempel; fehlende Zukunftspreise werden nicht ergänzt.
-
-Ohne variablen Vertrag muss hier nichts eingerichtet werden. Eine direkte Vertragspreis-Anbindung hängt vom tatsächlichen Anbieter und dessen verfügbarer Schnittstelle ab. Der nutzbare Weg für beliebige Anbieter bleibt der Import vollständiger Preise.
+- Kilowatch fragt die Quelle stündlich ab, beim ersten Mal bis zu 31 Tage rückwirkend; Preise für morgen erscheinen am frühen Nachmittag. Es gehen nur Zeitraum bzw. die Preisabfrage hinaus, keine Messwerte. Der Tibber-Token liegt verschlüsselt im Zugangsdaten-Volume.
+- Beim Tibber-Preis trägst du als Aufschlag nur ein, was **nicht** im Tibber-Preis steckt (z. B. Netzentgelt in Norwegen), sonst 0.
+- Die Tibber-Währung muss zur Währungseinstellung passen. Börsenpreise gibt es nur für Euro-Zonen.
+- Eine geänderte Quelle oder ein geänderter Aufschlag rechnet den Rückblick neu. Automatische Preise ersetzen im abgedeckten Zeitraum CSV-Preise.
+- Fehlende Preise bleiben als unbepreiste Energie sichtbar; es gibt keinen Rückfall auf Null oder einen Festpreis.
 
 ## Tarif simulieren
 
-Unter **Kosten & Tarife → Tarif simulieren** lässt sich derselbe gemessene Lastgang mit einem anderen Tarif nachrechnen: Festpreis, HT/NT oder dynamisch als **(Börsenpreis + Aufschlag) × (1 + MwSt)**. Der Aufschlag umfasst Netzentgelt, Umlagen, Stromsteuer und Anbietermarge und steht im Preisblatt des Anbieters.
+**Tarif simulieren** rechnet denselben Lastgang mit einem anderen Tarif (Fest, HT/NT oder Börsenpreis + Aufschlag). Verglichen wird gepaart: Arbeitspreise nur über Viertelstunden, die in beiden Tarifen bepreist sind, Grund- und Einspeisepreis über den ganzen Zeitraum. Bei dynamischen Tarifen siehst du den **verbrauchsgewichteten Börsenpreis** neben dem Zeitmittel; liegt er darüber, fällt dein Bezug eher in teure Stunden. Angenommen wird gleicher Verbrauch zur gleichen Zeit, also kein Sparversprechen.
 
-- Verglichen wird **gepaart**: Arbeitspreise beider Tarife nur über die Viertelstunden, die in beiden bepreist sind; Grundpreis und Einspeisung über den ganzen Zeitraum. Der abgedeckte Anteil wird angezeigt.
-- Für dynamische Tarife braucht die Simulation Börsenpreise des Zeitraums. **Börsenpreise für den Zeitraum nachladen** holt sie bei aWATTar (höchstens 62 Tage je Abruf, in Abschnitten zu drei Tagen, 10 Minuten Pause zwischen Abrufen). Übertragen werden nur die Zeitgrenzen.
-- Bei dynamischen Tarifen zeigt die Simulation zusätzlich den **verbrauchsgewichteten Börsenpreis** gegenüber dem Zeitmittel. Liegt er darüber, fällt der Bezug eher in teure Stunden.
-- Annahme: gleicher Verbrauch zur gleichen Zeit. Eine Verhaltensänderung durch den anderen Tarif ist nicht berücksichtigt; das Ergebnis ist kein Einsparversprechen.
+Dafür braucht die Simulation Börsenpreise des Zeitraums: **Börsenpreise für den Zeitraum nachladen** holt sie bei [aWATTar](https://energy.tado.com/services/api) (höchstens 62 Tage je Abruf, nur Zeitgrenzen werden übertragen). Unter **Börsenpreise ansehen** kannst du außerdem die Netto-Börsenpreise von heute und morgen ansehen. Sie sind keine Vertragspreise und fließen nicht in die Kosten ein.
 
 ## Budget und Abschlag
 
-Unter **Budget & Abschlag** lassen sich ein Monatsbudget in €, ein Monatsziel in kWh und der monatliche Abschlag hinterlegen.
+Unter **Budget & Abschlag** legst du Monatsbudget (€), Monatsziel (kWh) und Abschlag fest.
 
-- **Monat:** bisherige Kosten und Prognose bis Monatsende (bisherige Kosten + prognostizierte Rest-kWh × bisheriger mittlerer Arbeitspreis + voller Monatsgrundpreis). Die Prognose braucht dieselbe Datenbasis wie die Monatsprognose der Analysen.
-- **Jahr:** Hochrechnung aus vollständig erfassten Tagen der letzten 365 Tage, erst ab 60 solchen Tagen. Ohne Jahreszeitbereinigung; bei weniger als einem Jahr Daten kann die Zahl deutlich abweichen. Die angezeigte Spanne beschreibt nur die Tagesstreuung. Einspeisung bleibt unberücksichtigt.
-- Optional meldet die Alarmregel **Monatsbudget erreicht** per E-Mail, sobald die erfassten Kosten das Budget erreichen.
-
-Primärquelle: [aWATTar/tado° DE API-Dokumentation](https://energy.tado.com/services/api). Monatlicher Grundpreis und Einspeisevergütung werden weiter unabhängig davon lokal hinterlegt.
+- **Monat:** bisherige Kosten und Prognose bis Monatsende (bisherige Kosten + Rest-kWh × mittlerer Arbeitspreis + voller Grundpreis). Die Prognose braucht dieselbe Datenbasis wie die Monatsprognose der Analyse.
+- **Jahr:** Hochrechnung aus vollständig erfassten Tagen der letzten 365 Tage, erst ab 60 solchen Tagen, ohne Jahreszeitbereinigung. Die Spanne zeigt nur die Tagesstreuung, Einspeisung bleibt außen vor.
+- Optional meldet die Alarmregel **Monatsbudget** per E-Mail ([Benachrichtigungen](BENACHRICHTIGUNGEN.md)).
