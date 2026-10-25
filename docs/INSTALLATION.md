@@ -95,6 +95,16 @@ Kilowatch spricht selbst nur HTTP. Mit beliebigem Reverse-Proxy (Caddy, nginx, T
 
 Hinter dem Proxy sieht Kilowatch alle Anfragen von derselben internen Adresse; die Anmeldebegrenzung gilt dann für alle Clients gemeinsam. Weitergeleitete Adress-Header werden bewusst nicht ausgewertet.
 
+## Als App installieren (PWA)
+
+Kilowatch lässt sich wie eine App auf Handy, Tablet oder Desktop installieren: eigenes Symbol, eigenes Fenster ohne Browserleiste.
+
+- **Voraussetzung ist HTTPS** (siehe oben) oder `localhost`. Über reines HTTP im Heimnetz erlauben Browser weder Service Worker noch die Installation; die Seite lässt sich dann nur als Lesezeichen ablegen.
+- **Android (Chrome), Windows/Mac (Chrome, Edge):** Kilowatch zeigt beim ersten Besuch ein Angebot „Als App installieren?“; alternativ über das Menü des Browsers („App installieren“ bzw. „Zum Startbildschirm“).
+- **iPhone/iPad (Safari):** Teilen → „Zum Home-Bildschirm“.
+- **Updates:** Der Browser prüft beim Öffnen, beim Zurückkehren in die App und stündlich, ob der Server eine neue Version hat. Eine neue Version wird automatisch geladen, die App startet dabei neu. Solange du ein Formular bearbeitest, wartet sie: Es erscheint ein Hinweis mit „Neu laden“, und spätestens beim Wechsel in den Hintergrund wird aktualisiert.
+- **Offline:** Ohne Verbindung zum Server öffnet sich die Oberfläche aus dem Zwischenspeicher, zeigt aber keine Messdaten. Daten (`/api/`) werden nie zwischengespeichert, weder Messwerte noch Anmeldung.
+
 ## Ohne Internet
 
 An jedem Release hängen Importdateien `kilowatch-<version>-amd64.tar.gz` und `-arm64.tar.gz` mit Prüfsumme. Die passende zum Prozessor wählen (`uname -m`: `x86_64` = amd64, `aarch64` = arm64).
