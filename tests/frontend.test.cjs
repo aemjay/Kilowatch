@@ -61,8 +61,9 @@ async function harness(options={}) {
     }else if(path==='/api/notifications')data=notes;
     else if(path==='/api/discovery/network')data={suggestions:[{network:'192.168.1.0/24',reason:'Synthetic network'}]};
     else if(path==='/api/discovery/scan')data={network:body.network,checked:254,devices:[{ip:'192.168.1.10',host:'bridge.example.lan',fqdn:'bridge.example.lan'}]};
-    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null,household:options.household??null},co2:options.co2??null,
-      series:{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:i*60,power_w:i===30?4000:300+i,seconds:60}))}};
+    else if(path==='/api/timeline')data=options.timeline||{start:null,end:0,bin_seconds:900,bins:[]};
+    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:options.window?.start??0,end:options.window?.end??3600},previous:null,gaps:[],targets:{daily_kwh:null,household:options.household??null},co2:options.co2??null,
+      series:options.series||{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:(options.window?.start??0)+i*60,power_w:i===30?4000:300+i,seconds:60}))}};
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
     else if(path==='/api/prices/source'){priceFeed={...priceFeed,...body,tibber_token_configured:!!body.tibber_token||priceFeed.tibber_token_configured};delete priceFeed.tibber_token;data=priceFeed;}
     else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market,price_feed:priceFeed};
@@ -75,7 +76,7 @@ async function harness(options={}) {
     else if(path==='/api/bridge/test')data={protocol:'SML',endpoint:'/node_data.json',resolved_addresses:['192.168.1.10'],has_import:true};
     return {ok:status===200,status,json:async()=>structuredClone(data),blob:async()=>new w.Blob(['synthetic-image'],{type:'image/png'})};
   };
-  for(const name of ['theme.js','i18n.js','overlays.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
+  for(const name of ['theme.js','i18n.js','overlays.js','charts.js','timeline.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
     !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
@@ -398,4 +399,180 @@ test('background refresh neither dims the page nor redraws unchanged data',async
   await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(observed.filter(c=>c.includes('loading')),[]);
   assert.deepEqual(h.errors,[]);
+});
+
+
+// --- Diagramme: Tooltip, Fadenkreuz, Zoom und Zeitbalken ---
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const windowCalls=h=>h.calls.filter(c=>c.path.startsWith('/api/overview?since=')).map(c=>Object.fromEntries(new URLSearchParams(c.path.split('?')[1])));
+
+test('hovering a line chart shows crosshair, marker and a tooltip with the nearest value',async t=>{
+  const h=await harness({page:'history',settings:{setup_required:false,high_load_w:3000}});t.after(()=>h.dom.window.close());const {w}=h;
+  const chart=w.document.querySelector('#page-history .chart');
+  await until(()=>!!chart.querySelector('.chart-tip'));
+  assert.equal(chart.querySelectorAll('title').length,0,'keine trägen Browser-Tooltips mehr');
+  const tip=chart.querySelector('.chart-tip');
+  assert.equal(tip.hidden,true);
+  // Messpunkt 30 (4000 W) liegt bei x = 47 + 1800/3600 * 701 = 397,5.
+  chart.dispatchEvent(new w.MouseEvent('pointermove',{bubbles:true,clientX:399}));
+  assert.equal(tip.hidden,false);
+  assert.match(tip.textContent,/4\.000,0 W/);
+  assert.equal(chart.querySelector('.chart-cursor').hasAttribute('hidden'),false);
+  assert.equal(chart.querySelector('.chart-cursor line').getAttribute('x1'),'397.5');
+  assert.equal(chart.querySelector('.chart-cursor circle').hasAttribute('hidden'),false);
+  chart.dispatchEvent(new w.MouseEvent('pointerleave',{bubbles:true}));
+  assert.equal(tip.hidden,true);
+  assert.equal(chart.querySelector('.chart-cursor').hasAttribute('hidden'),true);
+});
+
+test('a line chart is reachable by keyboard and says when there are no data',async t=>{
+  const h=await harness({page:'history',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  const chart=w.document.querySelector('#page-history .chart');
+  await until(()=>!!chart.querySelector('.chart-tip'));
+  const tip=chart.querySelector('.chart-tip');
+  chart.dispatchEvent(new w.FocusEvent('focus'));
+  assert.equal(tip.hidden,false);
+  const last=tip.textContent;
+  chart.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));
+  assert.notEqual(tip.textContent,last);
+  assert.equal(tip.getAttribute('role'),'status','Tastaturbedienung wird angesagt');
+  chart.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+  assert.equal(tip.hidden,true);
+  // Hinter dem letzten Messpunkt (x1 = 3600, letzter Punkt 3540) liegt keine Messung mehr.
+  chart.dispatchEvent(new w.MouseEvent('pointermove',{bubbles:true,clientX:4}));
+  assert.match(tip.textContent,/keine Daten/);
+  assert.equal(chart.querySelector('.chart-cursor circle').hasAttribute('hidden'),true);
+});
+
+test('bars lift on hover and name day, energy and recorded hours',async t=>{
+  const day=86400*20000;
+  const series={group:'day',power_resolution_seconds:900,power:[],energy:[0,1,2].map(i=>({ts:day+i*86400,import_kwh:2.5+i,import_s:86400,export_kwh:0,export_s:86400}))};
+  const h=await harness({page:'history',series,settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  const chart=w.document.querySelector('#page-history .chart');
+  await until(()=>!!chart.querySelector('.chart-tip'));
+  chart.dispatchEvent(new w.MouseEvent('pointermove',{bubbles:true,clientX:100}));
+  const tip=chart.querySelector('.chart-tip');
+  assert.match(tip.textContent,/2,500 kWh/);
+  assert.match(tip.textContent,/24,0 h erfasst/);
+  assert.ok(chart.querySelector('rect.bar[data-i="0"]').classList.contains('hover'));
+  chart.dispatchEvent(new w.MouseEvent('pointermove',{bubbles:true,clientX:700}));
+  assert.equal(chart.querySelector('rect.bar.hover').dataset.i,'2');
+  assert.match(tip.textContent,/4,500 kWh/);
+});
+
+function timelineSetup(){
+  const now=Math.floor(Date.now()/1000), first=now-10*86400;
+  return {now,first,options:{page:'history',settings:{setup_required:false},window:{start:now-86400,end:now-3600},
+    timeline:{start:first,end:now,bin_seconds:3600,bins:Array.from({length:40},(_,i)=>({ts:first+i*21600,kwh:1+i%5,covered:1}))}}};
+}
+
+test('the timeline shows the whole record with the current window and moves it by dragging',async t=>{
+  const {options,first,now}=timelineSetup();
+  const h=await harness(options);t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!w.document.getElementById('timeline').hidden);
+  const svg=w.document.getElementById('timeline-svg');
+  assert.equal(svg.querySelectorAll('.tl-bar').length,40);
+  assert.ok(svg.querySelector('.tl-window')&&svg.querySelectorAll('.tl-handle').length===2);
+  assert.match(w.document.getElementById('timeline-label').textContent,/–/);
+  const scale=744/(now-first), xOf=ts=>8+(ts-first)*scale;
+  const win=svg.querySelector('.tl-window'), left=Number(win.getAttribute('x')), right=left+Number(win.getAttribute('width'));
+  // Fenster mit gedrückter Maustaste nach links (in die Vergangenheit) schieben.
+  const middle=(left+right)/2;
+  svg.dispatchEvent(new w.MouseEvent('pointerdown',{bubbles:true,clientX:middle,button:0}));
+  svg.dispatchEvent(new w.MouseEvent('pointermove',{bubbles:true,clientX:middle-60}));
+  svg.dispatchEvent(new w.MouseEvent('pointerup',{bubbles:true,clientX:middle-60}));
+  await pause(320);
+  const [call]=windowCalls(h).slice(-1);
+  assert.ok(call,'Daten für das neue Fenster werden geladen');
+  const shift=60/scale;
+  assert.ok(Math.abs((Number(call.until)-Number(call.since))-(options.window.end-options.window.start))<90,'Länge bleibt');
+  assert.ok(Math.abs(Number(call.since)-(options.window.start-shift))<900,'Fenster wurde verschoben');
+  assert.equal(h.w.document.querySelector('#range-start').value.length,10);
+});
+
+test('dragging a window edge and the mouse wheel zoom the time axis',async t=>{
+  const {options,now,first}=timelineSetup();
+  const h=await harness(options);t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!w.document.getElementById('timeline').hidden);
+  const svg=w.document.getElementById('timeline-svg');
+  const win=svg.querySelector('.tl-window'), left=Number(win.getAttribute('x'));
+  svg.dispatchEvent(new w.MouseEvent('pointerdown',{bubbles:true,clientX:left,button:0}));
+  svg.dispatchEvent(new w.MouseEvent('pointermove',{bubbles:true,clientX:left+40}));
+  svg.dispatchEvent(new w.MouseEvent('pointerup',{bubbles:true,clientX:left+40}));
+  await pause(320);
+  let call=windowCalls(h).slice(-1)[0];
+  assert.ok(Number(call.until)-Number(call.since)<options.window.end-options.window.start,'linker Rand nach innen: kleineres Fenster');
+  assert.equal(Number(call.until),options.window.end);
+  const span=Number(call.until)-Number(call.since);
+  const before=windowCalls(h).length;
+  const wheel=new w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-200,clientX:left+60});
+  svg.dispatchEvent(wheel);
+  assert.equal(wheel.defaultPrevented,true,'Mausrad zoomt statt die Seite zu scrollen');
+  await pause(320);
+  assert.ok(windowCalls(h).length>before);
+  call=windowCalls(h).slice(-1)[0];
+  assert.ok(Number(call.until)-Number(call.since)<span,'Hineinzoomen verkleinert das Fenster');
+  // Nie unter 5 Minuten, nie über den erfassten Zeitraum.
+  for(let i=0;i<40;i++)svg.dispatchEvent(new w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-400,clientX:left}));
+  await pause(320);
+  call=windowCalls(h).slice(-1)[0];
+  assert.ok(Number(call.until)-Number(call.since)>=300);
+  for(let i=0;i<60;i++)svg.dispatchEvent(new w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:400,clientX:left}));
+  await pause(320);
+  call=windowCalls(h).slice(-1)[0];
+  assert.ok(Number(call.since)>=first-1&&Number(call.until??now)-Number(call.since)<=now-first+2);
+  assert.equal(call.until,undefined,'Fenster bis zur Gegenwart folgt der Zeit');
+});
+
+test('clicking beside the window recentres it, buttons and keys zoom, "Alles" shows the whole record',async t=>{
+  const {options,first,now}=timelineSetup();
+  const h=await harness(options);t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!w.document.getElementById('timeline').hidden);
+  const svg=w.document.getElementById('timeline-svg');
+  const scale=744/(now-first);
+  svg.dispatchEvent(new w.MouseEvent('pointerdown',{bubbles:true,clientX:60,button:0}));
+  svg.dispatchEvent(new w.MouseEvent('pointerup',{bubbles:true,clientX:60}));
+  await pause(320);
+  let call=windowCalls(h).slice(-1)[0];
+  const centre=(Number(call.since)+Number(call.until))/2;
+  assert.ok(Math.abs(centre-(first+(60-8)/scale))<1800,'Fenster sitzt dort, wo geklickt wurde');
+  assert.ok(Math.abs((Number(call.until)-Number(call.since))-(options.window.end-options.window.start))<90,'Länge bleibt');
+  const span=Number(call.until)-Number(call.since);
+  w.document.getElementById('timeline-in').click();
+  await pause(320);
+  call=windowCalls(h).slice(-1)[0];
+  assert.ok(Math.abs((Number(call.until)-Number(call.since))-span/2)<900);
+  svg.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
+  await pause(320);
+  const moved=windowCalls(h).slice(-1)[0];
+  assert.ok(Number(moved.since)>Number(call.since));
+  w.document.getElementById('timeline-all').click();
+  await pause(320);
+  call=windowCalls(h).slice(-1)[0];
+  assert.ok(Math.abs(Number(call.since)-first)<=1);
+  assert.equal(call.until,undefined);
+});
+
+test('ctrl+wheel and dragging inside the chart zoom and pan the same window',async t=>{
+  const {options}=timelineSetup();
+  const h=await harness(options);t.after(()=>h.dom.window.close());const {w}=h;
+  const chart=w.document.querySelector('#page-history .chart');
+  await until(()=>!!chart.querySelector('.chart-tip')&&!w.document.getElementById('timeline').hidden);
+  const plain=new w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-100,clientX:300});
+  chart.dispatchEvent(plain);
+  assert.equal(plain.defaultPrevented,false,'normales Mausrad scrollt weiter die Seite');
+  const zoom=new w.WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-200,ctrlKey:true,clientX:300});
+  chart.dispatchEvent(zoom);
+  assert.equal(zoom.defaultPrevented,true);
+  await pause(320);
+  let call=windowCalls(h).slice(-1)[0];
+  const span=Number(call.until)-Number(call.since);
+  assert.ok(span<options.window.end-options.window.start);
+  chart.dispatchEvent(new w.MouseEvent('pointerdown',{bubbles:true,clientX:300,button:0}));
+  w.dispatchEvent(new w.MouseEvent('pointermove',{bubbles:true,clientX:340}));
+  w.dispatchEvent(new w.MouseEvent('pointerup',{bubbles:true,clientX:340}));
+  await pause(320);
+  const dragged=windowCalls(h).slice(-1)[0];
+  assert.ok(Number(dragged.since)<Number(call.since),'Ziehen nach rechts zeigt früher Liegendes');
+  assert.ok(Math.abs((Number(dragged.until)-Number(dragged.since))-span)<90,'Länge bleibt');
 });

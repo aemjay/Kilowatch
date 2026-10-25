@@ -42,8 +42,8 @@ function buildOverlays(spec) {
   if (spec.trends === false) for (const key of Object.keys(OVERLAYS)) chosen.delete(key);
   const overlays = [];
   const series = (chosen.has('moving') || chosen.has('range')) ? rolling(spec.data, spec.field, spec.xField, spec.window, spec.byCount, spec.gapLimit) : [];
-  if (chosen.has('range')) overlays.push({type: 'band', points: series.filter(p => p.low != null).map(p => ({x: p.x, low: p.low, high: p.high}))});
-  if (chosen.has('moving')) overlays.push({type: 'line', cls: 'overlay-moving', points: series.filter(p => p.mean != null).map(p => ({x: p.x, y: p.mean}))});
+  if (chosen.has('range')) overlays.push({type: 'band', name: [t(OVERLAYS.range), spec.windowLabel].filter(Boolean).join(' '), points: series.filter(p => p.low != null).map(p => ({x: p.x, low: p.low, high: p.high}))});
+  if (chosen.has('moving')) overlays.push({type: 'line', cls: 'overlay-moving', name: [t(OVERLAYS.moving), spec.windowLabel].filter(Boolean).join(' '), points: series.filter(p => p.mean != null).map(p => ({x: p.x, y: p.mean}))});
   if (chosen.has('mean')) {
     const value = average(spec.data, spec.field);
     if (value != null) overlays.push({type: 'hline', cls: 'overlay-mean', y: value, label: t('Ø {value}', {value: number(value, value < 10 ? 2 : 0)})});

@@ -84,6 +84,7 @@ Die Historie beginnt mit der ersten Erfassung; ein Cloud-Historienimport ist nic
 ## Dokumentation und Entwicklung
 
 - [Installation](docs/INSTALLATION.md) und [Updates](docs/UPDATES.md)
+- [Diagramme bedienen: Tooltips, Zoomen, Zeitbalken](docs/BEDIENUNG.md)
 - [Betrieb, Zugangsdaten, Backup und Restore](docs/BETRIEB.md)
 - [Eigener Strompreis, HT/NT und dynamische Preise](docs/TARIFE.md)
 - [Bridge, Gerätesuche und optionaler MQTT-Betrieb](docs/BRIDGE.md)
