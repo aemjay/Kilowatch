@@ -1,6 +1,6 @@
 # Betrieb, Sicherung und Wiederherstellung
 
-Alle Befehle im Projektordner des NAS ausführen. Für importierte Images `compose.prebuilt.yaml` statt `compose.yaml` verwenden. Bei optionalen Zusatzdiensten die zugehörigen `-f compose.signal.yaml` beziehungsweise `-f compose.mqtt.yaml` auch bei Updates mitführen.
+Alle Befehle im Projektordner des NAS ausführen. Wer selbst baut, verwendet `compose.build.yaml` statt `compose.yaml`. Bei optionalen Zusatzdiensten die zugehörigen `-f compose.signal.yaml` beziehungsweise `-f compose.mqtt.yaml` auch bei Updates mitführen.
 
 ## Alltag und Zugangsdaten
 
@@ -36,7 +36,7 @@ Docker-Volume kilowatch-secrets  # nicht im Projektordner
 
 **Warum getrennt?** Läge der Schlüssel neben den verschlüsselten Passwörtern im gesicherten Ordner, enthielte jede Sicherung beides zusammen, und die Verschlüsselung wäre wertlos. So landen in Hyper Backup nur Messdaten, Einstellungen und Sicherungen, aber keine Geheimnisse. Das Volume liegt unter `@docker` und wird von einer Sicherung des Ordners `docker` nicht erfasst.
 
-Die Dateien in `data/` gehören standardmäßig der Benutzer-ID 10001. Wer sie in der File Station als eigener Benutzer bearbeiten möchte, trägt in der `.env` `PUID`/`PGID` mit der eigenen DSM-Benutzer- und Gruppen-ID ein (per SSH `id -u` und `id -g`). Beim Start passt der Container die Eigentümer an und läuft danach ohne Root-Rechte.
+Die Dateien in `data/` gehören dem DSM-Benutzer aus `PUID`/`PGID` in der `.env` (ohne Angabe der internen ID 10001, die auf Synology wegen der ACLs meist nicht schreiben darf). Dieser Benutzer braucht in der File Station Lese-/Schreibrecht auf `data`. Beim Start passt der Container die Eigentümer an, prüft das Schreibrecht und läuft danach ohne Root-Rechte.
 
 Passwörter und Token werden atomar mit Dateirechten 0600 geschrieben. Wer als NAS-Administrator auf das Volume zugreifen kann, kann die Geheimnisse entschlüsseln; für Schutz bei Datenträgerverlust zusätzlich NAS-Verschlüsselung verwenden. Die API liefert gespeicherte Passwörter und Schlüssel nicht zurück.
 
@@ -83,12 +83,7 @@ Danach den neuen Setup-Code aus dem Protokoll verwenden und ein neues App-Passwo
 
 ## Update
 
-1. Datenbank sowie lokale Zugangskonfiguration sichern.
-2. Neue Quellen kopieren oder das neue Image `kilowatch:<version>` importieren und die Image-Zeile in der Compose-Datei anpassen.
-3. Quellbuild: `docker compose -f compose.yaml up -d --build`. Prebuilt: `docker compose -f compose.prebuilt.yaml up -d --force-recreate`.
-4. Historie, Tarif, aktuelle Messung, FQDN und Sicherungsdownload prüfen. Benachrichtigungen zuerst gezielt testen.
-
-Es sind keine unbeaufsichtigten `latest`-Updates eingerichtet. Bei inkompatiblem künftigem Schema passende Sicherungen und Image-Version gemeinsam verwenden.
+Siehe **[Updates](UPDATES.md)**: Update-Hinweis in der App, Update per Container Manager, SSH oder DSM-Aufgabenplaner, automatische Sicherung vor Datenbankänderungen und Rückweg.
 
 ## Nach Messausfällen
 

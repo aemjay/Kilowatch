@@ -6,6 +6,7 @@ import sqlite3
 import time
 
 from .config import Config
+from .storage import SCHEMA_VERSION
 
 
 def reset_login(directory, confirmed=False):
@@ -35,8 +36,8 @@ def restore(source, directory, confirmed=False):
                 raise ValueError("Sicherung ist beschädigt.")
             version = original.execute("PRAGMA user_version").fetchone()[0]
             tables = {r[0] for r in original.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            if version != 1 or not {"samples", "buckets", "settings", "state", "gaps", "tariffs", "prices", "events", "issues"} <= tables:
-                raise ValueError("Keine kompatible Kilowatch-Sicherung (Schema 1).")
+            if not 1 <= version <= SCHEMA_VERSION or not {"samples", "buckets", "settings", "state", "gaps", "tariffs", "prices", "events", "issues"} <= tables:
+                raise ValueError(f"Keine kompatible Kilowatch-Sicherung (Schema 1 bis {SCHEMA_VERSION}).")
             with closing(sqlite3.connect(temporary)) as dest:
                 original.backup(dest)
         if target.exists():

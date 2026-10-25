@@ -25,6 +25,8 @@ from .notifications import NotificationSettings, Notifications
 from .network import local_request
 from .discovery import Discovery, suggestions
 from .market import Market
+from .updates import Updates
+from . import insights
 
 
 class StrictModel(BaseModel):
@@ -117,6 +119,63 @@ class PriceImport(StrictModel):
     csv: str = Field(max_length=1500000)
 
 
+class ScenarioTariff(StrictModel):
+    mode: str
+    eur_kwh: float = Field(default=0, ge=-5, le=10)
+    low_eur_kwh: float | None = Field(default=None, ge=-5, le=10)
+    low_start: str = "22:00"
+    low_end: str = "06:00"
+    weekend_low: bool = False
+    markup_ct: float = Field(default=0, ge=-100, le=200)
+    vat_percent: float = Field(default=19, ge=0, le=30)
+    base_month: float = Field(ge=0, le=1000)
+    feedin_eur_kwh: float = Field(default=0, ge=-5, le=10)
+
+    @field_validator("mode")
+    @classmethod
+    def valid_mode(cls, value):
+        if value not in ("fixed", "dual", "spot"):
+            raise ValueError("Tarifart muss fixed, dual oder spot sein.")
+        return value
+
+    @field_validator("low_start", "low_end")
+    @classmethod
+    def tariff_clock(cls, value):
+        return Tariff.tariff_clock(value)
+
+    @model_validator(mode="after")
+    def dual_fields(self):
+        if self.mode == "dual" and (self.low_eur_kwh is None or self.low_start == self.low_end):
+            raise ValueError("Zweiter Preis und unterschiedliche NT-Anfangs-/Endzeit erforderlich.")
+        return self
+
+    def as_tariff(self):
+        values = self.model_dump()
+        values["markup_eur_kwh"] = values.pop("markup_ct") / 100
+        return values
+
+
+class Simulation(StrictModel):
+    start: date
+    end: date
+    tariff: ScenarioTariff
+
+
+class Budget(StrictModel):
+    monthly_eur: float | None = Field(default=None, gt=0, le=100000)
+    monthly_kwh: float | None = Field(default=None, gt=0, le=1000000)
+    abschlag_eur: float | None = Field(default=None, gt=0, le=100000)
+
+
+class HistoryRequest(StrictModel):
+    start: date
+    end: date
+
+
+class UpdateSettings(StrictModel):
+    enabled: bool
+
+
 class DiscoveryRequest(StrictModel):
     network: str = Field(min_length=1, max_length=50)
 
@@ -164,6 +223,7 @@ def create_app(config=None):
     notifier = Notifications(store, vault, collector, config.demo)
     discovery = Discovery()
     market = Market(store, config.demo)
+    updates = Updates(store, config.update_repository, config.demo)
     sessions, attempts = {}, {}
 
     def recent_attempts(key, now):
@@ -179,7 +239,8 @@ def create_app(config=None):
         if config.demo and not config.testing:
             from .demo import seed
             await asyncio.to_thread(seed, store)
-        tasks = [asyncio.create_task(collector.run()), asyncio.create_task(notifier.run())] if not config.testing else []
+        tasks = [asyncio.create_task(collector.run()), asyncio.create_task(notifier.run()),
+                 asyncio.create_task(updates.run())] if not config.testing else []
         yield
         for task in tasks:
             task.cancel()
@@ -194,6 +255,7 @@ def create_app(config=None):
     app.state.store, app.state.collector = store, collector
     app.state.config = config
     app.state.auth, app.state.vault, app.state.notifier = auth, vault, notifier
+    app.state.updates = updates
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -414,7 +476,39 @@ def create_app(config=None):
     def tariffs():
         schedules = store.state("tariff_schedules", {})
         return {"tariffs": [dict(row, **schedules.get(row["start_date"], {})) for row in store.rows("SELECT * FROM tariffs ORDER BY start_date")],
-                "prices": store.rows("SELECT COUNT(*) AS count,MIN(start) AS start,MAX(end) AS end FROM prices")[0], "market":market.cached()}
+                "prices": store.rows("SELECT COUNT(*) AS count,MIN(start) AS start,MAX(end) AS end FROM prices")[0], "market":market.cached(),
+                "spot_history": market.history_status()}
+
+    @app.get("/api/insights")
+    def insight_data(start: str | None = None, end: str | None = None):
+        s, e = range_for(start, end)
+        a = Analytics(store)
+        return {"baseline_trend": insights.baseline_trend(a, s, e), "feedin": insights.feedin_profile(a, s, e)}
+
+    @app.post("/api/simulate")
+    def simulate(data: Simulation):
+        s, e = range_for(data.start.isoformat(), data.end.isoformat())
+        return insights.simulate(Analytics(store), s, e, data.tariff.as_tariff())
+
+    @app.get("/api/budget")
+    def budget():
+        saved = store.state("budget", {})
+        a, now = Analytics(store), time.time()
+        return {"settings": Budget(**saved).model_dump(), "month": insights.month_budget(a, now, saved),
+                "annual": insights.annual_projection(a, now, saved.get("abschlag_eur"))}
+
+    @app.put("/api/budget")
+    def save_budget(data: Budget):
+        store.set_state("budget", data.model_dump())
+        notifier.wakeup.set()
+        return {"ok": True}
+
+    @app.post("/api/market/history")
+    async def market_history(data: HistoryRequest):
+        if data.end < data.start:
+            raise ValueError("Ende liegt vor dem Beginn.")
+        zone = store.settings()["timezone"]
+        return await market.history(midnight(data.start, zone), midnight(data.end + timedelta(days=1), zone))
 
     @app.post("/api/market/refresh")
     async def refresh_market():
@@ -531,6 +625,19 @@ def create_app(config=None):
     def backup():
         path = store.backup()
         return FileResponse(path, filename=path.name, media_type="application/vnd.sqlite3")
+
+    @app.get("/api/updates")
+    def update_status():
+        return updates.status()
+
+    @app.put("/api/updates")
+    def update_settings(data: UpdateSettings):
+        updates.set_enabled(data.enabled)
+        return updates.status()
+
+    @app.post("/api/updates/check")
+    async def update_check():
+        return await updates.check(manual=True)
 
     @app.get("/api/diagnostics")
     def diagnostics():

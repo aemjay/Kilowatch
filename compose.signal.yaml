@@ -1,7 +1,8 @@
-# Optional: docker compose -f compose.yaml -f compose.signal.yaml up -d --build
+# Optional: docker compose -f compose.yaml -f compose.signal.yaml up -d
 # Kein veröffentlichter Gateway-Port: Kopplung erfolgt über die App-Oberfläche.
 services:
   signal-api:
+    container_name: kilowatch-signal
     image: bbernhard/signal-cli-rest-api:0.101
     restart: unless-stopped
     environment:

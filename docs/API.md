@@ -45,6 +45,12 @@ Ein HttpOnly-Cookie gilt zwölf Stunden. Beim App-Neustart werden alle Sitzungen
 | GET `/api/events/ID/comparison` | Ereignis und Vorperiode vergleichen |
 | GET `/api/export` | CSV-/JSON-Download |
 | GET `/api/backup` | konsistente SQLite-Sicherung herunterladen |
+| GET `/api/insights` | Grundlast-Entwicklung (je Woche/Monat, mit kWh und € pro Jahr) und Einspeiseprofil |
+| POST `/api/simulate` | `{ "start": "...", "end": "...", "tariff": { "mode": "fixed\|dual\|spot", ... } }`, Tarifsimulation mit gepaartem Vergleich |
+| GET/PUT `/api/budget` | Monatsbudget, Monatsziel und Abschlag; Monatsprognose und Jahreshochrechnung |
+| POST `/api/market/history` | `{ "start": "...", "end": "..." }`, vergangene Börsenpreise nachladen (höchstens 62 Tage) |
+| GET/PUT `/api/updates` | Status des Update-Hinweises; `{ "enabled": true }` schaltet die tägliche Prüfung ein |
+| POST `/api/updates/check` | einmalige Update-Prüfung bei GitHub |
 | GET `/api/diagnostics` | freigegebene Diagnosefelder, lokale Hinweise und Speichergröße |
 
 Zeitraumsparameter für Übersicht, Analyse und Export:

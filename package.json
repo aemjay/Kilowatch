@@ -1,6 +1,5 @@
 {
   "name": "kilowatch-ui-tests",
-  "version": "1.0.0",
   "private": true,
   "description": "Development-only DOM tests; no Node runtime in the NAS image",
   "scripts": {

@@ -17,6 +17,18 @@ DEFAULTS = {
 }
 
 
+def _spot_prices(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS spot_prices(start INTEGER PRIMARY KEY,end INTEGER NOT NULL,eur_mwh REAL NOT NULL)")
+
+
+# Geordnete Schemaänderungen. Nur hinzufügen (Tabellen, Spalten, Indizes); Entfernen
+# frühestens in der nächsten Hauptversion. Jede Stufe läuft in einer eigenen Transaktion.
+MIGRATIONS = [
+    (2, _spot_prices),
+]
+SCHEMA_VERSION = max([1] + [target for target, _ in MIGRATIONS])
+
+
 class Store:
     def __init__(self, directory: Path):
         self.directory = Path(directory)
@@ -30,8 +42,10 @@ class Store:
         self.conn.execute("PRAGMA synchronous=FULL")
         self.conn.execute("PRAGMA busy_timeout=15000")
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
-        if version > 1:
-            raise RuntimeError("Datenbank stammt aus einer neueren Kilowatch-Version.")
+        if version > SCHEMA_VERSION:
+            raise RuntimeError(f"Datenbank hat Schema {version}, diese Kilowatch-Version kennt nur bis {SCHEMA_VERSION}. "
+                               "Neuere Kilowatch-Version verwenden oder die Sicherung backups/pre-migration-* "
+                               "mit dem dazu passenden älteren Image zurückspielen.")
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -58,11 +72,34 @@ class Store:
                 start INTEGER PRIMARY KEY,end INTEGER NOT NULL,eur_kwh REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS events(
                 id INTEGER PRIMARY KEY,start REAL,end REAL,title TEXT,note TEXT);
-            PRAGMA user_version=1;
         """)
+        if version == 0:
+            # Neue Datenbank: Grundschema ist Version 1, danach alle Migrationen.
+            self.conn.execute("PRAGMA user_version=1")
+            version = 1
+        elif version < SCHEMA_VERSION:
+            # Vor jeder Schemaänderung eine geprüfte Sicherung, die nicht rotiert wird.
+            folder = self.directory / "backups"
+            folder.mkdir(exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+            self.backup(folder / f"pre-migration-v{version}-to-v{SCHEMA_VERSION}-{stamp}.sqlite3")
+        try:
+            self.migrate(version)
+        except BaseException:
+            self.conn.close()
+            raise
         with self.transaction():
             for key, val in DEFAULTS.items():
                 self.conn.execute("INSERT OR IGNORE INTO settings VALUES(?,?)", (key, json.dumps(val)))
+
+    def migrate(self, version):
+        for target, step in MIGRATIONS:
+            if target <= version:
+                continue
+            with self.transaction():
+                step(self.conn)
+                self.conn.execute(f"PRAGMA user_version={int(target)}")
+            version = target
 
     @contextmanager
     def transaction(self):

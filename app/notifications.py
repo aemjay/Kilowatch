@@ -41,6 +41,7 @@ class NotificationSettings(BaseModel):
     load_w: int = Field(default=3000, ge=100, le=1000000)
     load_minutes: int = Field(default=10, ge=1, le=240)
     daily_kwh: float = Field(default=0, ge=0, le=10000)
+    budget_enabled: bool = False
     battery_enabled: bool = True
     battery_v: float = Field(default=2.7, ge=1, le=5)
     disk_enabled: bool = True
@@ -207,6 +208,8 @@ class Notifications:
         for key in list(self.rule_state):
             rule_enabled = {"offline": config.offline_enabled, "load": config.load_enabled,
                             "battery": config.battery_enabled, "disk": config.disk_enabled}.get(key, bool(config.daily_kwh))
+            if key.startswith("budget:"):
+                rule_enabled = config.budget_enabled
             if not rule_enabled:
                 with self.store.transaction():
                     self.store.conn.execute("UPDATE notifications SET status='cancelled' WHERE rule_key=? AND status='pending'", (key,))
@@ -296,8 +299,18 @@ class Notifications:
             used = Analytics(self.store).summary(midnight(day, settings["timezone"]), now)["import_kwh"]
             self.rule("daily:" + day.isoformat(), used is not None and used >= config.daily_kwh,
                       "Tagesbudget erreicht", f"Heute sind mindestens {used or 0:.2f} kWh Netzbezug erfasst. Eingestellter Hinweiswert: {config.daily_kwh:.2f} kWh. Fehlende Daten können zusätzlichen Verbrauch enthalten.", now, config, recovery=False)
+        budget = self.store.state("budget", {}).get("monthly_eur")
+        month = local_day(now, settings["timezone"]).strftime("%Y-%m")
+        if config.budget_enabled and budget:
+            first = local_day(now, settings["timezone"]).replace(day=1)
+            spent = Analytics(self.store).summary(midnight(first, settings["timezone"]), now)["known_cost_eur"]
+            self.rule("budget:" + month, spent is not None and spent >= budget, "Monatsbudget erreicht",
+                      f"In diesem Monat sind bereits mindestens {spent or 0:.2f} € erfasst. Eingestelltes Budget: {budget:.2f} €. Fehlende Daten oder Preise können weitere Kosten enthalten.",
+                      now, config, recovery=False)
         for key in list(self.rule_state):
             if key.startswith("daily:") and key != "daily:" + local_day(now, settings["timezone"]).isoformat():
+                self.rule(key, False, "", "", now, config, enabled=False)
+            if key.startswith("budget:") and (key != "budget:" + month or not config.budget_enabled or not budget):
                 self.rule(key, False, "", "", now, config, enabled=False)
         self.store.set_state("notification_rules", self.rule_state)
 

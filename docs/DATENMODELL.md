@@ -29,11 +29,12 @@ Der MQTT-Broker ist nicht der Messdaten-Eingang von Kilowatch. Er kann der Bridg
 | `settings` | lokale Einstellungen ohne Passwort |
 | `tariffs` | gültig-ab-Datum, Preisart, vollständiger Bruttopreis und Monatsgrundpreis |
 | `prices` | zeitlich eindeutige dynamische Brutto-Preisintervalle |
+| `spot_prices` | abgerufene Börsenpreise (EUR/MWh) als Historie für die Tarifsimulation |
 | `events` | eigene Markierungen und Notizen |
 | `issues` | Erfassungs- und Plausibilitätshinweise |
 | `notifications` | Zustellwarteschlange und Verlauf mit Betreff, Text, Versuchen und Status |
 
-Schema 2 wird über `PRAGMA user_version` geführt. Schema 1 wird beim Öffnen übernommen; neuere unbekannte Schemata werden abgelehnt. Die erhöhte Version verhindert, dass eine alte App die neue HT/NT-Tarifart irrtümlich als CSV-Tarif behandelt. Es gibt bewusst genau einen App-Worker/Collector. Niemals mehrere Container auf dieselbe Datenbank schreiben lassen.
+Die Schemaversion wird über `PRAGMA user_version` geführt. Ältere Schemata werden beim Start über geordnete Migrationen in `app/storage.py` angehoben, vorher entsteht automatisch eine Sicherung `backups/pre-migration-*`. Neuere unbekannte Schemata werden abgelehnt. Siehe [Updates](UPDATES.md). Es gibt bewusst genau einen App-Worker/Collector. Niemals mehrere Container auf dieselbe Datenbank schreiben lassen.
 
 Benachrichtigungseinstellungen und Regelzustände liegen in `state`. Die ergänzende Tabelle `notifications` wird bei Bedarf angelegt. App-Passwort-Hash und verschlüsselte Geheimnisse liegen außerhalb von SQLite, siehe [Betrieb](BETRIEB.md). Ein Datenbankbackup allein sichert diese Dateien nicht.
 
@@ -96,6 +97,9 @@ Die Netzanschlussmessung allein liefert weder die gesamte PV-Erzeugung noch den 
 - **Tagesprofile:** gemessene Bezugsenergie pro erfasster Stunde, getrennt nach Werktagen/Wochenende. Schlechte Abdeckung kann den Eindruck verzerren und muss mitbetrachtet werden.
 - **Nachtauffälligkeit:** Vergleich der Nachtmediane der letzten sieben Tage mit den davorliegenden sieben Tagen; beide Fenster brauchen mindestens 24 ausreichend erfasste Viertelstunden im gewählten Analysebereich. Hinweis ab mehr als 80 W und mehr als 30 % Anstieg. Dieser Analysehinweis erscheint in der Oberfläche. Die separat konfigurierbaren [Alarmregeln](BENACHRICHTIGUNGEN.md) können E-Mail und Signal auslösen; eine automatische Geräteerkennung ist nicht enthalten.
 - **Prognose:** Mittel gleicher Wochentage aus 28 Tagen. Mindestens sieben Tage mit jeweils ≥ 98 % Abdeckung und ≥ 98 % Abdeckung im laufenden Monat erforderlich. Für den Rest des laufenden Tages wird dessen Anteil vereinfacht aus einem typischen Tagesverbrauch angesetzt. Das Band aus Tagesstreuung ist heuristisch und besitzt keine garantierte statistische Abdeckung. Saisonänderungen und neue Großverbraucher werden nicht vorab erkannt.
+- **Grundlast-Entwicklung:** Nachtgrundlast wie oben, je Woche (bei mehr als 120 Tagen je Monat); Punkte mit weniger als 24 erfassten Nachtviertelstunden bleiben leer. Jahreswerte = Grundlast × 8766 h, Kosten mit dem zeitlich gemittelten Arbeitspreis des aktuellen Tarifs der letzten sieben Tage. Negative Nachtwerte (Batterie, Einspeisung) zählen nicht.
+- **Einspeiseprofil:** mittlere Einspeiseleistung je Stunde aus den erfassten Einspeisesekunden. Eigenverbrauch und Autarkie lassen sich aus dem Netzanschluss allein nicht bestimmen.
+- **Tarifsimulation, Budget, Abschlag:** siehe [Tarife](TARIFE.md).
 - **Vorperioden:** gleiche Zahl lokaler Kalendertage. Eine laufende Periode wird im Vergleich nur bis zur letzten vollständigen Viertelstunde berücksichtigt. Abdeckungsunterschiede und Tage mit anderer Länge werden nicht verborgen.
 
 Diagramme reduzieren sehr große Leistungsreihen für die Darstellung. Erfasste Spitzen und Zählerenergiemengen bleiben separat erhalten. Historische Rohdaten sind nur innerhalb ihrer Aufbewahrungsdauer verfügbar.

@@ -23,7 +23,6 @@ def test_malformed_market_data_rejected(payload):
 def test_price_fetch_is_explicit_cached_and_never_overwrites_contract_prices(store,monkeypatch):
     now=midnight("2026-10-25","Europe/Berlin")+3600
     monkeypatch.setattr("app.market.time.time",lambda:now)
-    actual_client=httpx.AsyncClient
     calls=[]
     def handle(request):
         calls.append(request)
@@ -31,16 +30,17 @@ def test_price_fetch_is_explicit_cached_and_never_overwrites_contract_prices(sto
         assert "authorization" not in request.headers and "cookie" not in request.headers
         assert "start" in request.url.params and "end" in request.url.params
         return httpx.Response(200,json=response(midnight("2026-10-25","Europe/Berlin")))
-    monkeypatch.setattr("app.market.httpx.AsyncClient",lambda **kw:actual_client(transport=httpx.MockTransport(handle),**kw))
     with store.transaction():
         store.conn.execute("INSERT INTO prices VALUES(?,?,?)",(1800,2700,.35))
-    market=Market(store)
+    market=Market(store,transport=httpx.MockTransport(handle))
     assert not calls
     first=asyncio.run(market.refresh())
     second=asyncio.run(market.refresh())
     assert len(calls)==1 and second["from_cache"]
     assert first["kind"]=="spot_net"
     assert store.rows("SELECT eur_kwh FROM prices")[0]["eur_kwh"]==.35
+    # Abgerufene Börsenpreise bleiben als Historie für die Tarifsimulation erhalten.
+    assert store.rows("SELECT COUNT(*) AS n FROM spot_prices")[0]["n"]==len(first["rows"])
 
 
 def test_market_failure_keeps_old_cache_and_limits_retries(store,monkeypatch):
@@ -48,9 +48,7 @@ def test_market_failure_keeps_old_cache_and_limits_retries(store,monkeypatch):
     monkeypatch.setattr("app.market.time.time",lambda:now)
     old={"rows":[{"start":1800,"end":5400,"ct_kwh":10}],"fetched_at":now-7200,"error":"","kind":"spot_net"}
     store.set_state("market_cache",old)
-    actual_client=httpx.AsyncClient
-    monkeypatch.setattr("app.market.httpx.AsyncClient",lambda **kw:actual_client(transport=httpx.MockTransport(lambda _:httpx.Response(503)),**kw))
-    market=Market(store)
+    market=Market(store,transport=httpx.MockTransport(lambda _:httpx.Response(503)))
     with pytest.raises(ValueError,match="503"):
         asyncio.run(market.refresh())
     assert market.cached()["rows"]==old["rows"]
@@ -61,3 +59,21 @@ def test_market_failure_keeps_old_cache_and_limits_retries(store,monkeypatch):
 def test_market_has_no_demo_network_requests(store):
     with pytest.raises(ValueError,match="Demo"):
         asyncio.run(Market(store,True).refresh())
+
+
+def test_history_backfill_is_chunked_limited_and_rate_limited(store,monkeypatch):
+    day=midnight("2026-10-01","Europe/Berlin")
+    now=day+10*86400
+    monkeypatch.setattr("app.market.time.time",lambda:now)
+    calls=[]
+    def handle(request):
+        start=int(request.url.params["start"])//1000
+        calls.append(start)
+        return httpx.Response(200,json=response(start))
+    market=Market(store,transport=httpx.MockTransport(handle))
+    with pytest.raises(ValueError,match="62 Tage"):
+        asyncio.run(market.history(now-90*86400,now))
+    result=asyncio.run(market.history(day,day+7*86400))
+    assert len(calls)==3 and result["added"]>0 and result["count"]==result["added"]
+    with pytest.raises(ValueError,match="10 Minuten"):
+        asyncio.run(market.history(day,day+86400))

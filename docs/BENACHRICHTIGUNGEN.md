@@ -19,13 +19,13 @@ Kilowatch verwendet [signal-cli-rest-api](https://github.com/bbernhard/signal-cl
 Im NAS-Projektordner:
 
 ```sh
-docker compose -f compose.yaml -f compose.signal.yaml up -d --build
+docker compose -f compose.yaml -f compose.signal.yaml up -d
 ```
 
 Mit importiertem App-Image:
 
 ```sh
-docker compose -f compose.prebuilt.yaml -f compose.signal.yaml up -d
+docker compose -f compose.yaml -f compose.signal.yaml up -d
 ```
 
 Im Container Manager muss die Projektkonfiguration beide Services enthalten. Dafür die YAML-Dateien zusammenführen oder den SSH-Befehl verwenden. `signal-api` muss im gleichen Compose-Netzwerk wie `kilowatch` laufen. Die Zusatzdatei allein ist keine vollständige App-Installation. Bei späteren Updates die Zusatzdatei mitführen.
