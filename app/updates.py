@@ -6,6 +6,7 @@ import time
 import httpx
 
 from . import __version__
+from .i18n import UserError
 
 CHECK_INTERVAL = 86400
 MANUAL_INTERVAL = 60
@@ -78,7 +79,7 @@ class Updates:
                 if response.status_code == 404:
                     raise ValueError("Noch keine veröffentlichte Version gefunden.")
                 if response.status_code != 200:
-                    raise ValueError(f"Update-Prüfung momentan nicht möglich (HTTP {response.status_code}).")
+                    raise UserError("Update-Prüfung momentan nicht möglich (HTTP {status}).", status=response.status_code)
                 if len(response.content) > 200000:
                     raise ValueError("Antwort von GitHub ist zu groß.")
                 saved = dict(parse_release(response.json()), checked_at=now, error="")

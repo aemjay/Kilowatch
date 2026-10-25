@@ -7,6 +7,7 @@ import time
 import httpx
 
 from .network import private_address, resolve_local, validate_host
+from .i18n import _
 
 
 def private_ipv4(value):
@@ -36,8 +37,8 @@ async def suggestions(client_address, bridge_host, nas_host):
             network = str(ipaddress.IPv4Network(f"{address}/24", strict=False))
             if network not in [item["network"] for item in found]:
                 found.append({"network": network, "reason": reason})
-    add(client_address, "Browser-Netz, /24 vorgeschlagen")
-    for host, label in [(bridge_host, "Netz der eingetragenen Bridge, /24 vorgeschlagen"), (nas_host, "NAS-Name, /24 vorgeschlagen")]:
+    add(client_address, _("Browser-Netz, /24 vorgeschlagen"))
+    for host, label in [(bridge_host, _("Netz der eingetragenen Bridge, /24 vorgeschlagen")), (nas_host, _("NAS-Name, /24 vorgeschlagen"))]:
         if host:
             try:
                 for address in await resolve_local(host):

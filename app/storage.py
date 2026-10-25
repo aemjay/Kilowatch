@@ -6,6 +6,7 @@ import math
 import sqlite3
 import threading
 import time
+from .i18n import _
 
 
 DEFAULTS = {
@@ -14,6 +15,7 @@ DEFAULTS = {
     "max_gap_seconds": 90, "max_power_w": 100000,
     "raw_retention_days": 90, "minute_retention_days": 1095,
     "high_load_w": 3000, "name": "Mein Zuhause",
+    "language": "", "currency": "EUR",
 }
 
 
@@ -179,10 +181,10 @@ class Store:
                         delta = new - old
                         maximum = settings["max_power_w"] * dt / 3600000 + 0.02
                         if delta < -1e-8:
-                            reasons.append("Zählerstand gefallen / neue Ausgangsbasis")
+                            reasons.append(_("Zählerstand gefallen / neue Ausgangsbasis"))
                             self.issue("counter_reset", "Zählerstand gefallen; kein negativer Verbrauch gebucht.", ts)
                         elif delta > maximum:
-                            reasons.append("Unplausibler Zählersprung")
+                            reasons.append(_("Unplausibler Zählersprung"))
                             self.issue("counter_jump", "Unplausibler Zählersprung; Intervall nicht gebucht.", ts)
                         else:
                             energy = max(0.0, delta)
@@ -203,7 +205,7 @@ class Store:
                     energies[field] = energy
                     estimates[field] = estimated
                 if changed or dt > settings["max_gap_seconds"] or reasons:
-                    reason = "Zählerwechsel" if changed else "; ".join(sorted(set(reasons))) if reasons else "Messlücke"
+                    reason = _("Zählerwechsel") if changed else "; ".join(sorted(set(reasons))) if reasons else _("Messlücke")
                     self.conn.execute("INSERT INTO gaps(start,end,import_kwh,export_kwh,reason) VALUES(?,?,?,?,?)",
                                       (previous["ts"], ts, energies["import_kwh"], energies["export_kwh"], reason))
                     quality = "gap"

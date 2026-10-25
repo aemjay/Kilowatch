@@ -3,14 +3,16 @@
 // Ohne Eintrag folgt die Oberfläche der Systemeinstellung (prefers-color-scheme).
 (function () {
   const order = ['auto', 'light', 'dark'];
-  const labels = {auto: 'Farbschema: automatisch', light: 'Farbschema: hell', dark: 'Farbschema: dunkel'};
-  const icons = {auto: 'Auto', light: 'Hell', dark: 'Dunkel'};
+  const tk = text => text; // Markiert Texte für die Übersetzung; i18n.js lädt später.
+  const labels = {auto: tk('Farbschema: automatisch'), light: tk('Farbschema: hell'), dark: tk('Farbschema: dunkel')};
+  const icons = {auto: tk('Auto'), light: tk('Hell'), dark: tk('Dunkel')};
   function stored() { try { return localStorage.getItem('kilowatch-theme') || 'auto'; } catch { return 'auto'; } }
   function apply(mode) {
     if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', mode);
     const button = document.getElementById('theme-toggle');
-    if (button) { button.textContent = icons[mode]; button.title = labels[mode]; button.setAttribute('aria-label', labels[mode]); }
+    const tr = typeof t === 'function' ? t : text => text;
+    if (button) { button.textContent = tr(icons[mode]); button.title = tr(labels[mode]); button.setAttribute('aria-label', tr(labels[mode])); }
   }
   apply(stored());
   window.kilowatchTheme = {

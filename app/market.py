@@ -8,6 +8,7 @@ import time
 import httpx
 
 from .analytics import local_day, midnight
+from .i18n import UserError
 
 
 def parse_market(payload):
@@ -51,7 +52,7 @@ class Market:
     async def fetch(self, client, start, end):
         async with client.stream("GET","https://api.awattar.de/v1/marketdata",params={"start":int(start*1000),"end":int(end*1000)}) as response:
             if response.status_code != 200:
-                raise ValueError(f"Börsenpreise momentan nicht verfügbar (HTTP {response.status_code}).")
+                raise UserError("Börsenpreise momentan nicht verfügbar (HTTP {status}).", status=response.status_code)
             body=bytearray()
             async for chunk in response.aiter_bytes():
                 body.extend(chunk)
@@ -106,7 +107,7 @@ class Market:
         now = time.time()
         end = min(end, now)
         if end - start > HISTORY_DAYS * 86400 + 7200:
-            raise ValueError(f"Höchstens {HISTORY_DAYS} Tage je Abruf nachladen.")
+            raise UserError("Höchstens {days} Tage je Abruf nachladen.", days=HISTORY_DAYS)
         if end <= start:
             raise ValueError("Zeitraum muss in der Vergangenheit liegen.")
         if self.lock.locked():
@@ -130,5 +131,5 @@ class Market:
                             count += len(rows)
                         cursor = chunk_end
             except (httpx.HTTPError, OSError, asyncio.TimeoutError):
-                raise ValueError(f"Preisquelle nicht erreichbar; {count} Intervalle gespeichert.") from None
+                raise UserError("Preisquelle nicht erreichbar; {count} Intervalle gespeichert.", count=count) from None
             return dict(self.history_status(), added=count)

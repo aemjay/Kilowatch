@@ -2,7 +2,7 @@
 // DOM unit tests with synthetic API replies. No browser, network or real accounts.
 const assert = require('node:assert/strict');
 const {test} = require('node:test');
-const {readFileSync} = require('node:fs');
+const {existsSync,readFileSync} = require('node:fs');
 const {join} = require('node:path');
 const {Script} = require('node:vm');
 const {JSDOM, VirtualConsole} = require('jsdom');
@@ -35,9 +35,16 @@ async function harness(options={}) {
     url:'http://kilowatch.test/#'+(options.page||'settings'),runScripts:'outside-only',virtualConsole:vc});
   const w=dom.window;
   w.setInterval=()=>0;
+  // jsdom meldet en-US: Sprache festlegen, damit die deutschen Erwartungen gelten.
+  w.localStorage.setItem('kilowatch-language',options.language||'de');
   w.URL.createObjectURL=()=> 'blob:http://kilowatch.test/synthetic';
   w.URL.revokeObjectURL=()=>{};
   w.fetch=async(path,config={})=>{
+    if(path.startsWith('/i18n/')){
+      const file=join(root,path);
+      const catalog=existsSync(file)?JSON.parse(readFileSync(file,'utf8')):{};
+      return {ok:true,status:200,json:async()=>structuredClone(catalog)};
+    }
     const body=config.body?JSON.parse(config.body):null;
     calls.push({path,method:config.method||'GET',body,headers:config.headers});
     let data={ok:true},status=200;
@@ -68,7 +75,7 @@ async function harness(options={}) {
     else if(path==='/api/bridge/test')data={protocol:'SML',endpoint:'/node_data.json',resolved_addresses:['192.168.1.10'],has_import:true};
     return {ok:status===200,status,json:async()=>structuredClone(data),blob:async()=>new w.Blob(['synthetic-image'],{type:'image/png'})};
   };
-  for(const name of ['theme.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
+  for(const name of ['theme.js','i18n.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
     !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
@@ -239,5 +246,47 @@ test('theme toggle cycles auto, light and dark and remembers the choice',async t
   button.click();assert.equal(root.getAttribute('data-theme'),'light');assert.equal(w.localStorage.getItem('kilowatch-theme'),'light');
   button.click();assert.equal(root.getAttribute('data-theme'),'dark');assert.equal(button.textContent,'Dunkel');
   button.click();assert.equal(root.hasAttribute('data-theme'),false);assert.equal(w.localStorage.getItem('kilowatch-theme'),null);
+  assert.deepEqual(h.errors,[]);
+});
+
+test('English interface translates static and dynamic texts and tells the server the language',async t=>{
+  const h=await harness({language:'en',page:'costs',settings:{setup_required:false,language:'en'}});t.after(()=>h.dom.window.close());const {w}=h;
+  const en=JSON.parse(readFileSync(join(root,'i18n','en.json'),'utf8'));
+  assert.equal(w.document.documentElement.lang,'en');
+  const nav=w.document.querySelector('[data-page="costs"] bdi').textContent;
+  assert.equal(nav,en['Kosten & Tarife']);assert.notEqual(nav,'Kosten & Tarife');
+  await until(()=>!!w.document.querySelector('#tariff-form'));
+  assert.match(w.document.querySelector('#page-costs').textContent,new RegExp(en['Tarifart'].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.equal(w.document.title,en['Kilowatch · Energie zu Hause']);
+  assert.ok(h.calls.filter(c=>c.path.startsWith('/api/')).every(c=>c.headers['X-Kilowatch-Language']==='en'));
+  assert.deepEqual(h.errors,[]);
+});
+
+test('language and currency form saves both and hides euro spot prices for other currencies',async t=>{
+  const h=await harness({settings:{setup_required:false,language:'de'}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#locale-form'));
+  input(w,'locale-form','language','nl');input(w,'locale-form','currency','SEK');
+  submit(w,'locale-form');
+  await until(()=>h.calls.some(c=>c.path==='/api/settings'&&c.method==='PUT'&&c.body.currency==='SEK'));
+  assert.deepEqual(h.calls.find(c=>c.body?.currency==='SEK').body,{language:'nl',currency:'SEK'});
+  await until(()=>w.document.documentElement.lang==='nl');
+  assert.equal(w.localStorage.getItem('kilowatch-language'),'nl');
+  w.document.querySelector('[data-page="costs"]').click();
+  await until(()=>!!w.document.querySelector('#simulation-form'));
+  assert.equal(w.document.querySelector('#market-refresh'),null);
+  assert.equal(w.document.querySelector('#simulation-form [name="mode"] option[value="spot"]'),null);
+  assert.match(w.document.querySelector('#page-costs').textContent,/öre/);
+  assert.doesNotMatch(w.document.querySelector('#page-costs').textContent,/\bct\b|€/);
+  assert.deepEqual(h.errors,[]);
+});
+
+test('login screen offers all languages and switches immediately',async t=>{
+  const h=await harness({settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  const select=w.document.querySelector('#login-language');
+  assert.deepEqual([...select.options].map(o=>o.value),['de','en','nb','sv','nl']);
+  select.value='sv';select.dispatchEvent(new w.Event('change'));
+  await until(()=>w.document.documentElement.lang==='sv');
+  const sv=JSON.parse(readFileSync(join(root,'i18n','sv.json'),'utf8'));
+  assert.equal(w.document.querySelector('#login-form h2 bdi').textContent,sv['Anmelden']);
   assert.deepEqual(h.errors,[]);
 });
