@@ -66,12 +66,12 @@ def test_vault_missing_key_does_not_silently_replace_credentials(tmp_path):
 
 
 def test_clear_bridge_password_pauses_without_deleting_history(authenticated):
-    authenticated.put("/api/settings",json={"bridge_host":"bridge.fritz.box","bridge_user":"my-user","bridge_password":"synthetic-secret"})
+    authenticated.put("/api/settings",json={"bridge_host":"bridge.example.lan","bridge_user":"my-user","bridge_password":"synthetic-secret"})
     assert authenticated.delete("/api/credentials/bridge").status_code==200
     settings=authenticated.get("/api/settings").json()
     assert not settings["password_configured"]
     assert not settings["enabled"]
-    assert settings["bridge_host"]=="bridge.fritz.box"
+    assert settings["bridge_host"]=="bridge.example.lan"
 
 
 def test_secrets_are_kept_outside_the_data_folder(tmp_path):

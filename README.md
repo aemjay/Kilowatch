@@ -1,22 +1,22 @@
 # Kilowatch
 
-> **English:** Kilowatch is a self-hosted energy monitor for the Tibber Pulse IR. It reads the Bridge in your home network and keeps all readings on your NAS, with no Tibber account or cloud needed for measuring. The interface is available in English, Norsk bokmål, Svenska, Nederlands and Deutsch, with light and dark themes. The documentation is in German for now.
+> **English:** Kilowatch is a self-hosted energy monitor for the Tibber Pulse IR. It reads the Bridge in your home network and keeps all readings on your own server or NAS, with no Tibber account or cloud needed for measuring. The interface is available in English, Norsk bokmål, Svenska, Nederlands and Deutsch, with light and dark themes. The documentation is in German for now.
 
-**Lokale Stromanalyse auf einem Synology-NAS (oder jedem Docker-Host) – mit Tibber Pulse IR, ohne Tibber-Stromtarif.**
+**Lokale Stromanalyse mit der Tibber Pulse IR – auf jedem Docker-Host oder Synology-NAS, ohne Tibber-Stromtarif.**
 
-Kilowatch liest die vorhandene Bridge im Heimnetz aus und speichert Messwerte und Auswertungen auf dem NAS. Die Adresse kann eine **IPv4-Adresse oder ein FQDN** wie `tibber-bridge.fritz.box` sein. DHCP kann aktiviert bleiben: Der Name wird bei neuen HTTP-Abrufen erneut aufgelöst. Der Beispielname muss im eigenen Router tatsächlich existieren.
+Kilowatch liest die vorhandene Bridge im Heimnetz aus und speichert Messwerte und Auswertungen lokal. Die Bridge-Adresse ist eine IPv4-Adresse oder ein Gerätename deines Routers; bei DHCP wird der Name bei neuen Abrufen erneut aufgelöst.
 
-**Keine persönliche Adresse und keine Zugangsdaten sind vorbelegt.** Beim ersten Öffnen führt ein Assistent durch die Einrichtung. Bridge-Adresse, Benutzer, Passwort und Benachrichtigungen bleiben später in der Oberfläche änderbar. Passwörter und Gateway-Token werden lokal verschlüsselt gespeichert; das App-Passwort als gesalzener Hash. Nach einem Neustart ist keine erneute Eingabe der Bridge-Zugangsdaten nötig.
+**Keine persönliche Adresse und keine Zugangsdaten sind vorbelegt.** Beim ersten Öffnen führt ein Assistent durch die Einrichtung. Passwörter und Token werden lokal verschlüsselt gespeichert, das App-Passwort als gesalzener Hash. Nach einem Neustart ist keine erneute Eingabe nötig.
 
-Für die laufende Messung braucht die Anwendung keine Tibber-API, kein Tibber-Konto und keine Internetverbindung. Installation, Updates, optionaler E-Mail-Versand und die optionale CO₂-Bilanz benötigen Internet. Für die CO₂-Bilanz sendet Kilowatch nur Land und Zeitraum an Energy-Charts.info, keine Messwerte. Lokales Auslesen beendet einen eventuell bestehenden Cloud-Upload der Bridge nicht automatisch.
+Für die laufende Messung braucht die Anwendung keine Tibber-API, kein Tibber-Konto und keine Internetverbindung. Installation, Updates, E-Mail-Versand und die optionalen Abrufe von Strommix und dynamischen Preisen brauchen Internet. Dabei gehen nur Land, Zeitraum bzw. die Preisabfrage hinaus, keine Messwerte. Lokales Auslesen beendet einen eventuell bestehenden Cloud-Upload der Bridge nicht automatisch.
 
-Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer) oder ein anderer Docker-Host mit Docker Compose, eine Tibber Pulse IR mit Bridge im selben Heimnetz und ein Zähler, der SML oder lesbare OBIS-Werte über die optische Schnittstelle ausgibt. Unterstützt werden **linux/amd64** (Intel/AMD) und **linux/arm64**; die Plattform wird bei der Einrichtung gewählt oder automatisch vom Host übernommen. Für die App sind 512 MiB RAM als Obergrenze konfiguriert; der tatsächliche Bedarf hängt von Datenmenge und Ansichten ab. Das Zählermodell muss nicht ausgewählt werden; maßgeblich ist das tatsächlich gelieferte Telegramm.
+**Voraussetzungen:** ein Docker-Host mit Docker Compose (Synology: Container Manager, DSM 7.2 oder neuer) auf `linux/amd64` oder `linux/arm64`, eine Tibber Pulse IR mit Bridge im selben Heimnetz und ein Zähler mit SML oder lesbaren OBIS-Werten. Das Zählermodell muss nicht gewählt werden; maßgeblich ist das gelieferte Telegramm. Für die App sind 512 MiB RAM als Obergrenze konfiguriert.
 
 ## Funktionen
 
 | Bereich | Enthalten |
 |---|---|
-| Einrichtung | Lokale Subnetzsuche, Assistent, eigenes App-Passwort, Bridge per FQDN oder IP, Zugangsdaten später ändern |
+| Einrichtung | Lokale Subnetzsuche, Assistent, eigenes App-Passwort, Bridge per Gerätename oder IP, Zugangsdaten später ändern |
 | Live | Netzleistung mit Vorzeichen, Bezug, Einspeisung, Aktualität und Empfangsdiagnose |
 | Verlauf | Letzte Stunde (Einzelwerte im Abfrageintervall), letzte 6 Stunden (Minutenwerte), Tag, Woche, Monat, Jahr, eigener Zeitraum, Vorperioden und Messlücken |
 | Analyse | Stunden-Heatmap, Tagesprofile, Nachtgrundlast und deren Entwicklung samt Kosten pro Jahr, Lastdauerlinie, Spitzen, Einspeiseprofil und Monatsprognose |
@@ -30,40 +30,33 @@ Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer)
 | Oberfläche | Deutsch, English, Norsk bokmål, Svenska, Nederlands; helles, dunkles oder automatisches Farbschema; Währungszeichen € (ct), NOK (øre) oder SEK (öre) |
 | Betrieb | Wiederanlauf, Aufbewahrung, konsistente SQLite-Sicherungen, Restore, lokale Passwort-Wiederherstellung, optionaler Update-Hinweis und Datenbank-Migrationen mit automatischer Vorab-Sicherung |
 
-Die Oberfläche liefert JavaScript, SVG und Schriften lokal aus. Server: Python/FastAPI, Datenbank: SQLite mit WAL. Es gibt keinen Node-Build auf dem NAS. Mosquitto ist ein getrennter, optionaler Container.
+Die Oberfläche liefert JavaScript, SVG und Schriften lokal aus. Server: Python/FastAPI, Datenbank: SQLite mit WAL. Es gibt keinen Node-Build im Image. Mosquitto ist ein getrennter, optionaler Container.
 
 ![Dashboard mit ausschließlich künstlichen Beispieldaten im Demo-Modus](docs/vorschau.png)
 
-## Auf dem NAS starten
-
-**[Schnellstart in fünf Schritten](docs/SCHNELLSTART.md)** – ohne Kommandozeile:
-
-1. `compose.yaml` vom neuesten Release herunterladen und in der File Station nach `docker/kilowatch` hochladen.
-2. Dort **selbst** einen Ordner `data` anlegen. Kilowatch läuft dann automatisch unter deinem Benutzer; weitere Rechte oder Einstellungen sind nicht nötig.
-3. Container Manager → **Projekt → Erstellen** mit Pfad `/docker/kilowatch` und der vorhandenen `compose.yaml`, starten.
-4. `data/SETUP-CODE.txt` öffnen, `http://<NAS-Adresse>:8088` aufrufen, Code eingeben und eigenes App-Passwort festlegen.
-5. Bridge-Adresse und das Passwort vom Bridge-Aufkleber eingeben, **Verbindung prüfen**, **Bridge speichern und starten**. Danach unter **Kosten & Tarife** den Strompreis hinterlegen.
-
-Alternativ erledigt ein **Installer** alle Schritte bis zum Setup-Code, per DSM-Aufgabenplaner oder SSH. Alle Optionen: **[Installation](docs/INSTALLATION-SYNOLOGY.md)**.
-
-Mit SSH im Projektordner:
+## Installation und Update
 
 ```sh
-docker compose -f compose.yaml up -d
-docker compose -f compose.yaml logs --tail=50 kilowatch
+# 1. Skript holen
+curl -fsSLO https://github.com/aemjay/Kilowatch/releases/latest/download/update.sh
+# 2. Installieren (legt Ordner, Daten und Konfiguration an, prüft die Signatur, startet)
+sudo sh update.sh --user <benutzer> --dir /pfad/zu/kilowatch
+# 3. Im Browser http://<Host>:8088 öffnen, Setup-Code eingeben, Bridge verbinden
 ```
 
-Die optionale `.env.example` enthält ausschließlich Betriebsoptionen wie HTTP-Port und Plattform. Adressen und persönliche Zugangsdaten werden in der Oberfläche eingegeben. Messdaten und tägliche Sicherungen liegen im Ordner **`data/`** des Projekts und werden so von Hyper Backup mitgesichert. Zugangsdaten liegen bewusst getrennt im Docker-Volume **`kilowatch-secrets`**, damit Schlüssel und verschlüsselte Passwörter nie gemeinsam in einer Sicherung landen ([Details](docs/BETRIEB.md#speicherorte)). `docker compose down -v` löscht dieses Volume und ist kein normaler Update-Schritt.
+Das Skript gibt Adresse und Setup-Code aus. Alle Schritte, die Einrichtung im Browser, Synology (Aufgabenplaner, Container Manager) und HTTPS: **[Installation](docs/INSTALLATION.md)**.
 
-## Fertige Images und Updates
+**Update** – derselbe Befehl, immer:
 
-Releases erscheinen als signierte Multi-Arch-Images (amd64/arm64) unter `ghcr.io/aemjay/kilowatch`. `compose.yaml` verwendet standardmäßig die neueste 1.x-Version; mit `KILOWATCH_VERSION=1.2.3` in der `.env` lässt sich eine feste Version wählen. Für NAS ohne Internet hängen Importdateien an jedem Release.
+```sh
+sudo sh <projektordner>/tools/update.sh
+```
 
-Kilowatch aktualisiert sich nie selbst. Optional zeigt die App neue Versionen an (standardmäßig aus, eine Abfrage pro Tag bei GitHub). Aktualisiert wird per Container Manager, per SSH oder automatisch über den DSM-Aufgabenplaner mit `tools/update.sh`, der vorher die Image-Signatur prüft. Vor jeder Datenbankänderung legt Kilowatch selbst eine Sicherung an. Details und Rückweg: **[Updates](docs/UPDATES.md)**.
+Das Skript prüft die Image-Signatur, startet nur bei neuer Version neu und rollt automatisch zurück, wenn die neue Version nicht gesund startet. Kilowatch aktualisiert sich nie selbst und braucht keinen Docker-Zugriff; die App zeigt auf Wunsch nur einen Hinweis auf neue Versionen (standardmäßig aus). Automatisches Update per Aufgabenplaner oder cron, Offline-Weg und Rückweg: **[Updates](docs/UPDATES.md)**.
 
-Der [GitHub-Workflow](.github/workflows/nas-image.yml) prüft Tests und Compose-Konfigurationen, startet die Images für beide Plattformen mit echtem Datenordner und prüft Einrichtung, Dateirechte, API, Sicherung, Persistenz, das Update von der letzten veröffentlichten Version und den optionalen MQTT-Broker.
+Releases erscheinen als signierte Multi-Arch-Images unter `ghcr.io/aemjay/kilowatch`; `compose.yaml` folgt standardmäßig der neuesten 1.x-Version. Messdaten und tägliche Sicherungen liegen im Ordner `data/` des Projekts. Zugangsdaten liegen bewusst getrennt im Docker-Volume `kilowatch-secrets`, damit Schlüssel und verschlüsselte Passwörter nie gemeinsam in einer Sicherung landen ([Details](docs/BETRIEB.md#speicherorte)). `docker compose down -v` löscht dieses Volume und ist kein Update-Schritt.
 
-Empfohlen ist der Zugriff per HTTPS über den DSM-Reverse-Proxy ([Anleitung](docs/INSTALLATION-SYNOLOGY.md#7-https-über-den-dsm-reverse-proxy)); Sicherheitslücken bitte vertraulich melden ([SECURITY.md](SECURITY.md)).
+Empfohlen ist der Zugriff per HTTPS über einen Reverse-Proxy ([Anleitung](docs/INSTALLATION.md#https-über-einen-reverse-proxy)). Sicherheitslücken bitte vertraulich melden ([SECURITY.md](SECURITY.md)).
 
 ## E-Mail-Benachrichtigungen
 
@@ -71,7 +64,7 @@ Empfohlen ist der Zugriff per HTTPS über den DSM-Reverse-Proxy ([Anleitung](doc
 
 E-Mail verwendet den eigenen SMTP-Server mit STARTTLS oder direktem TLS und Zertifikatsprüfung, einstellbarem Absendernamen und optionalem Erkennungswort im Betreff. Der Versand ist zunächst ausgeschaltet. Erst die eigene Konfiguration und ein erfolgreicher Test bestätigen den Versand vor Ort.
 
-Weitere sinnvolle Schutzfunktionen sind bereits enthalten: keine Nullwerte bei Messausfällen, Überwachung der Datenaktualität, Alarmberuhigung durch Ruhezeiten und Entwarnungen, Aufbewahrungsgrenzen und Wiederherstellung bei vergessenem App-Passwort. Ein komplett ausgeschaltetes NAS kann selbst keine Ausfallnachricht versenden; dafür wäre ein zusätzlicher unabhängiger Monitor nötig.
+Weitere sinnvolle Schutzfunktionen sind bereits enthalten: keine Nullwerte bei Messausfällen, Überwachung der Datenaktualität, Alarmberuhigung durch Ruhezeiten und Entwarnungen, Aufbewahrungsgrenzen und Wiederherstellung bei vergessenem App-Passwort. Ein komplett ausgeschalteter Host kann selbst keine Ausfallnachricht versenden; dafür wäre ein zusätzlicher unabhängiger Monitor nötig.
 
 ## Datenqualität und Unabhängigkeit
 
@@ -90,9 +83,10 @@ Die Historie beginnt mit der ersten Erfassung; ein Cloud-Historienimport ist nic
 
 ## Dokumentation und Entwicklung
 
-- [Betrieb, Zugangsdaten, Backup, Restore und Updates](docs/BETRIEB.md)
-- [Eigener Strompreis, HT/NT und optionale Börsenpreise](docs/TARIFE.md)
-- [Bridge im lokalen Subnetz suchen](docs/GERAETESUCHE.md)
+- [Installation](docs/INSTALLATION.md) und [Updates](docs/UPDATES.md)
+- [Betrieb, Zugangsdaten, Backup und Restore](docs/BETRIEB.md)
+- [Eigener Strompreis, HT/NT und dynamische Preise](docs/TARIFE.md)
+- [Bridge, Gerätesuche und optionaler MQTT-Betrieb](docs/BRIDGE.md)
 - [API und Preis-CSV](docs/API.md)
 - [Testabdeckung und Abnahme](docs/PRUEFPROTOKOLL.md)
 - [Übersetzungen prüfen und ergänzen](docs/UEBERSETZUNG.md)

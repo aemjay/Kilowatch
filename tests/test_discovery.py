@@ -25,13 +25,13 @@ def test_scan_uses_no_credentials_and_detects_auth_realm(monkeypatch):
         assert "cookie" not in request.headers
         return httpx.Response(401,headers={"WWW-Authenticate":'Basic realm="Tibber Bridge"'})
     async def name(address):
-        return "bridge.fritz.box"
+        return "bridge.example.lan"
     monkeypatch.setattr("app.discovery.device_name",name)
     async def check():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle),follow_redirects=False) as client:
             result=await probe(client,"192.168.1.10")
-        assert result["fqdn"]=="bridge.fritz.box"
-        assert result["host"]=="bridge.fritz.box"
+        assert result["fqdn"]=="bridge.example.lan"
+        assert result["host"]=="bridge.example.lan"
     asyncio.run(check())
     assert len(requests)==1
 
@@ -65,7 +65,7 @@ def test_network_suggestion_uses_client_without_fixed_ip(monkeypatch):
     async def resolve(host):
         return ["192.168.1.123"]
     monkeypatch.setattr("app.discovery.resolve_local",resolve)
-    result=asyncio.run(suggestions("192.168.1.50","bridge.fritz.box","nas.fritz.box"))
+    result=asyncio.run(suggestions("192.168.1.50","bridge.example.lan","nas.example.lan"))
     assert len(result)==1 and result[0]["network"]=="192.168.1.0/24"
 
 

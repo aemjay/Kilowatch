@@ -5,7 +5,7 @@ services:
     # Standard: neueste 1.x-Version (Fehlerbehebungen und neue Funktionen, keine inkompatiblen Änderungen).
     # Für eine feste Version KILOWATCH_VERSION=1.2.3 in der .env setzen.
     image: ghcr.io/aemjay/kilowatch:${KILOWATCH_VERSION:-1}
-    # Leer = Plattform des Hosts. Wird von tools/setup.py in .env gesetzt.
+    # Leer = Plattform des Hosts. Aus der .env (KILOWATCH_PLATFORM).
     platform: ${KILOWATCH_PLATFORM:-}
     container_name: kilowatch
     restart: unless-stopped

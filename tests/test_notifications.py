@@ -84,7 +84,7 @@ def test_quiet_hours_also_cover_repeated_dst_hour(stamp,expected):
 def prepare_engine(client,monkeypatch,**extra):
     engine=client.app.state.notifier
     engine.save(NotificationSettings(**email_config(**extra)))
-    client.app_store.update_settings({"bridge_host":"bridge.fritz.box","bridge_user":"synthetic-user"})
+    client.app_store.update_settings({"bridge_host":"bridge.example.lan","bridge_user":"synthetic-user"})
     client.app.state.vault.update({"bridge_password":"synthetic-password"})
     monkeypatch.setattr("app.notifications.shutil.disk_usage",lambda _:SimpleNamespace(free=10*1024**3))
     return engine

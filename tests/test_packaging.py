@@ -55,27 +55,6 @@ def test_platform_is_only_chosen_during_setup():
             assert service.get("platform") in (None,"${KILOWATCH_PLATFORM:-}"), name
 
 
-def test_setup_writes_selected_platform():
-    import importlib.util
-    spec=importlib.util.spec_from_file_location("setup_tool",ROOT/"tools/setup.py")
-    tool=importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(tool)
-    example=(ROOT/".env.example").read_text()
-    assert "KILOWATCH_PLATFORM=\n" in tool.render(example,8088,"auto")
-    assert "KILOWATCH_PLATFORM=linux/arm64\n" in tool.render(example,8088,"arm64")
-    assert "HTTP_PORT=9000" in tool.render(example,9000,"amd64")
-    owned=tool.render(example,8088,"auto","1026","100")
-    assert "PUID=1026\n" in owned and "PGID=100\n" in owned
-
-
-def test_setup_creates_data_folder(tmp_path):
-    import importlib.util
-    spec=importlib.util.spec_from_file_location("setup_tool",ROOT/"tools/setup.py")
-    tool=importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(tool)
-    assert tool.prepare_data(tmp_path,"","").is_dir()
-
-
 def test_data_in_project_folder_and_secrets_in_separate_volume():
     for name in ["compose.build.yaml","compose.yaml"]:
         config=yaml.safe_load((ROOT/name).read_text())
@@ -111,8 +90,9 @@ def test_user_is_detected_automatically_unless_set():
         environment=yaml.safe_load((ROOT/name).read_text())["services"]["kilowatch"]["environment"]
         assert environment["PUID"]=="${PUID:-}" and environment["PGID"]=="${PGID:-}"
     entrypoint=(ROOT/"docker-entrypoint.sh").read_text()
-    assert "stat -c %u" in entrypoint and "SCHNELLSTART" in entrypoint
-    assert (ROOT/"tools/install.sh").is_file() and (ROOT/"docs/SCHNELLSTART.md").is_file()
+    assert "stat -c %u" in entrypoint and "INSTALLATION" in entrypoint
+    assert (ROOT/"tools/update.sh").is_file() and (ROOT/"docs/INSTALLATION.md").is_file()
+    assert not (ROOT/"tools/install.sh").exists() and not (ROOT/"tools/setup.py").exists()
 
 
 def test_stylesheet_has_light_dark_and_print_themes_and_no_stray_colors():

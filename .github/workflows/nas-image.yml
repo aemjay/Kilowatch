@@ -208,8 +208,8 @@ jobs:
           merge-multiple: true
       - name: Installationsdateien beilegen
         run: |
-          # Feste Namen für den Installer (releases/latest/download/<name>); ohne führenden Punkt.
-          cp compose.yaml tools/install.sh tools/update.sh dist/
+          # Feste Namen für update.sh (releases/latest/download/<name>); ohne führenden Punkt.
+          cp compose.yaml tools/update.sh dist/
           cp .env.example dist/env.example
       - name: Release anlegen oder ergänzen
         env:

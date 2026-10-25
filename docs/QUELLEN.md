@@ -19,13 +19,12 @@ Für die Ausarbeitung herangezogene Primärquellen (Stand Oktober 2026). Firmwar
 
 | Thema | Primärquelle | Verwendung |
 |---|---|---|
-| Heimnetz-Gerätenamen | [FRITZ!Box: Gerätenamen](https://fritz.com/de-ch/apps/knowledge-base/FRITZ-Box-7360-SL/791_Netzwerkgerat-kann-nicht-umbenannt-werden) | DNS-Hostnamen statt fest eingetragener Geräte-IP; Router-DNS muss Namen tatsächlich pflegen |
 | Lokale Verschlüsselung | [cryptography/Fernet](https://cryptography.io/en/latest/fernet/) | authentifizierte Verschlüsselung mit separat zu sicherndem lokalem Schlüssel |
 | Passwort-Hash | [Python hashlib.scrypt](https://docs.python.org/3/library/hashlib.html#hashlib.scrypt) | gesalzener Hash für die App-Anmeldung |
 | Mailversand | [Python smtplib](https://docs.python.org/3/library/smtplib.html), [TLS-Kontexte](https://docs.python.org/3/library/ssl.html#ssl.create_default_context) | STARTTLS/direktes TLS mit Zertifikatsprüfung |
 | DOM-Tests | [jsdom](https://github.com/jsdom/jsdom) | isolierte Formularprüfungen ohne echten Browser und ohne Nachrichtenversand |
 
-FQDN-Verhalten wird mit wechselnden simulierten DNS-Antworten getestet. Ob die eigene Bridge-Firmware für ihr optionales MQTT-Ziel DNS-Namen auflöst, ist vor Ort zu prüfen.
+Verhalten bei Gerätenamen wird mit wechselnden simulierten DNS-Antworten getestet. Der Router-DNS muss Gerätenamen tatsächlich pflegen. Ob die eigene Bridge-Firmware für ihr optionales MQTT-Ziel DNS-Namen auflöst, ist vor Ort zu prüfen.
 
 ## Börsenpreise
 

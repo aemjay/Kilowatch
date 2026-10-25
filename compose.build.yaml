@@ -3,7 +3,7 @@ services:
   kilowatch:
     # Lokal gebaut. Für fertige Images compose.yaml verwenden.
     image: kilowatch:local
-    # Leer = Plattform des Hosts. Wird von tools/setup.py in .env gesetzt.
+    # Leer = Plattform des Hosts. Aus der .env (KILOWATCH_PLATFORM).
     platform: ${KILOWATCH_PLATFORM:-}
     build: .
     container_name: kilowatch

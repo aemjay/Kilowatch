@@ -53,7 +53,7 @@ for dir in "$DATA_DIR" "$SECRETS_DIR"; do
     echo "Kilowatch kann nicht in $dir schreiben (Benutzer-ID $PUID, Gruppen-ID $PGID)." >&2
     echo "Synology: den Ordner data im Projektordner selbst in der File Station anlegen (nicht vom Container anlegen lassen)" >&2
     echo "und das Projekt neu starten. Alternativ PUID/PGID in der .env auf einen DSM-Benutzer mit Lese-/Schreibrecht setzen." >&2
-    echo "Anleitung: docs/SCHNELLSTART.md" >&2
+    echo "Anleitung: docs/INSTALLATION.md" >&2
     exit 1
   fi
 done

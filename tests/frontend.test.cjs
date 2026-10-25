@@ -60,7 +60,7 @@ async function harness(options={}) {
       if(smtp_password)notes.smtp_password_configured=true;
     }else if(path==='/api/notifications')data=notes;
     else if(path==='/api/discovery/network')data={suggestions:[{network:'192.168.1.0/24',reason:'Synthetic network'}]};
-    else if(path==='/api/discovery/scan')data={network:body.network,checked:254,devices:[{ip:'192.168.1.10',host:'bridge.fritz.box',fqdn:'bridge.fritz.box'}]};
+    else if(path==='/api/discovery/scan')data={network:body.network,checked:254,devices:[{ip:'192.168.1.10',host:'bridge.example.lan',fqdn:'bridge.example.lan'}]};
     else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null,household:options.household??null},co2:options.co2??null,
       series:{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:i*60,power_w:i===30?4000:300+i,seconds:60}))}};
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
@@ -112,17 +112,17 @@ test('password mismatch stays in wizard and sends no setup request',async t=>{
 });
 
 test('bridge test accepts FQDN and saved secret is never rendered back',async t=>{
-  const h=await harness({settings:{setup_required:false,bridge_host:'old.fritz.box',bridge_user:'synthetic-user',password_configured:true}});
+  const h=await harness({settings:{setup_required:false,bridge_host:'old.example.lan',bridge_user:'synthetic-user',password_configured:true}});
   t.after(()=>h.dom.window.close());const {w}=h;
-  input(w,'settings-form','bridge_host','bridge.fritz.box');
+  input(w,'settings-form','bridge_host','bridge.example.lan');
   w.document.querySelector('#test-bridge').click();
   await until(()=>!w.document.querySelector('#bridge-result').hidden);
   assert.match(w.document.querySelector('#bridge-result').textContent,/192\.168\.1\.10/);
   const check=h.calls.find(c=>c.path==='/api/bridge/test');
-  assert.equal(check.body.bridge_host,'bridge.fritz.box');
+  assert.equal(check.body.bridge_host,'bridge.example.lan');
   assert.equal('bridge_password' in check.body,false);
   submit(w,'settings-form');
-  await until(()=>h.settings.bridge_host==='bridge.fritz.box');
+  await until(()=>h.settings.bridge_host==='bridge.example.lan');
   assert.equal(w.document.querySelector('[name="bridge_password"]').value,'');
   assert.deepEqual(h.errors,[]);
 });
@@ -147,11 +147,11 @@ test('notification form normalizes recipients and saves before explicit test',as
 });
 
 test('forget bridge password pauses acquisition without erasing address',async t=>{
-  const h=await harness({settings:{setup_required:false,bridge_host:'bridge.fritz.box',bridge_user:'synthetic-user',password_configured:true}});
+  const h=await harness({settings:{setup_required:false,bridge_host:'bridge.example.lan',bridge_user:'synthetic-user',password_configured:true}});
   t.after(()=>h.dom.window.close());h.w.document.querySelector('#forget-bridge').click();
   await until(()=>!h.settings.password_configured);
   assert.equal(h.settings.enabled,false);
-  assert.equal(h.settings.bridge_host,'bridge.fritz.box');
+  assert.equal(h.settings.bridge_host,'bridge.example.lan');
   assert.ok(h.calls.some(c=>c.path==='/api/credentials/bridge'&&c.method==='DELETE'));
 });
 
@@ -179,7 +179,7 @@ test('subnet discovery works before credentials and adopts discovered FQDN',asyn
   const request=h.calls.find(c=>c.path==='/api/discovery/scan');
   assert.deepEqual(request.body,{network:'192.168.1.0/24'});
   w.document.querySelector('[data-use-device]').click();
-  assert.equal(w.document.querySelector('[name="bridge_host"]').value,'bridge.fritz.box');
+  assert.equal(w.document.querySelector('[name="bridge_host"]').value,'bridge.example.lan');
   assert.equal(w.document.querySelector('[name="bridge_password"]').value,'');
   assert.deepEqual(h.errors,[]);
 });
