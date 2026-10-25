@@ -41,9 +41,40 @@ function metric(label, value, suffix, note, icon, highlight = false) { return `<
 function coverage(summary) { const percent = Math.min(100,Math.max(0,(summary?.coverage || 0)*100)); return `<div class="quality-row"><span>${t('Datenabdeckung')}</span><div class="quality-track"><span style="width:${percent}%"></span></div><strong>${number(percent,1)} %</strong></div>`; }
 // Minuten- oder Stundenansicht (letzte 5/15 Minuten, 1/6 Stunden) oder Kalendertage aus den Datumsfeldern.
 let rangeHours=null, rangeMinutes=null, lastPageRefresh=0;
+// Frei gewähltes Zeitfenster (Zeitbalken, Zoomen, Verschieben): {from,to} fest oder {span,to:null} = die letzten span Sekunden bis jetzt.
+let view=null, timelineData=null, reloadTimer=0;
+const MIN_SPAN=300;
+const nowSeconds=()=>Math.floor(Date.now()/1000);
+function viewWindow() { if(!view)return null; const now=nowSeconds(); return view.to==null?{from:now-view.span,to:now}:{from:view.from,to:view.to}; }
+// Das gerade angezeigte Fenster: freie Auswahl oder Zeitraum der geladenen Übersicht.
+function currentWindow() { return viewWindow()||(overview?.summary?{from:overview.summary.start,to:overview.summary.end}:null); }
+function setView(from,to) {
+  const now=nowSeconds(), first=timelineData?.start??now-3600*24*3660;
+  const maxSpan=Math.max(MIN_SPAN,now-first), span=Math.min(maxSpan,Math.max(MIN_SPAN,to-from)), centre=(from+to)/2;
+  from=centre-span/2;to=from+span;
+  if(to>now){from-=to-now;to=now;}
+  if(from<first){to+=first-from;from=first;}
+  to=Math.min(to,now);from=Math.round(from);to=Math.round(to);
+  // Reicht das Fenster bis an die Gegenwart, folgt es ihr (Auto-Aktualisierung).
+  view=now-to<=Math.max(30,(to-from)*.01)?{span:to-from,to:null}:{from,to};
+  rangeHours=rangeMinutes=null;
+  $$('[data-range]').forEach(button=>button.classList.remove('selected'));
+  $('#range-start').value=dayString(new Date(from*1000));$('#range-end').value=dayString(new Date(to*1000));
+  renderTimeline();
+  clearTimeout(reloadTimer);reloadTimer=setTimeout(()=>loadPage(),220);
+}
+function viewZoomTs(ts,factor) { const win=currentWindow();if(!win)return;setView(ts-(ts-win.from)*factor,ts+(win.to-ts)*factor); }
+function viewZoomAt(fraction,factor) { const win=currentWindow();if(!win)return;viewZoomTs(win.from+(win.to-win.from)*fraction,factor); }
+function viewPan(fraction) { const win=currentWindow();if(!win)return;const shift=(win.to-win.from)*fraction;setView(win.from+shift,win.to+shift); }
+// Wie oft die Seite im Hintergrund neu geladen wird; ein festes Fenster in der Vergangenheit ändert sich nicht.
+function refreshEvery() {
+  if(view)return view.to!=null?Infinity:view.span<=7200?5000:view.span<=172800?15000:60000;
+  return rangeMinutes?5000:rangeHours?15000:60000;
+}
 function datesText() { return `${dateLabel($('#range-start').value)} – ${dateLabel($('#range-end').value)}`; }
-function periodText() { return rangeMinutes ? t('Letzte {count} Min.',{count:rangeMinutes}) : rangeHours ? t('Letzte {count} Std.',{count:rangeHours}) : datesText(); }
-function query() { return new URLSearchParams(rangeMinutes?{minutes:rangeMinutes}:rangeHours?{hours:rangeHours}:{start:$('#range-start').value,end:$('#range-end').value}).toString(); }
+function windowText(win) { const format={day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'};return `${localTime(win.from,format)} – ${localTime(win.to,format)}`; }
+function periodText() { return view?windowText(viewWindow()):rangeMinutes ? t('Letzte {count} Min.',{count:rangeMinutes}) : rangeHours ? t('Letzte {count} Std.',{count:rangeHours}) : datesText(); }
+function query() { return new URLSearchParams(view?(view.to==null?{since:nowSeconds()-view.span}:{since:view.from,until:view.to}):rangeMinutes?{minutes:rangeMinutes}:rangeHours?{hours:rangeHours}:{start:$('#range-start').value,end:$('#range-end').value}).toString(); }
 function totalNote(summary) { return summary.gap_count ? `${t('{count} Lücke(n)',{count:summary.gap_count})} · ${t('{value} nur als Gesamtmenge bekannt',{value:unit(summary.recovered_import_kwh,'kWh')})}` : t('{percent} % zeitlich erfasst',{percent:number(summary.coverage*100,1)}); }
 
 function lineChart(data, field = 'power_w', label = 'W', xField = 'ts', options = {}) {
@@ -66,8 +97,8 @@ function lineChart(data, field = 'power_w', label = 'W', xField = 'ts', options 
   let xLabels = '';
   for(let i=0;i<=5;i++) { const val=x0+(x1-x0)*i/5; const text=xField==='ts'?localTime(val,{hour:'2-digit',minute:'2-digit',...(x1-x0>86400?{day:'2-digit',month:'2-digit'}:{})}):`${number(val,0)} h`; xLabels+=`<text x="${X(val)}" y="${h-8}" text-anchor="${i===0?'start':i===5?'end':'middle'}">${esc(text)}</text>`; }
   const pathsSvg = paths.map(items=>{ const line=items.map((item,i)=>`${i?'L':'M'}${X(item[xField]).toFixed(1)},${Y(item[field]).toFixed(1)}`).join(' '); return `<path d="${line} L${X(items.at(-1)[xField]).toFixed(1)},${Y(0)} L${X(items[0][xField]).toFixed(1)},${Y(0)} Z" fill="url(#energy-fill)"/><path class="chart-line" d="${line}"/>`; }).join('');
-  const dots = data.filter((_,i)=>i%Math.max(1,Math.floor(data.length/350))===0).map(item=>`<circle cx="${X(item[xField]).toFixed(1)}" cy="${Y(item[field]).toFixed(1)}" r="4" fill="transparent"><title>${esc(xField==='ts'?localTime(item[xField]):unit(item[xField],'h'))} · ${esc(unit(item[field],label))}</title></circle>`).join('');
-  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('{label} im ausgewählten Zeitraum',{label}))}"><defs><linearGradient id="energy-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#d3eb65" stop-opacity=".34"/><stop offset="100%" stop-color="#d3eb65" stop-opacity=".01"/></linearGradient></defs>${grid}${overlaySvg(overlays.filter(o=>o.type==='band'),X,Y,left,w-right)}${pathsSvg}${overlaySvg(overlays.filter(o=>o.type!=='band'),X,Y,left,w-right)}${dots}${xLabels}<text x="${left}" y="7">${esc(label)}</text></svg></div>`;
+  const id = registerChart(lineModel({data,field,xField,X,Y,x0,x1,w,h,left,right,top,bottom,gapLimit,label,overlays,zoomable:!!options.zoomable,seconds:xField==='ts'&&(times[Math.floor(times.length/2)]||60)<60}));
+  return `<div class="chart" data-chart="${id}" tabindex="0"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('{label} im ausgewählten Zeitraum',{label}))}"><defs><linearGradient id="energy-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#d3eb65" stop-opacity=".34"/><stop offset="100%" stop-color="#d3eb65" stop-opacity=".01"/></linearGradient></defs>${grid}${overlaySvg(overlays.filter(o=>o.type==='band'),X,Y,left,w-right)}${pathsSvg}${overlaySvg(overlays.filter(o=>o.type!=='band'),X,Y,left,w-right)}${xLabels}<text x="${left}" y="7">${esc(label)}</text></svg></div>`;
 }
 
 // Overlays zeichnen: Band (Min/Max), Linie (gleitender Ø) und waagerechte Referenzlinie mit Beschriftung.
@@ -80,7 +111,7 @@ function overlaySvg(overlays, X, Y, x0, x1) {
   }).join('');
 }
 
-function barChart(data, field = 'import_kwh', label = 'kWh', overlays = []) {
+function barChart(data, field = 'import_kwh', label = 'kWh', overlays = [], zoomable = false) {
   if(!data.length) return empty();
   const w=760,h=245,left=42,top=18,bottom=36,right=9;
   const extra=overlays.flatMap(o=>o.type==='hline'?[o.y]:o.type==='band'?o.points.map(p=>p.high):o.points.map(p=>p.y));
@@ -89,10 +120,21 @@ function barChart(data, field = 'import_kwh', label = 'kWh', overlays = []) {
   const width=(w-left-right)/Math.max(1,data.length), skip=Math.max(1,Math.ceil(data.length/9));
   let grid='';
   for(let i=0;i<=4;i++){const y=h-bottom-(h-top-bottom)*i/4;grid+=`<line class="grid-line" x1="${left}" x2="${w-right}" y1="${y}" y2="${y}"/><text x="${left-8}" y="${y+3}" text-anchor="end">${number(max*i/4,1)}</text>`;}
-  const bars=data.map((item,index)=>{const value=item[field],x=left+index*width,y=h-bottom-(value||0)/max*(h-top-bottom);return `${value==null?'':`<rect x="${x+width*.18}" y="${y}" width="${Math.max(1,width*.64)}" height="${h-bottom-y}" rx="${Math.min(4,width*.2)}" fill="#bfd559"><title>${esc(localDate(item.ts))} · ${esc(unit(value,label,3))} · ${esc(t('{hours} h erfasst',{hours:number((item.import_s||0)/3600,1)}))}</title></rect>`}${index%skip===0?`<text x="${x+width/2}" y="${h-9}" text-anchor="middle">${esc(localTime(item.ts,{day:'2-digit',month:'2-digit',...(data.length<20?{}:{})}))}</text>`:''}`;}).join('');
+  const items=data.map((item,index)=>{
+    const value=item[field], y=h-bottom-(value||0)/max*(h-top-bottom);
+    const rows=value==null?[{v:t('keine Daten')}]:[{v:unit(value,label,3),cls:'main'},...(item.import_s!=null?[{v:t('{hours} h erfasst',{hours:number(item.import_s/3600,1)}),k:''}]:[])];
+    for(const overlay of overlays){
+      if(overlay.type!=='line'&&overlay.type!=='band')continue;
+      const point=overlay.points.find(p=>p.x===item.ts);if(!point)continue;
+      rows.push(overlay.type==='line'?{v:unit(point.y,label,3),k:overlay.name,cls:overlay.cls}:{v:`${number(point.low,2)} – ${unit(point.high,label,2)}`,k:overlay.name,cls:'overlay-band'});
+    }
+    return {head:localDate(item.ts),rows,y};
+  });
+  const bars=data.map((item,index)=>{const value=item[field],x=left+index*width,y=items[index].y;return `${value==null?'':`<rect class="bar" data-i="${index}" x="${x+width*.18}" y="${y}" width="${Math.max(1,width*.64)}" height="${h-bottom-y}" rx="${Math.min(4,width*.2)}" fill="#bfd559"/>`}${index%skip===0?`<text x="${x+width/2}" y="${h-9}" text-anchor="middle">${esc(localTime(item.ts,{day:'2-digit',month:'2-digit'}))}</text>`:''}`;}).join('');
   // Overlay-Punkte tragen den Zeitstempel ihres Balkens; gezeichnet wird in der Balkenmitte.
   const index=new Map(data.map((item,i)=>[item.ts,i])), X=ts=>left+(index.get(ts)??0)*width+width/2, Y=value=>h-bottom-(value||0)/max*(h-top-bottom);
-  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('Verbrauch in {unit}',{unit:label}))}">${grid}${overlaySvg(overlays.filter(o=>o.type==='band'),X,Y,left,w-right)}${bars}${overlaySvg(overlays.filter(o=>o.type!=='band'),X,Y,left,w-right)}<text x="${left}" y="8">${label}</text></svg></div>`;
+  const id=registerChart(barModel({w,h,left,right,top,bottom,width,items,zoomable}));
+  return `<div class="chart" data-chart="${id}" tabindex="0"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('Verbrauch in {unit}',{unit:label}))}">${grid}${overlaySvg(overlays.filter(o=>o.type==='band'),X,Y,left,w-right)}${bars}${overlaySvg(overlays.filter(o=>o.type!=='band'),X,Y,left,w-right)}<text x="${left}" y="8">${label}</text></svg></div>`;
 }
 
 function powerPanel(data) {
@@ -106,7 +148,7 @@ function powerPanel(data) {
        references:[...(data.series.group==='day'?[{key:'target', label:t('Tagesziel {value}',{value:unit(data.targets?.daily_kwh,'kWh',1)}), value:data.targets?.daily_kwh??null}]:[]),
          ...householdReference(data.targets?.household, data.series.group)]};
   const overlays = buildOverlays(spec);
-  const chart = overlayToggles(spec) + (isShort ? lineChart(data.series.power,'power_w','W','ts',{start:data.summary.start,end:data.summary.end,overlays}) : barChart(data.series.energy,'import_kwh','kWh',overlays));
+  const chart = overlayToggles(spec) + (isShort ? lineChart(data.series.power,'power_w','W','ts',{start:data.summary.start,end:data.summary.end,overlays,zoomable:true}) : barChart(data.series.energy,'import_kwh','kWh',overlays,true));
   return panel(isShort?t('So fließt dein Strom.'):t('Dein Verbrauch im Verlauf.'),raw?t('Einzelne Messwerte im Abfrageintervall · positive Werte = Bezug'):isShort?t('Mittlere Netzleistung je Zeitabschnitt · positive Werte = Bezug'):t('Verbrauch aus den Zählerständen · zeitlich zugeordnete Energie'),chart+`<div class="chart-note"><span>${isShort?t('Leere Stellen zeigen fehlende Messdaten.'):t('Nicht zeitlich zuordenbare Lückenenergie ist separat ausgewiesen.')}</span><span>${isShort?t('ZEIT'):t('DATUM')}</span></div>`,`<div class="legend"><span><i${isShort?' class="line"':''}></i>${isShort?t('Netzleistung'):t('Netzbezug')}</span></div>`);
 }
 
@@ -245,7 +287,7 @@ function renderReports(data) {
   $('#page-reports').innerHTML=panel(t('Dein Energiebericht.'),periodText(),content)+`<div class="report-actions">${panel(t('Export'),'',exports)}</div>`;
   $('#print-report').addEventListener('click',()=>window.print());
   $('#month-report').addEventListener('click',()=>applyRange('month'));$('#year-report').addEventListener('click',()=>applyRange('year'));
-  $('#export-data').addEventListener('click',()=>{window.location.href=`/api/export?${query()}&kind=${$('#export-kind').value}&format=${$('#export-format').value}`;});
+  $('#export-data').addEventListener('click',()=>{window.location.href=`/api/export?start=${$('#range-start').value}&end=${$('#range-end').value}&kind=${$('#export-kind').value}&format=${$('#export-format').value}`;});
 }
 
 
@@ -291,7 +333,7 @@ async function loadPage({background=false}={}) {
       // Unveränderte Daten oder ein gerade bearbeitetes Eingabefeld: Seite stehen lassen.
       const editing=target.contains(document.activeElement)&&document.activeElement.matches('input,select,textarea');
       if(background&&(renderedData[selected]===key||editing)){updateLiveParts();return;}
-      renderedData[selected]=key;overview=result[0];
+      renderedData[selected]=key;overview=result[0];updateTimeline();
       if(selected==='dashboard')renderDashboard(overview);
       if(selected==='history')renderHistory(overview);
       if(selected==='analysis')renderAnalysis(result[1],overview);
@@ -312,13 +354,14 @@ async function navigate(value, updateHash=true) {
   $$('[data-page]').forEach(button=>button.classList.toggle('active',button.dataset.page===page));
   const text=t(pageText[page]);$('#breadcrumb').textContent=text.toLocaleUpperCase(LOCALE);$('#page-title').textContent=text;
   $('#range-bar').hidden=['settings','system','events','notifications'].includes(page);
+  renderTimeline();
   $('.sidebar').classList.remove('open');
   if(updateHash)history.replaceState(null,'','#'+page);
   await loadPage();
 }
 
 async function applyRange(value) {
-  const now=today();let start=now,end=now;
+  const now=today();let start=now,end=now;view=null;clearTimeout(reloadTimer);
   rangeHours=value.startsWith('hours')?Number(value.slice(5)):null;
   rangeMinutes=value.startsWith('minutes')?Number(value.slice(7)):null;
   if(value==='yesterday')start=end=shiftDay(now,-1);
@@ -352,7 +395,7 @@ $('#login-language').addEventListener('change',safely(async event=>{await setLan
 $('#logout').addEventListener('click',safely(async()=>{await api('/api/logout','POST');showLogin();}));
 $$('[data-page]').forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.page)));
 $$('[data-range]').forEach(button=>button.addEventListener('click',()=>applyRange(button.dataset.range)));
-$('#range-form').addEventListener('submit',event=>{event.preventDefault();if($('#range-end').value<$('#range-start').value){toast(t('Das Ende liegt vor dem Beginn.'),true);return;}$$('[data-range]').forEach(button=>button.classList.remove('selected'));rangeHours=rangeMinutes=null;loadPage();});
+$('#range-form').addEventListener('submit',event=>{event.preventDefault();if($('#range-end').value<$('#range-start').value){toast(t('Das Ende liegt vor dem Beginn.'),true);return;}$$('[data-range]').forEach(button=>button.classList.remove('selected'));rangeHours=rangeMinutes=null;view=null;loadPage();});
 $('#mobile-menu').addEventListener('click',()=>$('.sidebar').classList.toggle('open'));
 // Farbschema: Auto → Hell → Dunkel; Diagramme neu zeichnen, weil Heatmap-Farben vom Schema abhängen.
 window.kilowatchTheme?.refresh();
@@ -367,6 +410,6 @@ setInterval(async()=>{
     lastLiveRefresh=Date.now();
     try{live=await api('/api/live');updateLiveParts();}catch(error){if(!$('#application').hidden)toast(error.message,true);}
   }
-  if(['dashboard','history'].includes(page)&&Date.now()-lastPageRefresh>=(rangeMinutes?5000:rangeHours?15000:60000))loadPage({background:true});
+  if(['dashboard','history'].includes(page)&&Date.now()-lastPageRefresh>=refreshEvery())loadPage({background:true});
 },1000);
 setLanguage(pickLanguage(),false).then(start).catch(error=>{showLogin();if(error.status!==401)$('#login-error').textContent=error.message;});

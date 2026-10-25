@@ -4,6 +4,7 @@ import csv
 from datetime import date, datetime, timedelta
 import io
 import logging
+import math
 from pathlib import Path
 import secrets
 import threading
@@ -609,16 +610,17 @@ def create_app(config=None):
     async def test_notifications(channel: str):
         return await notifier.test(channel)
 
-    def range_for(start, end, hours=None, minutes=None):
-        return period(start, end, store.settings()["timezone"], time.time(), hours, minutes)
+    def range_for(start, end, hours=None, minutes=None, since=None, until=None):
+        return period(start, end, store.settings()["timezone"], time.time(), hours, minutes, since, until)
 
     @app.get("/api/overview")
-    def overview(start: str | None = None, end: str | None = None, hours: int | None = None, minutes: int | None = None):
-        s, e = range_for(start, end, hours, minutes)
+    def overview(start: str | None = None, end: str | None = None, hours: int | None = None, minutes: int | None = None,
+                 since: int | None = None, until: int | None = None):
+        s, e = range_for(start, end, hours, minutes, since, until)
         a = Analytics(store)
         # Minutenfenster rechnen mit Minutenwerten, alles andere mit Viertelstunden.
-        step = 60 if minutes is not None else 900
-        if hours is not None or minutes is not None:
+        step = 60 if minutes is not None or (since is not None and e - s <= 7200) else 900
+        if hours is not None or minutes is not None or since is not None:
             # Vergleich mit dem gleich langen Abschnitt direkt davor.
             previous_start, previous_end = s - (e - s), s
         else:
@@ -641,8 +643,9 @@ def create_app(config=None):
                 "co2": grid.balance(buckets, s, e)}
 
     @app.get("/api/analysis")
-    def analysis(start: str | None = None, end: str | None = None, hours: int | None = None, minutes: int | None = None):
-        s, e = range_for(start, end, hours, minutes)
+    def analysis(start: str | None = None, end: str | None = None, hours: int | None = None, minutes: int | None = None,
+                 since: int | None = None, until: int | None = None):
+        s, e = range_for(start, end, hours, minutes, since, until)
         a = Analytics(store)
         return dict(a.patterns(s, e), forecast=a.forecast(time.time()))
 
@@ -682,9 +685,24 @@ def create_app(config=None):
         await feed.refresh()
         return price_feed_state()
 
+    @app.get("/api/timeline")
+    def timeline():
+        """Gesamter erfasster Zeitraum in groben Abschnitten für den Zeitbalken; keine Einzelwerte."""
+        first = store.rows("SELECT MIN(ts) AS first FROM buckets WHERE resolution=900")[0]["first"]
+        now = int(time.time())
+        if first is None:
+            return {"start": None, "end": now, "bin_seconds": 900, "bins": []}
+        first = int(first) // 900 * 900
+        bin_seconds = max(900, math.ceil((now - first) / 320 / 900) * 900)
+        first = first // bin_seconds * bin_seconds
+        rows = store.rows("SELECT CAST(ts AS INTEGER)/?*? AS ts, SUM(import_kwh) AS kwh, SUM(import_s) AS covered FROM buckets "
+                          "WHERE resolution=900 GROUP BY 1 ORDER BY 1", (bin_seconds, bin_seconds))
+        return {"start": first, "end": now, "bin_seconds": bin_seconds,
+                "bins": [{"ts": row["ts"], "kwh": round(row["kwh"] or 0, 4), "covered": round((row["covered"] or 0) / bin_seconds, 3)} for row in rows]}
+
     @app.get("/api/insights")
-    def insight_data(start: str | None = None, end: str | None = None):
-        s, e = range_for(start, end)
+    def insight_data(start: str | None = None, end: str | None = None, since: int | None = None, until: int | None = None):
+        s, e = range_for(start, end, None, None, since, until)
         a = Analytics(store)
         return {"baseline_trend": insights.baseline_trend(a, s, e), "feedin": insights.feedin_profile(a, s, e)}
 

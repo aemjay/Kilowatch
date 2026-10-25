@@ -21,7 +21,15 @@ def local_day(ts, zone):
     return datetime.fromtimestamp(ts, ZoneInfo(zone)).date()
 
 
-def period(start, end, zone, now, hours=None, minutes=None):
+def period(start, end, zone, now, hours=None, minutes=None, since=None, until=None):
+    if since is not None:
+        # Frei gewähltes Fenster (Zeitbalken, Zoom): Beginn auf die Minute bzw. Viertelstunde gerundet, Ende höchstens jetzt.
+        stop = int(min(now, until)) if until is not None else int(now)
+        step = 60 if stop - since <= 7200 else 900
+        first = int(since // step) * step
+        if first < 0 or stop - first < 300 or stop - first > 3660 * 86400:
+            raise ValueError("Zeitfenster: mindestens 5 Minuten, höchstens zehn Jahre und nur in der Vergangenheit.")
+        return first, stop
     if minutes is not None:
         # Letzte Minuten: Energie aus Minutenwerten, daher Beginn auf die Minute gerundet.
         if not 5 <= minutes <= 120:

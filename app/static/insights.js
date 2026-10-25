@@ -8,9 +8,11 @@ function hourChart(rows, field, label) {
   const w=760,h=200,left=42,top=14,bottom=30,right=9,max=Math.max(.01,...values.map(row=>row[field]))*1.15,width=(w-left-right)/24;
   let grid='';
   for(let i=0;i<=4;i++){const y=h-bottom-(h-top-bottom)*i/4;grid+=`<line class="grid-line" x1="${left}" x2="${w-right}" y1="${y}" y2="${y}"/><text x="${left-8}" y="${y+3}" text-anchor="end">${number(max*i/4,2)}</text>`;}
-  const bars=rows.map(row=>{const x=left+row.hour*width,value=row[field];if(value==null)return '';const y=h-bottom-value/max*(h-top-bottom);return `<rect x="${x+width*.18}" y="${y}" width="${width*.64}" height="${h-bottom-y}" rx="3" fill="#bfd559"><title>${String(row.hour).padStart(2,'0')}:00 · ${esc(unit(value,label,3))}</title></rect>`;}).join('');
+  const items=Array.from({length:24},(_,hour)=>{const row=rows.find(r=>r.hour===hour),value=row?.[field];return {head:`${String(hour).padStart(2,'0')}:00`,rows:value==null?[{v:t('keine Daten')}]:[{v:unit(value,label,3),cls:'main'}],y:value==null?h-bottom:h-bottom-value/max*(h-top-bottom)};});
+  const bars=rows.map(row=>{const x=left+row.hour*width,value=row[field];if(value==null)return '';const y=h-bottom-value/max*(h-top-bottom);return `<rect class="bar" data-i="${row.hour}" x="${x+width*.18}" y="${y}" width="${width*.64}" height="${h-bottom-y}" rx="3" fill="#bfd559"/>`;}).join('');
   const labels=Array.from({length:8},(_,i)=>`<text x="${left+i*3*width+width/2}" y="${h-9}" text-anchor="middle">${String(i*3).padStart(2,'0')}</text>`).join('');
-  return `<div class="chart"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('{label} nach Tageszeit',{label}))}">${grid}${bars}${labels}<text x="${left}" y="8">${esc(label)}</text></svg></div>`;
+  const id=registerChart(barModel({w,h,left,right,top,bottom,width,items}));
+  return `<div class="chart" data-chart="${id}" tabindex="0"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('{label} nach Tageszeit',{label}))}">${grid}${bars}${labels}<text x="${left}" y="8">${esc(label)}</text></svg></div>`;
 }
 
 async function mountAnalysisInsights() {

@@ -153,3 +153,39 @@ def test_minute_views_use_minute_values_for_energy_and_power(authenticated):
     for bad in ("4","121"):
         assert authenticated.get("/api/overview?minutes="+bad).status_code==400
     assert authenticated.get("/api/analysis?minutes=15").status_code==200
+
+
+def test_free_time_window_for_zoom_and_pan(authenticated):
+    now=datetime.now(timezone.utc).timestamp()
+    for index in range(31):
+        authenticated.app_store.ingest(Reading(600,100+index*.001,0,"SYNTHETIC"),now-300+index*10)
+    # Zehn Minuten, ausdrücklich begrenzt: Minutenwerte, Beginn auf die Minute, Ende wie angefragt.
+    since,until=int(now-600),int(now-60)
+    data=authenticated.get(f"/api/overview?since={since}&until={until}").json()
+    assert data["summary"]["start"]%60==0 and data["summary"]["end"]==until
+    assert data["series"]["group"]=="minute"
+    assert data["previous"] is None or data["previous"]["end"]<=data["summary"]["start"]
+    # Ohne Ende gilt „bis jetzt“; auch Analyse und Auswertungen verstehen das Fenster.
+    assert authenticated.get(f"/api/overview?since={int(now-7200)}").status_code==200
+    assert authenticated.get(f"/api/analysis?since={since}&until={until}").status_code==200
+    assert authenticated.get(f"/api/insights?since={int(now-86400*3)}&until={int(now)}").status_code==200
+    # Dreieinhalb Tage: Viertelstundenwerte als Leistung, Tage als Energie.
+    wide=authenticated.get(f"/api/overview?since={int(now-86400*10)}").json()
+    assert wide["series"]["group"]=="day"
+    for bad in (f"since={int(now-100)}",f"since={int(now-86400*4000)}",f"since={int(now+1000)}",f"since={since}&until={since+60}","since=-5","since=abc"):
+        assert authenticated.get("/api/overview?"+bad).status_code in (400,422),bad
+
+
+def test_timeline_summarises_all_recorded_time_for_the_navigator(authenticated):
+    empty=authenticated.get("/api/timeline").json()
+    assert empty["start"] is None and empty["bins"]==[]
+    now=datetime.now(timezone.utc).timestamp()
+    for index in range(31):
+        authenticated.app_store.ingest(Reading(600,100+index*.001,0,"SYNTHETIC"),now-3600*5+index*10)
+    data=authenticated.get("/api/timeline").json()
+    assert data["start"]%data["bin_seconds"]==0 and data["start"]<=now-3600*5
+    assert data["bin_seconds"]%900==0 and 0<len(data["bins"])<=330
+    assert all(0<=item["covered"]<=1.0001 for item in data["bins"])
+    assert authenticated.get("/api/timeline").status_code==200
+    authenticated.cookies.clear()
+    assert authenticated.get("/api/timeline").status_code==401
