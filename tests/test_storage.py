@@ -136,3 +136,67 @@ def test_collector_persist_deduplicates_identical_telegrams(store):
     assert collector.persist(Reading(100, 1.0, 0, "A"), "hash-a", 905)==(False, 900)
     assert collector.persist(Reading(120, 1.001, 0, "A"), "hash-b", 910)==(True, 910)
     assert store.latest()["ts"]==910
+
+
+def test_new_database_gets_current_schema_without_migration_backup(tmp_path):
+    from app.storage import SCHEMA_VERSION, Store
+    db=Store(tmp_path)
+    try:
+        assert db.rows("PRAGMA user_version")[0]["user_version"]==SCHEMA_VERSION
+        assert not list((tmp_path/"backups").glob("pre-migration-*")) if (tmp_path/"backups").exists() else True
+    finally:
+        db.close()
+
+
+def test_migration_runs_in_order_with_unrotated_backup(tmp_path, monkeypatch):
+    import app.storage as storage
+    db=storage.Store(tmp_path)
+    db.ingest(Reading(100, 1.0, 0, "A"), 900)
+    db.close()
+    calls=[]
+    def add_column(conn):
+        calls.append("v3")
+        conn.execute("ALTER TABLE events ADD COLUMN color TEXT")
+    monkeypatch.setattr(storage, "MIGRATIONS", storage.MIGRATIONS+[(storage.SCHEMA_VERSION+1, add_column)])
+    monkeypatch.setattr(storage, "SCHEMA_VERSION", storage.SCHEMA_VERSION+1)
+    migrated=storage.Store(tmp_path)
+    try:
+        assert calls==["v3"]
+        assert migrated.rows("PRAGMA user_version")[0]["user_version"]==storage.SCHEMA_VERSION
+        assert migrated.latest()["ts"]==900
+        backups=list((tmp_path/"backups").glob("pre-migration-*.sqlite3"))
+        assert len(backups)==1
+        for day in range(10):
+            migrated.set_state("backup_day", f"x{day}")
+            migrated.maintenance(now=900+day*86400)
+        assert backups[0].exists()
+    finally:
+        migrated.close()
+
+
+def test_failed_migration_rolls_back_and_keeps_old_version(tmp_path, monkeypatch):
+    import app.storage as storage
+    storage.Store(tmp_path).close()
+    def broken(conn):
+        conn.execute("CREATE TABLE half_done(x)")
+        raise RuntimeError("synthetic failure")
+    monkeypatch.setattr(storage, "MIGRATIONS", storage.MIGRATIONS+[(storage.SCHEMA_VERSION+1, broken)])
+    monkeypatch.setattr(storage, "SCHEMA_VERSION", storage.SCHEMA_VERSION+1)
+    with pytest.raises(RuntimeError, match="synthetic"):
+        storage.Store(tmp_path)
+    monkeypatch.undo()
+    db=storage.Store(tmp_path)
+    try:
+        assert db.rows("PRAGMA user_version")[0]["user_version"]==storage.SCHEMA_VERSION
+        assert not db.rows("SELECT name FROM sqlite_master WHERE name='half_done'")
+    finally:
+        db.close()
+
+
+def test_newer_database_is_refused_with_rollback_hint(tmp_path):
+    import app.storage as storage
+    db=storage.Store(tmp_path)
+    db.conn.execute(f"PRAGMA user_version={storage.SCHEMA_VERSION+1}")
+    db.close()
+    with pytest.raises(RuntimeError, match="pre-migration"):
+        storage.Store(tmp_path)

@@ -1,8 +1,10 @@
-# Für das aus GitHub Actions importierte NAS-Image. Enthält bewusst keinen Build.
+# Fertiges Image aus der GitHub Container Registry. Enthält bewusst keinen Build.
 name: kilowatch
 services:
   kilowatch:
-    image: kilowatch:1.0.0
+    # Standard: neueste 1.x-Version (Fehlerbehebungen und neue Funktionen, keine inkompatiblen Änderungen).
+    # Für eine feste Version KILOWATCH_VERSION=1.2.3 in der .env setzen.
+    image: ghcr.io/aemjay/kilowatch:${KILOWATCH_VERSION:-1}
     # Leer = Plattform des Hosts. Wird von tools/setup.py in .env gesetzt.
     platform: ${KILOWATCH_PLATFORM:-}
     restart: unless-stopped

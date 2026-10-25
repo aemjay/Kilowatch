@@ -29,6 +29,7 @@ async function harness(options={}) {
   let saved=structuredClone({...settings,...options.settings});
   let notes=structuredClone(notification), needsSetup=!!options.needsSetup;
   let tariffs=structuredClone(options.tariffs||[]),market={rows:[],fetched_at:null,error:''};
+  let budget={settings:{monthly_eur:null,monthly_kwh:null,abschlag_eur:null},month:{observed_eur:3,observed_kwh:10,forecast_eur:null,forecast_kwh:null,forecast_reason:'Zu wenig Daten'},annual:{available:false,reason:'Mindestens 60 vollständig erfasste Tage erforderlich.'}};
   const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error));
   const dom=new JSDOM(readFileSync(join(root,'index.html'),'utf8'),{
     url:'http://kilowatch.test/#'+(options.page||'settings'),runScripts:'outside-only',virtualConsole:vc});
@@ -59,11 +60,15 @@ async function harness(options={}) {
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
     else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market};
     else if(path==='/api/market/refresh'){market={rows:[{start:1800,end:5400,ct_kwh:-5}],fetched_at:2000000000,error:''};data=market;}
+    else if(path==='/api/budget'&&config.method==='PUT'){budget.settings=body;}
+    else if(path==='/api/budget')data=budget;
+    else if(path==='/api/simulate')data={energy_cost_eur:10,base_cost_eur:2,feedin_eur:0,total_eur:12,actual_total_eur:13,priced_share:.5,average_eur_kwh:.3,comparable:false,paired_share:.5,difference_eur:-1.25,spot_weighted_ct:9,spot_time_average_ct:8};
+    else if(path==='/api/updates')data={enabled:false,current:'1.0.0',repository:'example/kilowatch',checked_at:null,error:'',available:false};
     else if(path==='/api/credentials/bridge'){saved.password_configured=false;saved.enabled=false;saved.setup_required=true;}
     else if(path==='/api/bridge/test')data={protocol:'SML',endpoint:'/node_data.json',resolved_addresses:['192.168.1.10'],has_import:true};
     return {ok:status===200,status,json:async()=>structuredClone(data),blob:async()=>new w.Blob(['synthetic-image'],{type:'image/png'})};
   };
-  for(const name of ['configure.js','extras.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
+  for(const name of ['configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
     !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
@@ -195,5 +200,34 @@ test('market prices are fetched only by explicit click and clearly separate from
   w.document.querySelector('#market-refresh').click();
   await until(()=>h.calls.some(c=>c.path==='/api/market/refresh'));
   assert.equal(h.calls.find(c=>c.path==='/api/market/refresh').method,'POST');
+  assert.deepEqual(h.errors,[]);
+});
+
+test('tariff simulation sends spot markup in ct and shows an honest result',async t=>{
+  const h=await harness({page:'costs',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#simulation-form'));
+  const form=w.document.querySelector('#simulation-form');
+  form.elements.mode.value='spot';form.elements.mode.dispatchEvent(new w.Event('change'));
+  assert.equal(form.elements.ct_kwh.disabled,true);
+  assert.equal(form.elements.markup_ct.disabled,false);
+  for(const [name,value] of Object.entries({markup_ct:'18.5',vat_percent:'19',base_month:'10',feedin_ct:'8'}))input(w,'simulation-form',name,value);
+  submit(w,'simulation-form');
+  await until(()=>h.calls.some(c=>c.path==='/api/simulate'));
+  const request=h.calls.find(c=>c.path==='/api/simulate').body;
+  assert.equal(request.tariff.mode,'spot');assert.equal(request.tariff.markup_ct,18.5);
+  assert.equal(request.tariff.feedin_eur_kwh,.08);assert.equal('eur_kwh' in request.tariff,false);
+  await until(()=>w.document.querySelector('#simulation-result').textContent.includes('Günstiger als dein Tarif'));
+  assert.match(w.document.querySelector('#simulation-result').textContent,/50,0 %/);
+  assert.match(w.document.querySelector('#simulation-result').textContent,/verbrauchsgewichtet/);
+  assert.deepEqual(h.errors,[]);
+});
+
+test('budget form saves empty fields as null',async t=>{
+  const h=await harness({page:'costs',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#budget-form'));
+  input(w,'budget-form','monthly_eur','90');input(w,'budget-form','abschlag_eur','85.5');
+  submit(w,'budget-form');
+  await until(()=>h.calls.some(c=>c.path==='/api/budget'&&c.method==='PUT'));
+  assert.deepEqual(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body,{monthly_eur:90,monthly_kwh:null,abschlag_eur:85.5});
   assert.deepEqual(h.errors,[]);
 });

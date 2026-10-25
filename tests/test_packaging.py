@@ -10,8 +10,11 @@ def test_compose_data_volume_and_prebuilt_match():
     original=yaml.safe_load((ROOT/"compose.yaml").read_text())
     prebuilt=yaml.safe_load((ROOT/"compose.prebuilt.yaml").read_text())
     service=original["services"]["kilowatch"]
+    prebuilt_service=prebuilt["services"]["kilowatch"]
     assert service.pop("build")=="."
-    assert service==prebuilt["services"]["kilowatch"]
+    assert service.pop("image")=="kilowatch:local"
+    assert prebuilt_service.pop("image")=="ghcr.io/aemjay/kilowatch:${KILOWATCH_VERSION:-1}"
+    assert service==prebuilt_service
     assert original["volumes"]==prebuilt["volumes"]
     assert service["read_only"] is True
 
@@ -68,6 +71,16 @@ def test_setup_writes_selected_platform():
     assert "KILOWATCH_PLATFORM=\n" in tool.render(example,8088,"auto")
     assert "KILOWATCH_PLATFORM=linux/arm64\n" in tool.render(example,8088,"arm64")
     assert "HTTP_PORT=9000" in tool.render(example,9000,"amd64")
+    owned=tool.render(example,8088,"auto","1026","100")
+    assert "PUID=1026\n" in owned and "PGID=100\n" in owned
+
+
+def test_setup_creates_data_folder(tmp_path):
+    import importlib.util
+    spec=importlib.util.spec_from_file_location("setup_tool",ROOT/"tools/setup.py")
+    tool=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    assert tool.prepare_data(tmp_path,"","").is_dir()
 
 
 def test_data_in_project_folder_and_secrets_in_separate_volume():
@@ -82,3 +95,10 @@ def test_data_in_project_folder_and_secrets_in_separate_volume():
     assert "ENTRYPOINT" in dockerfile and "SECRETS_DIR=/secrets" in dockerfile
     entrypoint=(ROOT/"docker-entrypoint.sh").read_text()
     assert "setpriv" in entrypoint and "--inh-caps=-all" in entrypoint
+
+
+def test_version_is_maintained_only_in_the_app_package():
+    import app
+    assert app.__version__.count(".")==2
+    for name in ["Dockerfile","compose.yaml","compose.prebuilt.yaml","package.json",".github/workflows/nas-image.yml"]:
+        assert app.__version__ not in (ROOT/name).read_text(), name

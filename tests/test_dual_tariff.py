@@ -6,7 +6,7 @@ import pytest
 from app.analytics import Analytics, midnight
 from app.cli import restore
 from app.decoder import Reading
-from app.storage import Store
+from app.storage import SCHEMA_VERSION, Store
 
 
 def payload(**extra):
@@ -65,6 +65,6 @@ def test_newer_schema_is_rejected_by_restore(store,tmp_path):
     store.ingest(Reading(400,100,0,"SYNTHETIC"),1800)
     backup=store.backup()
     with sqlite3.connect(backup) as connection:
-        connection.execute("PRAGMA user_version=2")
-    with pytest.raises(ValueError,match="Schema 1"):
+        connection.execute(f"PRAGMA user_version={SCHEMA_VERSION+1}")
+    with pytest.raises(ValueError,match="Schema 1 bis"):
         restore(backup,tmp_path/"restored",True)

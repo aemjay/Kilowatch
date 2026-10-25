@@ -25,10 +25,27 @@ Beispiel ausschließlich zur Erklärung: HT 35 ct/kWh, NT 25 ct/kWh, NT von 22:0
 
 Für einen echten variablen Vertrag enthält die Preis-CSV die **vollständigen Bruttopreise je Zeitintervall**, siehe [API/CSV-Format](API.md). Fehlende Preise bleiben als unbepreiste Energie sichtbar. Es gibt keinen Rückfall auf Null oder einen festen Preis.
 
-Zusätzlich kann unter **Börsenpreise ansehen** per Knopfdruck der technisch ohne Token lesbare DE-Feed von aWATTar abgerufen werden. Er liefert veröffentlichte Börsenintervalle für heute und, sobald vorhanden, morgen. Der Abruf wurde am 25.10.2026 erfolgreich lesend geprüft. Die App überträgt dabei nur die angefragten Zeitgrenzen, keine Messdaten oder Zugangsdaten. Es gibt keinen Hintergrundabruf und keinen Tibber-Tarifzwang. Erfolgreiche Antworten bleiben eine Stunde im Cache; nach Fehlern gilt eine 15-Minuten-Pause. Im Demo-Modus wird nichts abgerufen.
+Zusätzlich kann unter **Börsenpreise ansehen** per Knopfdruck der technisch ohne Token lesbare DE-Feed von aWATTar abgerufen werden. Er liefert veröffentlichte Börsenintervalle für heute und, sobald vorhanden, morgen. Die App überträgt dabei nur die angefragten Zeitgrenzen, keine Messdaten oder Zugangsdaten. Es gibt keinen Hintergrundabruf und keinen Tibber-Tarifzwang. Erfolgreiche Antworten bleiben eine Stunde im Cache; nach Fehlern gilt eine 15-Minuten-Pause. Im Demo-Modus wird nichts abgerufen.
 
-**Börsenpreise sind keine vollständigen Vertragspreise.** Der Feed liefert EUR/MWh, die Vorschau rechnet durch 10 in ct/kWh um. Anbieteraufschläge, Netzentgelte und Steuern sind damit noch nicht vollständig erfasst. Deshalb verändert dieser Abruf weder deine Tarife noch importierte Bruttopreise und fließt nicht in die Kostenberechnung ein. Negative Börsenpreise bleiben sichtbar. Ältere Cache-Daten behalten ihre tatsächlichen Zeitstempel; fehlende Zukunftspreise werden nicht ergänzt.
+**Börsenpreise sind keine vollständigen Vertragspreise.** Der Feed liefert EUR/MWh, die Vorschau rechnet durch 10 in ct/kWh um. Anbieteraufschläge, Netzentgelte und Steuern sind damit noch nicht vollständig erfasst. Deshalb verändert dieser Abruf weder deine Tarife noch importierte Bruttopreise und fließt nicht in die Kostenberechnung ein. Abgerufene Börsenpreise werden aber als Historie gespeichert und stehen der Tarifsimulation zur Verfügung. Negative Börsenpreise bleiben sichtbar. Ältere Cache-Daten behalten ihre tatsächlichen Zeitstempel; fehlende Zukunftspreise werden nicht ergänzt.
 
-Da aktuell kein variabler Vertrag vorliegt, muss hier nichts eingerichtet werden. Eine spätere direkte Vertragspreis-Anbindung hängt vom tatsächlichen Anbieter und dessen verfügbarer Schnittstelle ab. Der nutzbare Weg für beliebige Anbieter bleibt der Import vollständiger Preise.
+Ohne variablen Vertrag muss hier nichts eingerichtet werden. Eine direkte Vertragspreis-Anbindung hängt vom tatsächlichen Anbieter und dessen verfügbarer Schnittstelle ab. Der nutzbare Weg für beliebige Anbieter bleibt der Import vollständiger Preise.
+
+## Tarif simulieren
+
+Unter **Kosten & Tarife → Tarif simulieren** lässt sich derselbe gemessene Lastgang mit einem anderen Tarif nachrechnen: Festpreis, HT/NT oder dynamisch als **(Börsenpreis + Aufschlag) × (1 + MwSt)**. Der Aufschlag umfasst Netzentgelt, Umlagen, Stromsteuer und Anbietermarge und steht im Preisblatt des Anbieters.
+
+- Verglichen wird **gepaart**: Arbeitspreise beider Tarife nur über die Viertelstunden, die in beiden bepreist sind; Grundpreis und Einspeisung über den ganzen Zeitraum. Der abgedeckte Anteil wird angezeigt.
+- Für dynamische Tarife braucht die Simulation Börsenpreise des Zeitraums. **Börsenpreise für den Zeitraum nachladen** holt sie bei aWATTar (höchstens 62 Tage je Abruf, in Abschnitten zu drei Tagen, 10 Minuten Pause zwischen Abrufen). Übertragen werden nur die Zeitgrenzen.
+- Bei dynamischen Tarifen zeigt die Simulation zusätzlich den **verbrauchsgewichteten Börsenpreis** gegenüber dem Zeitmittel. Liegt er darüber, fällt der Bezug eher in teure Stunden.
+- Annahme: gleicher Verbrauch zur gleichen Zeit. Eine Verhaltensänderung durch den anderen Tarif ist nicht berücksichtigt; das Ergebnis ist kein Einsparversprechen.
+
+## Budget und Abschlag
+
+Unter **Budget & Abschlag** lassen sich ein Monatsbudget in €, ein Monatsziel in kWh und der monatliche Abschlag hinterlegen.
+
+- **Monat:** bisherige Kosten und Prognose bis Monatsende (bisherige Kosten + prognostizierte Rest-kWh × bisheriger mittlerer Arbeitspreis + voller Monatsgrundpreis). Die Prognose braucht dieselbe Datenbasis wie die Monatsprognose der Analysen.
+- **Jahr:** Hochrechnung aus vollständig erfassten Tagen der letzten 365 Tage, erst ab 60 solchen Tagen. Ohne Jahreszeitbereinigung; bei weniger als einem Jahr Daten kann die Zahl deutlich abweichen. Die angezeigte Spanne beschreibt nur die Tagesstreuung. Einspeisung bleibt unberücksichtigt.
+- Optional meldet die Alarmregel **Monatsbudget erreicht** per E-Mail oder Signal, sobald die erfassten Kosten das Budget erreichen.
 
 Primärquelle: [aWATTar/tado° DE API-Dokumentation](https://energy.tado.com/services/api). Monatlicher Grundpreis und Einspeisevergütung werden weiter unabhängig davon lokal hinterlegt.

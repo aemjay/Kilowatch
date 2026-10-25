@@ -12,6 +12,8 @@ class Config:
     secure_cookie: bool = False
     demo: bool = False
     testing: bool = False
+    # Quelle des optionalen Update-Hinweises; Forks setzen hier ihr eigenes Repository.
+    update_repository: str = "aemjay/kilowatch"
 
     @property
     def mode(self):
@@ -32,4 +34,5 @@ class Config:
             secrets_dir=Path(os.getenv("SECRETS_DIR", "/secrets")),
             secure_cookie=os.getenv("COOKIE_SECURE", "false").lower() == "true",
             demo=os.getenv("DEMO_MODE", "false").lower() == "true",
+            update_repository=os.getenv("KILOWATCH_UPDATE_REPOSITORY", "aemjay/kilowatch"),
         )

@@ -5,8 +5,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATA_DIR=/data \
     SECRETS_DIR=/secrets
 WORKDIR /opt/kilowatch
+# Die Versionsnummer pflegt allein app/__init__.py; die CI reicht sie hier durch.
+ARG VERSION=local
 LABEL org.opencontainers.image.title="Kilowatch" \
-      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.licenses="GPL-3.0-or-later"
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \

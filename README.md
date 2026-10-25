@@ -17,13 +17,13 @@ Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer)
 | Einrichtung | Lokale Subnetzsuche, Assistent, eigenes App-Passwort, Bridge per FQDN oder IP, Zugangsdaten später ändern |
 | Live | Netzleistung mit Vorzeichen, Bezug, Einspeisung, Aktualität und Empfangsdiagnose |
 | Verlauf | Tag, Woche, Monat, Jahr, eigener Zeitraum, Vorperioden und Messlücken |
-| Analyse | Stunden-Heatmap, Tagesprofile, Nachtgrundlast, Lastdauerlinie, Spitzen und Monatsprognose |
-| Kosten | Einzeltarif oder HT/NT nach Uhrzeit, Tarifwechsel, Grundpreis, Einspeisevergütung, dynamische Bruttopreise per CSV, optionale Börsenpreisvorschau |
+| Analyse | Stunden-Heatmap, Tagesprofile, Nachtgrundlast und deren Entwicklung samt Kosten pro Jahr, Lastdauerlinie, Spitzen, Einspeiseprofil und Monatsprognose |
+| Kosten | Einzeltarif oder HT/NT nach Uhrzeit, Tarifwechsel, Grundpreis, Einspeisevergütung, dynamische Bruttopreise per CSV, Tarifsimulation (Fest, HT/NT, Börsenpreis + Aufschlag), Monatsbudget und Abschlags-Hochrechnung, optionale Börsenpreise |
 | Benachrichtigungen | E-Mail über eigenen SMTP-Server; optional Signal über lokal gekoppelten Zusatzcontainer |
-| Alarmregeln | Fehlende Daten, anhaltend hohe Last, Tagesbudget, niedrige Batteriespannung und knapper Datenspeicher |
+| Alarmregeln | Fehlende Daten, anhaltend hohe Last, Tagesbudget, Monatsbudget, niedrige Batteriespannung und knapper Datenspeicher |
 | Versand | Ruhezeiten, Entwarnungen, Mindestabstand, persistente Warteschlange, begrenzte Wiederholungen und Zustellverlauf |
 | Berichte | Druckansicht, PDF über Browserdruck, CSV/JSON-Export und lokale HTTP-API |
-| Betrieb | Wiederanlauf, Aufbewahrung, konsistente SQLite-Sicherungen, Restore und lokale Passwort-Wiederherstellung |
+| Betrieb | Wiederanlauf, Aufbewahrung, konsistente SQLite-Sicherungen, Restore, lokale Passwort-Wiederherstellung, optionaler Update-Hinweis und Datenbank-Migrationen mit automatischer Vorab-Sicherung |
 
 Die Oberfläche liefert JavaScript, SVG und Schriften lokal aus. Server: Python/FastAPI, Datenbank: SQLite mit WAL. Es gibt keinen Node-Build auf dem NAS. Mosquitto und Signal sind getrennte, optionale Container.
 
@@ -34,8 +34,8 @@ Die Oberfläche liefert JavaScript, SVG und Schriften lokal aus. Server: Python/
 Ausführlich: **[Installation auf der Synology](docs/INSTALLATION-SYNOLOGY.md)**.
 
 1. Vollständiges Projekt nach beispielsweise `/volume1/docker/kilowatch` kopieren.
-2. Optional per SSH im Projektordner `python3 tools/setup.py` ausführen: fragt HTTP-Port und Plattform ab (`auto`, `amd64` oder `arm64`) und schreibt eine `.env`. Ohne `.env` gelten Port 8088 und die Plattform des NAS.
-3. Container Manager → **Projekt → Erstellen**, Projektpfad auswählen, **`compose.yaml`** verwenden und bauen/starten.
+2. **Vor dem ersten Start** den Ordner `data` anlegen, einem DSM-Benutzer Lese-/Schreibrecht darauf geben und dessen IDs als `PUID`/`PGID` in die `.env` schreiben. Per SSH erledigt `python3 tools/setup.py` das weitgehend (fragt auch Port und Plattform ab). Ohne diesen Schritt scheitert der Start auf Synology an den ACLs. Details: [Installation, Abschnitt 1](docs/INSTALLATION-SYNOLOGY.md#1-projektordner-datenordner-und-berechtigung).
+3. Container Manager → **Projekt → Erstellen**, Projektpfad auswählen, **`compose.prebuilt.yaml`** verwenden und starten (oder `compose.yaml`, um selbst zu bauen).
 4. Container-Protokoll öffnen und den einmaligen **Setup-Code** ablesen.
 5. `http://<NAS-FQDN>:8088` öffnen, Setup-Code eingeben und eigenes App-Passwort festlegen.
 6. Bridge-FQDN oder aktuelle IP sowie das Bridge-Passwort (Kennung vom Aufkleber, Format `ABCD-EFGH`) eingeben, **Verbindung prüfen**, dann **Bridge speichern und starten**. Node 1 ist der übliche Ausgangspunkt.
@@ -44,17 +44,19 @@ Ausführlich: **[Installation auf der Synology](docs/INSTALLATION-SYNOLOGY.md)**
 Mit SSH im Projektordner:
 
 ```sh
-docker compose -f compose.yaml up -d --build
-docker compose -f compose.yaml logs --tail=50 kilowatch
+docker compose -f compose.prebuilt.yaml up -d
+docker compose -f compose.prebuilt.yaml logs --tail=50 kilowatch
 ```
 
 Die optionale `.env.example` enthält ausschließlich Betriebsoptionen wie HTTP-Port und Plattform. Adressen und persönliche Zugangsdaten werden in der Oberfläche eingegeben. Messdaten und tägliche Sicherungen liegen im Ordner **`data/`** des Projekts und werden so von Hyper Backup mitgesichert. Zugangsdaten liegen bewusst getrennt im Docker-Volume **`kilowatch-secrets`**, damit Schlüssel und verschlüsselte Passwörter nie gemeinsam in einer Sicherung landen ([Details](docs/BETRIEB.md#speicherorte)). `docker compose down -v` löscht dieses Volume und ist kein normaler Update-Schritt.
 
-## Vorgebautes NAS-Image
+## Fertige Images und Updates
 
-Der [GitHub-Workflow](.github/workflows/nas-image.yml) prüft Tests und Compose-Konfigurationen und baut anschließend Images für amd64 und arm64. Er prüft den echten Containerstart ohne vorkonfigurierte Zugangsdaten, Einrichtung, Dateirechte, API, Sicherung, Persistenz nach Neustart und den optionalen MQTT-Broker.
+Releases erscheinen als signierte Multi-Arch-Images (amd64/arm64) unter `ghcr.io/aemjay/kilowatch`. `compose.prebuilt.yaml` verwendet standardmäßig die neueste 1.x-Version; mit `KILOWATCH_VERSION=1.2.3` in der `.env` lässt sich eine feste Version wählen. Für NAS ohne Internet hängen Importdateien an jedem Release.
 
-Nach einem erfolgreichen Lauf stehen die Artefakte **`kilowatch-nas-amd64`** und **`kilowatch-nas-arm64`** mit **`kilowatch-1.0.0-<plattform>.tar.gz`** und SHA256-Prüfsumme 30 Tage bereit; das zur NAS-CPU passende wählen. Nach dem Import im Container Manager **`compose.prebuilt.yaml`** verwenden. Beide Varianten nutzen dasselbe Datenvolume und dürfen nicht gleichzeitig als zwei App-Instanzen laufen. Kein Registry-Login erforderlich.
+Kilowatch aktualisiert sich nie selbst. Optional zeigt die App neue Versionen an (standardmäßig aus, eine Abfrage pro Tag bei GitHub). Aktualisiert wird per Container Manager, per SSH oder automatisch über den DSM-Aufgabenplaner mit `tools/update.sh`. Vor jeder Datenbankänderung legt Kilowatch selbst eine Sicherung an. Details und Rückweg: **[Updates](docs/UPDATES.md)**.
+
+Der [GitHub-Workflow](.github/workflows/nas-image.yml) prüft Tests und Compose-Konfigurationen, startet die Images für beide Plattformen mit echtem Datenordner und prüft Einrichtung, Dateirechte, API, Sicherung, Persistenz, das Update von der letzten veröffentlichten Version und den optionalen MQTT-Broker.
 
 ## E-Mail und Signal
 

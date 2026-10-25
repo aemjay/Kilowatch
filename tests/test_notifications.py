@@ -257,3 +257,19 @@ def test_restart_grace_does_not_emit_false_outage_recovery(authenticated,monkeyp
     engine.store.ingest(Reading(500,100,0,"SYNTHETIC"),now+25)
     restarted.evaluate(now+25)
     assert engine.store.rows("SELECT * FROM notifications WHERE kind='recovery'")
+
+
+def test_monthly_budget_alert_once_per_month(authenticated,monkeypatch):
+    from app.demo import seed
+    from app.analytics import midnight
+    now=midnight("2026-10-20","Europe/Berlin")+12*3600
+    seed(authenticated.app_store,now)
+    engine=prepare_engine(authenticated,monkeypatch,offline_enabled=False,battery_enabled=False,disk_enabled=False)
+    authenticated.app_store.set_state("budget",{"monthly_eur":5})
+    engine.evaluate(now)
+    assert not authenticated.app_store.rows("SELECT * FROM notifications WHERE rule_key LIKE 'budget:%'")
+    engine.save(NotificationSettings(**email_config(offline_enabled=False,battery_enabled=False,disk_enabled=False,budget_enabled=True)))
+    engine.evaluate(now)
+    engine.evaluate(now+60)
+    alerts=authenticated.app_store.rows("SELECT * FROM notifications WHERE rule_key='budget:2026-10'")
+    assert len(alerts)==1 and "Monatsbudget" in alerts[0]["subject"]
