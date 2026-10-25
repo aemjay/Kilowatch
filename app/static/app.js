@@ -270,17 +270,27 @@ const pageText={
   system:tk('System & Datenqualität')
 };
 
-async function loadPage() {
+// Zuletzt gezeichnete Daten je Seite: Hintergrundaktualisierungen zeichnen nur bei Änderungen neu.
+const renderedData={};
+
+async function loadPage({background=false}={}) {
   lastPageRefresh=Date.now();
   const version=++requestVersion, selected=page;
-  const target=$('#page-'+selected);target.classList.add('loading');
+  const target=$('#page-'+selected);
+  // Abdunkeln nur bei spürbar langsamen, selbst ausgelösten Ladevorgängen; Hintergrund-Updates nie.
+  const dim=background?null:setTimeout(()=>target.classList.add('loading'),250);
   try {
     const q=query();
     if(['dashboard','history','analysis','costs','reports'].includes(selected)) {
       const requests=[api('/api/overview?'+q)];
       if(selected==='analysis')requests.push(api('/api/analysis?'+q));
       if(selected==='costs')requests.push(api('/api/tariffs'));
-      const result=await Promise.all(requests);if(version!==requestVersion)return;overview=result[0];
+      const result=await Promise.all(requests);if(version!==requestVersion)return;
+      const key=q+JSON.stringify(result);
+      // Unveränderte Daten oder ein gerade bearbeitetes Eingabefeld: Seite stehen lassen.
+      const editing=target.contains(document.activeElement)&&document.activeElement.matches('input,select,textarea');
+      if(background&&(renderedData[selected]===key||editing)){updateLiveParts();return;}
+      renderedData[selected]=key;overview=result[0];
       if(selected==='dashboard')renderDashboard(overview);
       if(selected==='history')renderHistory(overview);
       if(selected==='analysis')renderAnalysis(result[1],overview);
@@ -292,7 +302,7 @@ async function loadPage() {
     else if(selected==='system'){const result=await api('/api/diagnostics');if(version!==requestVersion)return;renderSystem(result);}
     updateLiveParts();
   } catch(error) { if(version===requestVersion)toast(error.message,true); }
-  finally {target.classList.remove('loading');}
+  finally {clearTimeout(dim);target.classList.remove('loading');}
 }
 
 async function navigate(value, updateHash=true) {
@@ -355,6 +365,6 @@ setInterval(async()=>{
     lastLiveRefresh=Date.now();
     try{live=await api('/api/live');updateLiveParts();}catch(error){if(!$('#application').hidden)toast(error.message,true);}
   }
-  if(['dashboard','history'].includes(page)&&Date.now()-lastPageRefresh>=(rangeHours?15000:60000))loadPage();
+  if(['dashboard','history'].includes(page)&&Date.now()-lastPageRefresh>=(rangeHours?15000:60000))loadPage({background:true});
 },1000);
 setLanguage(pickLanguage(),false).then(start).catch(error=>{showLogin();if(error.status!==401)$('#login-error').textContent=error.message;});
