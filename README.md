@@ -56,7 +56,7 @@ Das Skript prüft die Image-Signatur, startet nur bei neuer Version neu und roll
 
 Releases erscheinen als signierte Multi-Arch-Images unter `ghcr.io/aemjay/kilowatch`; `compose.yaml` folgt standardmäßig der neuesten 1.x-Version. Messdaten und tägliche Sicherungen liegen im Ordner `data/` des Projekts. Zugangsdaten liegen bewusst getrennt im Docker-Volume `kilowatch-secrets`, damit Schlüssel und verschlüsselte Passwörter nie gemeinsam in einer Sicherung landen ([Details](docs/BETRIEB.md#speicherorte)). `docker compose down -v` löscht dieses Volume und ist kein Update-Schritt.
 
-Empfohlen ist der Zugriff per HTTPS über einen Reverse-Proxy ([Anleitung](docs/INSTALLATION.md#https-über-einen-reverse-proxy)). Sicherheitslücken bitte vertraulich melden ([SECURITY.md](SECURITY.md)).
+Empfohlen ist der Zugriff per HTTPS über einen Reverse-Proxy ([Anleitung](docs/INSTALLATION.md#https-über-einen-reverse-proxy)); mit HTTPS lässt sich Kilowatch auch als App installieren ([PWA](docs/INSTALLATION.md#als-app-installieren-pwa)). Sicherheitslücken bitte vertraulich melden ([SECURITY.md](SECURITY.md)).
 
 ## E-Mail-Benachrichtigungen
 

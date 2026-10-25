@@ -853,7 +853,20 @@ def create_app(config=None):
                 "backups": [p.name for p in sorted((folder / "backups").glob("*.sqlite3"))[-7:]],
                 "version": __version__, "demo": config.demo}
 
-    app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="frontend")
+    static_folder = Path(__file__).parent / "static"
+
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker():
+        # Mit der App-Version, damit jedes Release einen neuen Worker und damit eine Aktualisierung auslöst.
+        source = (static_folder / "sw.js").read_text(encoding="utf-8").replace("__VERSION__", __version__)
+        return Response(source, media_type="text/javascript", headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    def web_manifest():
+        return Response((static_folder / "manifest.webmanifest").read_bytes(), media_type="application/manifest+json",
+                        headers={"Cache-Control": "no-cache"})
+
+    app.mount("/", StaticFiles(directory=static_folder, html=True), name="frontend")
     return app
 
 
