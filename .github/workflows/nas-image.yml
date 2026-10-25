@@ -43,7 +43,7 @@ jobs:
           MQTT_BIND: 127.0.0.1
         run: |
           docker compose -f compose.yaml config --quiet
-          docker compose -f compose.prebuilt.yaml config --quiet
+          docker compose -f compose.build.yaml config --quiet
           docker compose -f compose.yaml -f compose.mqtt.yaml config --quiet
           docker compose -f compose.yaml -f compose.signal.yaml config --quiet
   image:
@@ -113,7 +113,7 @@ jobs:
       - name: Importdatei fuer NAS ohne Internet erzeugen
         run: |
           mkdir -p dist
-          # Beide Tags speichern: compose.prebuilt.yaml verwendet standardmäßig die Hauptversion.
+          # Beide Tags speichern: compose.yaml verwendet standardmäßig die Hauptversion.
           docker save "$IMAGE:$VERSION" "$IMAGE:${VERSION%%.*}" | gzip > "dist/kilowatch-$VERSION-${{ matrix.arch }}.tar.gz"
           cd dist
           sha256sum "kilowatch-$VERSION-${{ matrix.arch }}.tar.gz" > "kilowatch-$VERSION-${{ matrix.arch }}.tar.gz.sha256"

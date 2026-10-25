@@ -1,12 +1,12 @@
-# Fertiges Image aus der GitHub Container Registry. Enthält bewusst keinen Build.
 name: kilowatch
 services:
   kilowatch:
-    # Standard: neueste 1.x-Version (Fehlerbehebungen und neue Funktionen, keine inkompatiblen Änderungen).
-    # Für eine feste Version KILOWATCH_VERSION=1.2.3 in der .env setzen.
-    image: ghcr.io/aemjay/kilowatch:${KILOWATCH_VERSION:-1}
+    # Lokal gebaut. Für fertige Images compose.yaml verwenden.
+    image: kilowatch:local
     # Leer = Plattform des Hosts. Wird von tools/setup.py in .env gesetzt.
     platform: ${KILOWATCH_PLATFORM:-}
+    build: .
+    container_name: kilowatch
     restart: unless-stopped
     init: true
     ports:

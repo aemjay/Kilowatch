@@ -10,7 +10,7 @@ Releases folgen [Semantic Versioning](https://semver.org/lang/de/) und erscheine
 |---|---|
 | `1.2.3` | genau diese Version |
 | `1.2` | neueste Fehlerbehebung von 1.2 |
-| `1` | neueste 1.x-Version: Fehlerbehebungen und neue Funktionen, keine inkompatiblen Änderungen (**Standard in `compose.prebuilt.yaml`**) |
+| `1` | neueste 1.x-Version: Fehlerbehebungen und neue Funktionen, keine inkompatiblen Änderungen (**Standard in `compose.yaml`**) |
 | `latest` | neueste stabile Version, auch über Hauptversionen hinweg – für automatische Updates nicht empfohlen |
 | `edge` | aktueller Entwicklungsstand, nur zum Testen |
 
@@ -49,7 +49,7 @@ Das Skript lädt das Image, startet den Container nur bei einer neuen Version ne
 
 Mit dem Standard-Tag `1` kommen so Fehlerbehebungen und neue 1.x-Funktionen automatisch, aber nie eine neue Hauptversion.
 
-**Ohne Internet:** neue Importdatei vom Release laden, im Container Manager importieren und `docker compose -f compose.prebuilt.yaml up -d --pull never` ausführen.
+**Ohne Internet:** neue Importdatei vom Release laden, im Container Manager importieren und `docker compose -f compose.yaml up -d --pull never` ausführen.
 
 Bewusst nicht vorgesehen sind Werkzeuge wie Watchtower: Sie brauchen Zugriff auf den Docker-Socket, also Root-Rechte auf dem NAS, und ziehen Images ohne Prüfung.
 
@@ -61,7 +61,7 @@ Bewusst nicht vorgesehen sind Werkzeuge wie Watchtower: Sie brauchen Zugriff auf
 
 1. In der `.env` die vorherige Version eintragen, z. B. `KILOWATCH_VERSION=1.2.3`.
 2. Falls das Update die Datenbank geändert hat: Die ältere Version startet dann nicht und nennt im Protokoll die Sicherung. Diese wie unter [Datenbank wiederherstellen](BETRIEB.md#datenbank-wiederherstellen) einspielen: die Datei `pre-migration-…sqlite3` verwenden.
-3. `docker compose -f compose.prebuilt.yaml up -d`
+3. `docker compose -f compose.yaml up -d`
 
 Messwerte, die zwischen Update und Rückweg erfasst wurden, fehlen nach dem Einspielen der Sicherung.
 

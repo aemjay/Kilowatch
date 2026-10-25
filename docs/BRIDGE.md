@@ -51,10 +51,10 @@ Dieses Verfahren ist eine gesonderte Umstellung der Bridge. Es wurde an deinem G
 4. **Broker starten.** Bestehende eigene Broker bevorzugt weiterverwenden, wenn deren Konfiguration passt. Andernfalls:
 
    ```sh
-   docker compose -f compose.yaml -f compose.mqtt.yaml up -d --build
+   docker compose -f compose.yaml -f compose.mqtt.yaml up -d
    ```
 
-   Mit vorgebautem App-Image entsprechend `compose.prebuilt.yaml` statt `compose.yaml` verwenden. Im Container Manager kann ein separates MQTT-Projekt mit dem MQTT-Service aus `compose.mqtt.yaml` erstellt werden; relative Konfigurationspfade müssen zum Projektordner passen. Für den kombinierten Start ist der gezeigte SSH-Befehl am eindeutigsten.
+   Wer die App selbst baut, verwendet `compose.build.yaml` statt `compose.yaml` und ergänzt `--build`. Im Container Manager kann ein separates MQTT-Projekt mit dem MQTT-Service aus `compose.mqtt.yaml` erstellt werden; relative Konfigurationspfade müssen zum Projektordner passen. Für den kombinierten Start ist der gezeigte SSH-Befehl am eindeutigsten.
 
 5. **Broker zuerst prüfen.** Log auf erfolgreiche Verbindung prüfen. Vom PC mit Python lässt sich mit `python tools/mqtt_smoke.py --host <NAS-FQDN> --port 1883` ein künstlicher MQTT-Verbindungstest ausführen. Anschließend die geplanten LAN-/Geräte-Netz-Regeln kontrollieren.
 6. **Bridge kontrolliert umstellen.** Die [Community-Anleitung für Nichtkunden](https://github.com/marq24/ha-tibber-pulse-local/blob/main/TIBBER-PULSE-AS-NON-TIBBER-CUSTOMER.md) nennt `mqtt_url`, `mqtt_port`, `mqtt_topic`, `mqtt_topic_sub`, `mqtt_valid` und `mqtt_pause`. Nur vorhandene, eindeutig identifizierte Felder passend zur eigenen Firmware ändern:

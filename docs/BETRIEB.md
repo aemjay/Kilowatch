@@ -1,6 +1,6 @@
 # Betrieb, Sicherung und Wiederherstellung
 
-Alle Befehle im Projektordner des NAS ausführen. Für importierte Images `compose.prebuilt.yaml` statt `compose.yaml` verwenden. Bei optionalen Zusatzdiensten die zugehörigen `-f compose.signal.yaml` beziehungsweise `-f compose.mqtt.yaml` auch bei Updates mitführen.
+Alle Befehle im Projektordner des NAS ausführen. Wer selbst baut, verwendet `compose.build.yaml` statt `compose.yaml`. Bei optionalen Zusatzdiensten die zugehörigen `-f compose.signal.yaml` beziehungsweise `-f compose.mqtt.yaml` auch bei Updates mitführen.
 
 ## Alltag und Zugangsdaten
 

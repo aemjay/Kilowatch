@@ -35,7 +35,7 @@ Ausführlich: **[Installation auf der Synology](docs/INSTALLATION-SYNOLOGY.md)**
 
 1. Vollständiges Projekt nach beispielsweise `/volume1/docker/kilowatch` kopieren.
 2. **Vor dem ersten Start** den Ordner `data` anlegen, einem DSM-Benutzer Lese-/Schreibrecht darauf geben und dessen IDs als `PUID`/`PGID` in die `.env` schreiben. Per SSH erledigt `python3 tools/setup.py` das weitgehend (fragt auch Port und Plattform ab). Ohne diesen Schritt scheitert der Start auf Synology an den ACLs. Details: [Installation, Abschnitt 1](docs/INSTALLATION-SYNOLOGY.md#1-projektordner-datenordner-und-berechtigung).
-3. Container Manager → **Projekt → Erstellen**, Projektpfad auswählen, **`compose.prebuilt.yaml`** verwenden und starten (oder `compose.yaml`, um selbst zu bauen).
+3. Container Manager → **Projekt → Erstellen**, Projektpfad auswählen, **`compose.yaml`** verwenden und starten (oder `compose.build.yaml`, um selbst zu bauen).
 4. Container-Protokoll öffnen und den einmaligen **Setup-Code** ablesen.
 5. `http://<NAS-FQDN>:8088` öffnen, Setup-Code eingeben und eigenes App-Passwort festlegen.
 6. Bridge-FQDN oder aktuelle IP sowie das Bridge-Passwort (Kennung vom Aufkleber, Format `ABCD-EFGH`) eingeben, **Verbindung prüfen**, dann **Bridge speichern und starten**. Node 1 ist der übliche Ausgangspunkt.
@@ -44,15 +44,15 @@ Ausführlich: **[Installation auf der Synology](docs/INSTALLATION-SYNOLOGY.md)**
 Mit SSH im Projektordner:
 
 ```sh
-docker compose -f compose.prebuilt.yaml up -d
-docker compose -f compose.prebuilt.yaml logs --tail=50 kilowatch
+docker compose -f compose.yaml up -d
+docker compose -f compose.yaml logs --tail=50 kilowatch
 ```
 
 Die optionale `.env.example` enthält ausschließlich Betriebsoptionen wie HTTP-Port und Plattform. Adressen und persönliche Zugangsdaten werden in der Oberfläche eingegeben. Messdaten und tägliche Sicherungen liegen im Ordner **`data/`** des Projekts und werden so von Hyper Backup mitgesichert. Zugangsdaten liegen bewusst getrennt im Docker-Volume **`kilowatch-secrets`**, damit Schlüssel und verschlüsselte Passwörter nie gemeinsam in einer Sicherung landen ([Details](docs/BETRIEB.md#speicherorte)). `docker compose down -v` löscht dieses Volume und ist kein normaler Update-Schritt.
 
 ## Fertige Images und Updates
 
-Releases erscheinen als signierte Multi-Arch-Images (amd64/arm64) unter `ghcr.io/aemjay/kilowatch`. `compose.prebuilt.yaml` verwendet standardmäßig die neueste 1.x-Version; mit `KILOWATCH_VERSION=1.2.3` in der `.env` lässt sich eine feste Version wählen. Für NAS ohne Internet hängen Importdateien an jedem Release.
+Releases erscheinen als signierte Multi-Arch-Images (amd64/arm64) unter `ghcr.io/aemjay/kilowatch`. `compose.yaml` verwendet standardmäßig die neueste 1.x-Version; mit `KILOWATCH_VERSION=1.2.3` in der `.env` lässt sich eine feste Version wählen. Für NAS ohne Internet hängen Importdateien an jedem Release.
 
 Kilowatch aktualisiert sich nie selbst. Optional zeigt die App neue Versionen an (standardmäßig aus, eine Abfrage pro Tag bei GitHub). Aktualisiert wird per Container Manager, per SSH oder automatisch über den DSM-Aufgabenplaner mit `tools/update.sh`. Vor jeder Datenbankänderung legt Kilowatch selbst eine Sicherung an. Details und Rückweg: **[Updates](docs/UPDATES.md)**.
 

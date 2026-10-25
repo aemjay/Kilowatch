@@ -6,7 +6,7 @@ Voraussetzung: ein Synology-NAS mit installiertem **Container Manager** (DSM 7.2
 
 **Diese Reihenfolge einhalten.** Ohne vorab angelegten Ordner `data` mit passender Berechtigung scheitert der erste Start auf Synology: Der Container Manager legt fehlende Ordner nicht zuverlässig selbst an, und Synology-ACLs verweigern einer unbekannten Benutzer-ID den Zugriff, auch wenn der Container den Eigentümer setzt.
 
-1. **Dateien kopieren.** Im GitHub-Repository **Code → Download ZIP** wählen, entpacken und den Inhalt nach beispielsweise `/volume1/docker/kilowatch` kopieren. Für das fertige Image genügen `compose.prebuilt.yaml`, `.env.example` und der Ordner `tools/`; zum Selbstbauen wird der vollständige Inhalt gebraucht.
+1. **Dateien kopieren.** Im GitHub-Repository **Code → Download ZIP** wählen, entpacken und den Inhalt nach beispielsweise `/volume1/docker/kilowatch` kopieren. Für das fertige Image genügen `compose.yaml`, `.env.example` und der Ordner `tools/`; zum Selbstbauen wird der vollständige Inhalt gebraucht.
 2. **Benutzer wählen, dem die Daten gehören sollen.** Am einfachsten ein eigener DSM-Benutzer, z. B. `kilowatch` (Systemsteuerung → Benutzer und Gruppe → Erstellen; Anmeldung an DSM-Anwendungen darf verweigert werden). Alternativ das eigene Konto. Benutzer- und Gruppen-ID per SSH ermitteln: `id kilowatch` ergibt z. B. `uid=1030 gid=100`.
 3. **Ordner `data` anlegen.** In der File Station unter `docker/kilowatch` den Ordner `data` erstellen.
 4. **Berechtigung setzen.** File Station → `data` → Eigenschaften → Berechtigung → Erstellen: den Benutzer aus Schritt 2 mit **Lesen und Schreiben** eintragen und „Auf diesen Ordner, Unterordner und Dateien anwenden“ wählen.
@@ -22,10 +22,12 @@ Stimmt die Berechtigung nicht, bricht der Container beim Start mit einer Meldung
 
 1. Container Manager → **Projekt → Erstellen**.
 2. Name `kilowatch`, Projektpfad `/volume1/docker/kilowatch`.
-3. **`compose.prebuilt.yaml`** auswählen/hochladen.
+3. Die vorhandene **`compose.yaml`** im Projektordner verwenden.
 4. Erstellen und starten. Das Image für die NAS-Plattform (amd64 oder arm64) wird dabei geladen.
 
-**Alternative: selbst bauen.** In Schritt 3 **`compose.yaml`** verwenden. Der Projektpfad muss dann der vollständige Quellordner bleiben, damit `build: .` funktioniert; der erste Build lädt Basisimage und Python-Pakete aus dem Internet. Updates bedeuten hier: neue Quellen kopieren und neu bauen.
+**Alternative: selbst bauen.** In Schritt 3 **`compose.build.yaml`** verwenden. Der Projektpfad muss dann der vollständige Quellordner bleiben, damit `build: .` funktioniert; der erste Build lädt Basisimage und Python-Pakete aus dem Internet. Updates bedeuten hier: neue Quellen kopieren und neu bauen; `tools/update.sh` gilt nur für das fertige Image.
+
+Der Container Manager speichert die gewählte Datei im Projektordner immer als `compose.yaml`. Beim fertigen Image ist das dieselbe Datei wie im Repository. Wer `compose.build.yaml` wählt, bekommt deren Inhalt als `compose.yaml`; SSH-Befehle dann mit `-f compose.build.yaml` ausführen. Der Container heißt in beiden Fällen `kilowatch`.
 
 Danach:
 
@@ -68,14 +70,14 @@ Auch für den Browserzugriff auf das NAS kann dessen Router-DNS-Name verwendet w
 
 An jedem Release (Releases-Seite des GitHub-Repositorys) hängen Importdateien `kilowatch-<version>-amd64.tar.gz` und `-arm64.tar.gz` mit Prüfsumme. Die zur NAS-CPU passende wählen (DSM: **Systemsteuerung → Info-Center**).
 
-Container Manager → **Image → Hinzufügen/Importieren → Aus Datei**. Danach das Projekt wie oben mit **`compose.prebuilt.yaml`** erstellen; das importierte Image trägt bereits den passenden Namen.
+Container Manager → **Image → Hinzufügen/Importieren → Aus Datei**. Danach das Projekt wie oben mit **`compose.yaml`** erstellen; das importierte Image trägt bereits den passenden Namen.
 
 Per SSH:
 
 ```sh
 docker load -i kilowatch-<version>-<plattform>.tar.gz
-docker compose -f compose.prebuilt.yaml up -d --pull never
-docker compose -f compose.prebuilt.yaml logs --tail=50 kilowatch
+docker compose -f compose.yaml up -d --pull never
+docker compose -f compose.yaml logs --tail=50 kilowatch
 ```
 
 Beide Varianten verwenden den Ordner `data/` im Projektordner und das Volume `kilowatch-secrets`. Nur eine App-Instanz darauf betreiben. Nicht `down -v` ausführen, sonst sind die gespeicherten Zugangsdaten weg.

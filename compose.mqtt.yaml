@@ -1,7 +1,8 @@
-# Zusätzlich zur App: docker compose -f compose.yaml -f compose.mqtt.yaml up -d --build
+# Zusätzlich zur App: docker compose -f compose.yaml -f compose.mqtt.yaml up -d
 # Optionaler LAN-Broker; keine feste NAS- oder Bridge-IP erforderlich.
 services:
   mqtt:
+    container_name: kilowatch-mqtt
     image: eclipse-mosquitto:2.0.22
     user: "1883:1883"
     restart: unless-stopped
