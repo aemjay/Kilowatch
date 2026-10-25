@@ -58,7 +58,7 @@ def strings(node):
 
 
 def wanted(text):
-    return bool(re.search(r"[A-Za-zÄÖÜäöüß]{2,}", text)) and not text.startswith(("SELECT", "INSERT", "UPDATE"))
+    return bool(re.search(r"[A-Za-zÄÖÜäöüß]{2,}|\bz\. B\.", text)) and not text.startswith(("SELECT", "INSERT", "UPDATE"))
 
 
 def from_python():
@@ -170,7 +170,8 @@ def untranslated():
             for chunk in re.split(r"<[^>]*>", text) if before == "`" else [text]:
                 stripped = chunk.strip()
                 if (unescape(chunk) in known or not re.search(r"[A-Za-zÄÖÜäöüß]{3,}", chunk) or MARKUP.search(chunk)
-                        or stripped.startswith('"') or re.fullmatch(r"[\w.#\[\]=:/*,-]+", stripped)
+                        or stripped.startswith('"') or (re.fullmatch(r"[\w.#\[\]=:/*,-]+", stripped) and not re.fullmatch(r"[A-ZÄÖÜ]{4,}|[A-ZÄÖÜ][a-zäöüß]{2,}(-[A-ZÄÖÜa-zäöüß]+)*", stripped))
+                        or stripped in ("HTTP", "POST", "DELETE", "JSON", "OBIS", "Content-Type", "Demo", "Signal")
                         or (re.fullmatch(r"[a-z][\w -]*", stripped) and not re.search(r"[äöüß]", stripped))):
                     continue
                 result.append(f"{path.name}:{code.count(chr(10), 0, position) + 1}: {stripped[:100]}")

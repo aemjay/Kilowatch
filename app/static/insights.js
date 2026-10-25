@@ -22,7 +22,7 @@ async function mountAnalysisInsights() {
   const bars=trend.points.map(p=>({ts:p.start,baseline_w:p.baseline_w,import_s:p.quarters*900}));
   const stats=`<div class="stats-list">${stat(trend.group==='week'?t('Letzte Woche'):t('Letzter Monat'),last?unit(last.baseline_w,'W',0):t('Zu wenig Nachtdaten'))}${stat(t('Grundlast pro Jahr'),last?unit(last.annual_kwh,'kWh',0):'—')}${stat(t('Kosten der Grundlast pro Jahr'),last&&last.annual_eur!=null?unit(last.annual_eur,'€',0):t('Tarif fehlt'))}${stat(t('Veränderung (2. gegen 1. Hälfte)'),trend.change_w==null?t('Zu wenige Punkte'):unit(trend.change_w,'W',0))}</div>`;
   const note=`<p class="copy-footnote">${esc(t(trend.method))} ${esc(t('Punkte mit weniger als {count} erfassten Nachtviertelstunden bleiben leer. Nächte mit Einspeisung oder Batterieentladung zählen nicht als Grundlast.',{count:trend.min_quarters}))}</p>`;
-  target.insertAdjacentHTML('beforeend',panel('Grundlast-Entwicklung',t('Nachtgrundlast je ')+(trend.group==='week'?t('Woche'):t('Monat')),barChart(bars,'baseline_w','W')+stats+note));
+  target.insertAdjacentHTML('beforeend',panel(t('Grundlast-Entwicklung'),trend.group==='week'?t('Nachtgrundlast je Woche'):t('Nachtgrundlast je Monat'),barChart(bars,'baseline_w','W')+stats+note));
   const feed=data.feedin;
   if(feed.total_kwh){
     target.insertAdjacentHTML('beforeend',panel(t('Einspeisung'),t('Mittlere Einspeiseleistung nach Tageszeit'),hourChart(feed.profile,'average_kw','kW')+`<div class="stats-list">${stat(t('Eingespeist im Zeitraum'),unit(feed.total_kwh,'kWh',2))}</div><p class="copy-footnote">${t('Gemessen wird nur der Überschuss am Netzanschluss. Eigenverbrauch und Autarkie lassen sich daraus nicht bestimmen.')}</p>`));
@@ -39,7 +39,7 @@ function scenarioValues(form) {
 }
 
 function simulationResult(r) {
-  const lines=[stat('Arbeitspreis-Kosten',unit(r.energy_cost_eur,'€',2)),stat(t('Grundpreis anteilig'),unit(r.base_cost_eur,'€',2)),stat(t('Einspeiseerlös'),unit(r.feedin_eur,'€',2)),stat(t('Gesamt mit diesem Tarif'),unit(r.total_eur,'€',2)),stat(t('Tatsächlich erfasst'),r.actual_total_eur==null?t('Kein Tarif hinterlegt'):unit(r.actual_total_eur,'€',2)),stat(t('Bepreister Anteil des Bezugs'),r.priced_share==null?'—':unit(r.priced_share*100,'%',1)),stat(t('Durchschnittspreis'),r.average_eur_kwh==null?'—':unit(r.average_eur_kwh*100,'ct/kWh',2))];
+  const lines=[stat(t('Arbeitspreis-Kosten'),unit(r.energy_cost_eur,'€',2)),stat(t('Grundpreis anteilig'),unit(r.base_cost_eur,'€',2)),stat(t('Einspeiseerlös'),unit(r.feedin_eur,'€',2)),stat(t('Gesamt mit diesem Tarif'),unit(r.total_eur,'€',2)),stat(t('Tatsächlich erfasst'),r.actual_total_eur==null?t('Kein Tarif hinterlegt'):unit(r.actual_total_eur,'€',2)),stat(t('Bepreister Anteil des Bezugs'),r.priced_share==null?'—':unit(r.priced_share*100,'%',1)),stat(t('Durchschnittspreis'),r.average_eur_kwh==null?'—':unit(r.average_eur_kwh*100,'ct/kWh',2))];
   if(r.spot_weighted_ct!=null)lines.push(stat(t('Dein Börsenpreis (verbrauchsgewichtet)'),unit(r.spot_weighted_ct,'ct/kWh',2)),stat(t('Börsenpreis im Zeitmittel'),unit(r.spot_time_average_ct,'ct/kWh',2)));
   let difference=`<p class="inline-result">${t('Kein Vergleich möglich: Für den Zeitraum fehlt ein hinterlegter Tarif oder ein Preis im simulierten Tarif.')}</p>`;
   if(r.difference_eur!=null)difference=`<p class="inline-result">${esc(r.difference_eur<0?t('Günstiger als dein Tarif: {amount} im Zeitraum',{amount:unit(-r.difference_eur,'€',2)}):t('Teurer als dein Tarif: {amount} im Zeitraum',{amount:unit(r.difference_eur,'€',2)}))}${r.paired_share<.995?' · '+esc(t('verglichen über {share} des Bezugs, der in beiden Tarifen bepreist ist',{share:unit(r.paired_share*100,'%',1)})):''}</p>`;
@@ -70,7 +70,7 @@ function budgetStatus(data) {
   if(a.available){
     lines.push(stat(t('Hochrechnung Jahr'),`${unit(a.annual_eur,'€',0)} (${unit(a.low_eur,'€',0)} – ${unit(a.high_eur,'€',0)})`));
     if(a.abschlag_year_eur!=null)lines.push(stat(t('12 × Abschlag'),unit(a.abschlag_year_eur,'€',0)+' · '+(a.difference_eur>0?t('voraussichtlich Nachzahlung ca. {amount}',{amount:unit(a.difference_eur,'€',0)}):t('voraussichtlich Guthaben ca. {amount}',{amount:unit(-a.difference_eur,'€',0)}))));
-  } else lines.push(stat(t('Hochrechnung Jahr'),a.reason||t('Noch nicht möglich')));
+  } else lines.push(stat(t('Hochrechnung Jahr'),a.reason?t(a.reason):t('Noch nicht möglich')));
   const note=a.available?`<p class="copy-footnote">${esc(t(a.method))} ${esc(t('Grundlage: {count} vollständig erfasste Tage',{count:number(a.valid_days,0)}))}${a.full_year?'':esc(t(' (weniger als ein Jahr)'))}.</p>`:'';
   return `<div class="stats-list">${lines.join('')}</div>${note}`;
 }

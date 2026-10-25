@@ -44,7 +44,9 @@ def test_translations_keep_placeholders_units_and_plain_text(language):
             assert set(PLACEHOLDER.findall(text)) == set(PLACEHOLDER.findall(key)), (key, text)
             assert not re.search(r"[<>]", text), (key, text)
             # Währungen tauscht die Oberfläche zur Laufzeit über € und ct aus.
-            assert not re.search(r"\b(kr|øre|öre|NOK|SEK|EUR|cents?)\b", text), (key, text)
+            # Ausnahme: Texte über die Börsenpreisquelle, die immer in Euro liefert.
+            banned = r"\b(kr|øre|öre|NOK|SEK|cents?)\b" if "EUR" in key else r"\b(kr|øre|öre|NOK|SEK|EUR|cents?)\b"
+            assert not re.search(banned, text), (key, text)
             if key.isupper():
                 assert text == text.upper(), (key, text)
             assert text.startswith(" ") == key.startswith(" ") and text.endswith(" ") == key.endswith(" "), (key, text)
