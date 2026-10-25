@@ -361,3 +361,17 @@ test('typical household reference appears in budget, comparison and settings',as
   assert.deepEqual(h.calls.find(c=>c.body?.household_persons===4).body,{household_persons:4,household_type:'house',household_hot_water:true});
   assert.deepEqual(h.errors,[]);
 });
+
+test('background refresh neither dims the page nor redraws unchanged data',async t=>{
+  const h=await harness({page:'dashboard',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  const target=w.document.querySelector('#page-dashboard');
+  const before=target.querySelector('.cards');
+  const observed=[];new w.MutationObserver(()=>observed.push(target.className)).observe(target,{attributes:true,attributeFilter:['class']});
+  const calls=h.calls.length;
+  await w.loadPage({background:true});
+  assert.ok(h.calls.length>calls,'refresh requested data');
+  assert.equal(target.querySelector('.cards'),before,'identical data keeps the rendered page');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(observed.filter(c=>c.includes('loading')),[]);
+  assert.deepEqual(h.errors,[]);
+});
