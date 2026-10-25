@@ -122,8 +122,8 @@ function heatmap(cells) {
   const days=[...new Set(cells.map(c=>c.day))].slice(-62), lookup=new Map(cells.map(c=>[`${c.day}:${c.hour}`,c]));
   const maximum=Math.max(.01,...cells.map(c=>c.seconds?c.kwh*3600/c.seconds:0));
   let html='<div class="heat-scroll"><div class="heat-grid"><span></span>'+Array.from({length:24},(_,i)=>`<span class="heat-label">${String(i).padStart(2,'0')}</span>`).join('');
-  for(const day of days){html+=`<span class="heat-label">${esc(dateLabel(day).slice(0,5))}</span>`;for(let h=0;h<24;h++){const cell=lookup.get(`${day}:${h}`), strength=cell?.seconds?Math.min(1,cell.kwh*3600/cell.seconds/maximum):null; const color=strength==null?'#eff2eb':`hsl(${83-strength*6} ${35+strength*20}% ${92-strength*54}%)`;html+=`<div class="heat-cell" style="background:${color}" title="${esc(dateLabel(day))} ${String(h).padStart(2,'0')}:00 · ${cell?unit(cell.kwh,'kWh',3)+' / '+unit(cell.seconds/3600,'h',2)+' erfasst':'keine Daten'}"></div>`;}}
-  return html+'</div></div><div class="heat-key">Wenig '+['#eff4dd','#dce9ab','#b9d164','#86aa31'].map(c=>`<i style="background:${c}"></i>`).join('')+' Viel · Farbe: Verbrauch je erfasster Stunde · letzte 62 Tage</div>';
+  for(const day of days){html+=`<span class="heat-label">${esc(dateLabel(day).slice(0,5))}</span>`;for(let h=0;h<24;h++){const cell=lookup.get(`${day}:${h}`), strength=cell?.seconds?Math.min(1,cell.kwh*3600/cell.seconds/maximum):null; const dark=window.kilowatchTheme?.isDark(); const color=strength==null?(dark?'#1d2622':'#eff2eb'):dark?`hsl(${83-strength*6} ${30+strength*30}% ${16+strength*42}%)`:`hsl(${83-strength*6} ${35+strength*20}% ${92-strength*54}%)`;html+=`<div class="heat-cell" style="background:${color}" title="${esc(dateLabel(day))} ${String(h).padStart(2,'0')}:00 · ${cell?unit(cell.kwh,'kWh',3)+' / '+unit(cell.seconds/3600,'h',2)+' erfasst':'keine Daten'}"></div>`;}}
+  return html+'</div></div><div class="heat-key">Wenig '+(window.kilowatchTheme?.isDark()?['#24301c','#3d5226','#64852f','#9dc23f']:['#eff4dd','#dce9ab','#b9d164','#86aa31']).map(c=>`<i style="background:${c}"></i>`).join('')+' Viel · Farbe: Verbrauch je erfasster Stunde · letzte 62 Tage</div>';
 }
 
 function profileChart(rows) {
@@ -265,6 +265,10 @@ $$('[data-page]').forEach(button=>button.addEventListener('click',()=>navigate(b
 $$('[data-range]').forEach(button=>button.addEventListener('click',()=>applyRange(button.dataset.range)));
 $('#range-form').addEventListener('submit',event=>{event.preventDefault();if($('#range-end').value<$('#range-start').value){toast('Das Ende liegt vor dem Beginn.',true);return;}$$('[data-range]').forEach(button=>button.classList.remove('selected'));loadPage();});
 $('#mobile-menu').addEventListener('click',()=>$('.sidebar').classList.toggle('open'));
+// Farbschema: Auto → Hell → Dunkel; Diagramme neu zeichnen, weil Heatmap-Farben vom Schema abhängen.
+window.kilowatchTheme?.refresh();
+$('#theme-toggle').addEventListener('click',()=>{window.kilowatchTheme.cycle();if(!$('#application').hidden)loadPage();});
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(window.kilowatchTheme?.current()==='auto'&&!$('#application').hidden)loadPage();});
 window.addEventListener('hashchange',()=>navigate(location.hash.slice(1),false));
 setInterval(async()=>{if($('#application').hidden||document.hidden)return;try{live=await api('/api/live');updateLiveParts();}catch(error){if(!$('#application').hidden)toast(error.message,true);}},5000);
 setInterval(()=>{if(!$('#application').hidden&&!document.hidden&&['dashboard','history'].includes(page))loadPage();},60000);

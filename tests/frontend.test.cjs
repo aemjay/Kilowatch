@@ -68,7 +68,7 @@ async function harness(options={}) {
     else if(path==='/api/bridge/test')data={protocol:'SML',endpoint:'/node_data.json',resolved_addresses:['192.168.1.10'],has_import:true};
     return {ok:status===200,status,json:async()=>structuredClone(data),blob:async()=>new w.Blob(['synthetic-image'],{type:'image/png'})};
   };
-  for(const name of ['configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
+  for(const name of ['theme.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
     !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
@@ -229,5 +229,15 @@ test('budget form saves empty fields as null',async t=>{
   submit(w,'budget-form');
   await until(()=>h.calls.some(c=>c.path==='/api/budget'&&c.method==='PUT'));
   assert.deepEqual(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body,{monthly_eur:90,monthly_kwh:null,abschlag_eur:85.5});
+  assert.deepEqual(h.errors,[]);
+});
+
+test('theme toggle cycles auto, light and dark and remembers the choice',async t=>{
+  const h=await harness({settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  const root=w.document.documentElement,button=w.document.querySelector('#theme-toggle');
+  assert.equal(root.hasAttribute('data-theme'),false);
+  button.click();assert.equal(root.getAttribute('data-theme'),'light');assert.equal(w.localStorage.getItem('kilowatch-theme'),'light');
+  button.click();assert.equal(root.getAttribute('data-theme'),'dark');assert.equal(button.textContent,'Dunkel');
+  button.click();assert.equal(root.hasAttribute('data-theme'),false);assert.equal(w.localStorage.getItem('kilowatch-theme'),null);
   assert.deepEqual(h.errors,[]);
 });

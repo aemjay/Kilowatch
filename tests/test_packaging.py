@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 import yaml
 
@@ -120,3 +121,17 @@ def test_user_is_detected_automatically_unless_set():
     entrypoint=(ROOT/"docker-entrypoint.sh").read_text()
     assert "stat -c %u" in entrypoint and "SCHNELLSTART" in entrypoint
     assert (ROOT/"tools/install.sh").is_file() and (ROOT/"docs/SCHNELLSTART.md").is_file()
+
+
+def test_stylesheet_has_light_dark_and_print_themes_and_no_stray_colors():
+    css=(ROOT/"app/static/style.css").read_text()
+    assert "@media (prefers-color-scheme:dark){:root:not([data-theme=light])" in css
+    assert ":root[data-theme=dark]{color-scheme:dark" in css and "@media print{:root,:root[data-theme=dark]{color-scheme:light" in css
+    # Außerhalb der Themenblöcke nur Variablen; feste Farben nur in den immer dunklen bzw. hellen Bereichen.
+    body=css.split("\n",5)[5]
+    for selector,declarations in re.findall(r"([^{}]+)\{([^{}]*)\}",body):
+        if re.search(r"sidebar|nav|brand|home-|login-art|login-copy|login-foot|highlight",selector):
+            continue
+        for prop,value in re.findall(r"([\w-]+):([^;]+)",declarations):
+            if prop in ("color","background","background-color","border","border-color","fill","stroke"):
+                assert not re.search(r"#[0-9a-fA-F]{3,8}\b",value),(selector,prop,value)
