@@ -21,7 +21,12 @@ def local_day(ts, zone):
     return datetime.fromtimestamp(ts, ZoneInfo(zone)).date()
 
 
-def period(start, end, zone, now, hours=None):
+def period(start, end, zone, now, hours=None, minutes=None):
+    if minutes is not None:
+        # Letzte Minuten: Energie aus Minutenwerten, daher Beginn auf die Minute gerundet.
+        if not 5 <= minutes <= 120:
+            raise ValueError("Minutenansicht: 5 bis 120 Minuten.")
+        return int((now - minutes * 60) // 60) * 60, now
     if hours is not None:
         # Letzte Stunden: Beginn auf die Viertelstunde gerundet, weil Energie in Viertelstunden gespeichert ist.
         if not 1 <= hours <= 48:
@@ -95,10 +100,10 @@ class Analytics:
             day += timedelta(days=1)
         return factor
 
-    def summary(self, start, end):
-        rows = self.store.bucket_rows(start, end)
+    def summary(self, start, end, resolution=900):
+        rows = self.store.bucket_rows(start, end, resolution)
         if rows and any(t["mode"] == "dynamic" for t in self.tariffs):
-            self.load_prices(rows[0]["ts"], rows[-1]["ts"] + 900)
+            self.load_prices(rows[0]["ts"], rows[-1]["ts"] + resolution)
         imported = sum(r["import_kwh"] for r in rows)
         exported = sum(r["export_kwh"] for r in rows)
         imp_s = sum(r["import_s"] for r in rows)
@@ -149,13 +154,15 @@ class Analytics:
     def series(self, start, end):
         # Energie immer aus permanenten Viertelstundenwerten, Leistung für kurze
         # Ansichten aus Minutenwerten. Keine Lücken durch Nullwerte verdecken.
-        group = "quarter" if end - start <= 3 * 86400 else "day" if end - start <= 400 * 86400 else "month"
+        group = ("minute" if end - start <= 1800 else "quarter" if end - start <= 3 * 86400
+                 else "day" if end - start <= 400 * 86400 else "month")
+        step = 60 if group == "minute" else 900
         groups = {}
-        for row in self.store.bucket_rows(start, end):
+        for row in self.store.bucket_rows(start, end, step):
             local = datetime.fromtimestamp(row["ts"], ZoneInfo(self.zone))
-            key = str(row["ts"]) if group == "quarter" else local.strftime("%Y-%m-%d" if group == "day" else "%Y-%m")
+            key = str(row["ts"]) if group in ("minute", "quarter") else local.strftime("%Y-%m-%d" if group == "day" else "%Y-%m")
             if key not in groups:
-                stamp = row["ts"] if group == "quarter" else midnight(local.date().replace(day=1) if group == "month" else local.date(), self.zone)
+                stamp = row["ts"] if group in ("minute", "quarter") else midnight(local.date().replace(day=1) if group == "month" else local.date(), self.zone)
                 groups[key] = {"ts": stamp, "label": iso(stamp, self.zone), "import_kwh": 0,
                                "export_kwh": 0, "import_s": 0, "export_s": 0, "power_ws": 0, "power_s": 0, "peak_w": None}
             item = groups[key]
@@ -165,8 +172,8 @@ class Analytics:
                 item["peak_w"] = row["max_w"] if item["peak_w"] is None else max(item["peak_w"], row["max_w"])
         # Auch vollständig fehlende Zeitabschnitte behalten einen Platz auf der
         # Achse. Eine Lücke ist kein Nullverbrauch.
-        if group == "quarter":
-            stamps = list(range(int(start // 900) * 900, math.ceil(end), 900))
+        if group in ("minute", "quarter"):
+            stamps = list(range(int(start // step) * step, math.ceil(end), step))
         else:
             stamps = []
             day = local_day(start, self.zone)
@@ -177,7 +184,7 @@ class Analytics:
                 day = day + timedelta(days=1) if group == "day" else (day.replace(day=28) + timedelta(days=4)).replace(day=1)
         for stamp in stamps:
             local = datetime.fromtimestamp(stamp, ZoneInfo(self.zone))
-            key = str(stamp) if group == "quarter" else local.strftime("%Y-%m-%d" if group == "day" else "%Y-%m")
+            key = str(stamp) if group in ("minute", "quarter") else local.strftime("%Y-%m-%d" if group == "day" else "%Y-%m")
             groups.setdefault(key, {"ts": stamp, "label": iso(stamp, self.zone), "import_kwh": 0,
                                    "export_kwh": 0, "import_s": 0, "export_s": 0, "power_ws": 0,
                                    "power_s": 0, "peak_w": None})

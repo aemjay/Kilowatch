@@ -13,7 +13,6 @@ flowchart LR
     B -. optional MQTT .-> M[Lokaler Mosquitto]
     D --> N[Alarmregeln und Warteschlange]
     N --> E[Eigener SMTP-Server]
-    N --> S[Optionales lokales Signal-Gateway]
 ```
 
 Der MQTT-Broker ist nicht der Messdaten-Eingang von Kilowatch. Er kann der Bridge als lokales Kommunikationsziel dienen. Verbrauchsdaten werden weiter über den nachgewiesenen HTTP-Pfad gelesen.
@@ -95,7 +94,7 @@ Die Netzanschlussmessung allein liefert weder die gesamte PV-Erzeugung noch den 
 - **Lastdauerlinie:** ausreichend erfasste Viertelstundenmittel nach Höhe sortiert; x-Achse summiert die tatsächlich erfasste Dauer.
 - **Hohe Last:** aufsummierte normale Messintervalle mit mittlerer Leistung über der eingestellten Schwelle. Schwellenänderungen wirken auf neue Intervalle, historische Werte werden nicht nachträglich umklassifiziert.
 - **Tagesprofile:** gemessene Bezugsenergie pro erfasster Stunde, getrennt nach Werktagen/Wochenende. Schlechte Abdeckung kann den Eindruck verzerren und muss mitbetrachtet werden.
-- **Nachtauffälligkeit:** Vergleich der Nachtmediane der letzten sieben Tage mit den davorliegenden sieben Tagen; beide Fenster brauchen mindestens 24 ausreichend erfasste Viertelstunden im gewählten Analysebereich. Hinweis ab mehr als 80 W und mehr als 30 % Anstieg. Dieser Analysehinweis erscheint in der Oberfläche. Die separat konfigurierbaren [Alarmregeln](BENACHRICHTIGUNGEN.md) können E-Mail und Signal auslösen; eine automatische Geräteerkennung ist nicht enthalten.
+- **Nachtauffälligkeit:** Vergleich der Nachtmediane der letzten sieben Tage mit den davorliegenden sieben Tagen; beide Fenster brauchen mindestens 24 ausreichend erfasste Viertelstunden im gewählten Analysebereich. Hinweis ab mehr als 80 W und mehr als 30 % Anstieg. Dieser Analysehinweis erscheint in der Oberfläche. Die separat konfigurierbaren [Alarmregeln](BENACHRICHTIGUNGEN.md) können E-Mails auslösen; eine automatische Geräteerkennung ist nicht enthalten.
 - **Prognose:** Mittel gleicher Wochentage aus 28 Tagen. Mindestens sieben Tage mit jeweils ≥ 98 % Abdeckung und ≥ 98 % Abdeckung im laufenden Monat erforderlich. Für den Rest des laufenden Tages wird dessen Anteil vereinfacht aus einem typischen Tagesverbrauch angesetzt. Das Band aus Tagesstreuung ist heuristisch und besitzt keine garantierte statistische Abdeckung. Saisonänderungen und neue Großverbraucher werden nicht vorab erkannt.
 - **Grundlast-Entwicklung:** Nachtgrundlast wie oben, je Woche (bei mehr als 120 Tagen je Monat); Punkte mit weniger als 24 erfassten Nachtviertelstunden bleiben leer. Jahreswerte = Grundlast × 8766 h, Kosten mit dem zeitlich gemittelten Arbeitspreis des aktuellen Tarifs der letzten sieben Tage. Negative Nachtwerte (Batterie, Einspeisung) zählen nicht.
 - **Einspeiseprofil:** mittlere Einspeiseleistung je Stunde aus den erfassten Einspeisesekunden. Eigenverbrauch und Autarkie lassen sich aus dem Netzanschluss allein nicht bestimmen.

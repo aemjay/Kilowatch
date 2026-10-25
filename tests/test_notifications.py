@@ -23,7 +23,7 @@ def test_settings_mask_passwords_and_store_encrypted(authenticated):
     assert b"synthetic-mail-secret" not in authenticated.app.state.vault.path.read_bytes()
 
 
-@pytest.mark.parametrize("extra",[{"smtp_security":"none"},{"email_to":["bad\r\nBcc: ex@example.org"]},{"signal_number":"1234"},{"quiet_start":"25:60"},{"signal_url":"http://user:password@gateway:8080"}])
+@pytest.mark.parametrize("extra",[{"smtp_security":"none"},{"email_to":["bad\r\nBcc: ex@example.org"]},{"quiet_start":"25:60"}])
 def test_invalid_or_insecure_settings_rejected(authenticated,extra):
     assert authenticated.put("/api/notifications",json=email_config(**extra)).status_code==422
 
@@ -185,19 +185,28 @@ def test_measurement_gap_does_not_prove_continuous_high_load(authenticated,monke
     assert not engine.store.rows("SELECT * FROM notifications WHERE rule_key='load'")
 
 
-def test_signal_payload_and_token_use_only_mock_gateway(authenticated,monkeypatch):
-    config={"signal_url":"http://signal-api:8080","signal_number":"+49301234567","signal_to":["+49307654321"],"signal_token":"synthetic-token"}
-    assert authenticated.put("/api/notifications",json=config).status_code==200
-    async def fake_request(url,path,method,payload,token):
-        assert url=="http://signal-api:8080"
-        assert path=="/v2/send" and method=="POST"
-        assert payload["number"]==config["signal_number"]
-        assert payload["recipients"]==config["signal_to"]
-        assert "keine Messwerte" in payload["message"]
-        assert token=="synthetic-token"
-        return 201,b"{}","application/json"
-    monkeypatch.setattr("app.notifications.local_request",fake_request)
-    assert authenticated.post("/api/notifications/test/signal").status_code==200
+def test_settings_from_versions_with_signal_still_load_and_leftovers_are_removed(tmp_path):
+    from app.config import Config
+    from app.main import create_app
+    app=create_app(Config(tmp_path,testing=True))
+    store,vault=app.state.store,app.state.vault
+    store.set_state("notification_settings",{**email_config(),"signal_enabled":True,"signal_url":"http://signal-api:8080","signal_number":"+49301234567","signal_to":[]})
+    vault.update({"signal_token":"old-token","smtp_password":"kept"})
+    with store.transaction():
+        store.conn.execute("INSERT INTO notifications(rule_key,kind,channel,subject,body,status,created,next_try) VALUES('offline','alert','signal','s','b','pending',1,1)")
+    store.close()
+    app=create_app(Config(tmp_path,testing=True))
+    assert app.state.notifier.config().smtp_host=="smtp.example.org"
+    assert app.state.vault.get("signal_token",None) is None and app.state.vault.get("smtp_password")=="kept"
+    assert app.state.store.rows("SELECT status FROM notifications WHERE channel='signal'")[0]["status"]=="cancelled"
+    app.state.store.close()
+
+
+def test_signal_endpoints_and_fields_are_gone(authenticated):
+    assert authenticated.post("/api/notifications/test/signal").status_code==400
+    assert authenticated.post("/api/notifications/signal/qr").status_code in (404,405)
+    assert authenticated.put("/api/notifications",json={"signal_url":"http://signal-api:8080"}).status_code==422
+    assert "signal_token_configured" not in authenticated.get("/api/notifications").json()
 
 
 def test_disabling_rule_cancels_pending_alert_without_fresh_measurement(authenticated,monkeypatch):
@@ -223,22 +232,6 @@ def test_load_below_threshold_restarts_delay_before_first_alarm(authenticated,mo
     engine.store.ingest(Reading(4000,None,None,"SYNTHETIC"),now+100)
     engine.evaluate(now+100)
     assert len(engine.store.rows("SELECT * FROM notifications WHERE rule_key='load'"))==1
-
-
-def test_signal_qr_proxy_accepts_only_png_and_csp_allows_local_blob(authenticated,monkeypatch):
-    assert authenticated.put("/api/notifications",json={"signal_url":"http://signal-api:8080"}).status_code==200
-    async def png(*args,**kwargs):
-        assert kwargs["max_bytes"]==1024*1024
-        return 200,b"\x89PNG\r\n\x1a\nsynthetic-image","image/png"
-    monkeypatch.setattr("app.main.local_request",png)
-    response=authenticated.post("/api/notifications/signal/qr")
-    assert response.status_code==200 and response.headers["content-type"]=="image/png"
-    assert response.headers["cache-control"]=="no-store"
-    assert "img-src 'self' data: blob:" in authenticated.get("/").headers["content-security-policy"]
-    async def invalid(*args,**kwargs):
-        return 200,b"<script>synthetic</script>","text/html"
-    monkeypatch.setattr("app.main.local_request",invalid)
-    assert authenticated.post("/api/notifications/signal/qr").status_code==400
 
 
 def test_restart_grace_does_not_emit_false_outage_recovery(authenticated,monkeypatch):
@@ -273,3 +266,23 @@ def test_monthly_budget_alert_once_per_month(authenticated,monkeypatch):
     engine.evaluate(now+60)
     alerts=authenticated.app_store.rows("SELECT * FROM notifications WHERE rule_key='budget:2026-10'")
     assert len(alerts)==1 and "Monatsbudget" in alerts[0]["subject"]
+
+
+def test_sender_name_and_subject_code(authenticated,monkeypatch):
+    sent=[]
+    class Capture(FakeSMTP):
+        def send_message(self,message):
+            sent.append(message)
+    monkeypatch.setattr(smtplib,"SMTP",Capture)
+    config=NotificationSettings(**email_config(smtp_from_name="Stromzähler Müller"))
+    send_email(config,"","Betreff","Text")
+    assert sent[-1]["From"].addresses[0].display_name=="Stromzähler Müller"
+    assert "=?utf-8?" in sent[-1].as_string().split("From:")[1].splitlines()[0]  # Umlaute RFC-2047-kodiert
+    send_email(NotificationSettings(**email_config(smtp_from_name="")),"","Betreff","Text")
+    assert str(sent[-1]["From"])=="sender@example.org"
+    for bad in ({"smtp_from_name":"Evil\r\nBcc: x@example.org"},{"subject_code":"a\nb"},{"subject_code":"x"*41}):
+        assert authenticated.put("/api/notifications",json=email_config(**bad)).status_code==422
+    assert authenticated.put("/api/notifications",json=email_config(subject_code="Kuckuck-17")).status_code==200
+    assert authenticated.get("/api/notifications").json()["settings"]["subject_code"]=="Kuckuck-17"
+    assert authenticated.post("/api/notifications/test/email").status_code==200
+    assert sent[-1]["Subject"].startswith("[Kuckuck-17] Kilowatch")

@@ -23,8 +23,6 @@ Für die Ausarbeitung herangezogene Primärquellen (Stand Oktober 2026). Firmwar
 | Lokale Verschlüsselung | [cryptography/Fernet](https://cryptography.io/en/latest/fernet/) | authentifizierte Verschlüsselung mit separat zu sicherndem lokalem Schlüssel |
 | Passwort-Hash | [Python hashlib.scrypt](https://docs.python.org/3/library/hashlib.html#hashlib.scrypt) | gesalzener Hash für die App-Anmeldung |
 | Mailversand | [Python smtplib](https://docs.python.org/3/library/smtplib.html), [TLS-Kontexte](https://docs.python.org/3/library/ssl.html#ssl.create_default_context) | STARTTLS/direktes TLS mit Zertifikatsprüfung |
-| Signal-Gateway | [Upstream](https://github.com/bbernhard/signal-cli-rest-api), [Release 0.101](https://github.com/bbernhard/signal-cli-rest-api/releases/tag/0.101), [API](https://bbernhard.github.io/signal-cli-rest-api/) | JSON-RPC-Modus, QR-Kopplung, lokaler Versandaufruf |
-| Signal-Kopplung | [Signal Support](https://support.signal.org/hc/en-us/articles/360007320551-Linked-Devices) | vom Nutzer am Handy bestätigte Verknüpfung eines Geräts |
 | DOM-Tests | [jsdom](https://github.com/jsdom/jsdom) | isolierte Formularprüfungen ohne echten Browser und ohne Nachrichtenversand |
 
 FQDN-Verhalten wird mit wechselnden simulierten DNS-Antworten getestet. Ob die eigene Bridge-Firmware für ihr optionales MQTT-Ziel DNS-Namen auflöst, ist vor Ort zu prüfen.

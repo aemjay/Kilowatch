@@ -21,7 +21,7 @@ def test_compose_data_volume_and_prebuilt_match():
 
 
 def test_compose_runs_on_synology_kernel_and_dsm_log_view():
-    for name in ["compose.build.yaml", "compose.yaml", "compose.signal.yaml", "compose.mqtt.yaml"]:
+    for name in ["compose.build.yaml", "compose.yaml", "compose.mqtt.yaml"]:
         for service in yaml.safe_load((ROOT/name).read_text())["services"].values():
             assert "cpus" not in service, name
             assert "logging" not in service, name
@@ -49,16 +49,8 @@ def test_runtime_and_optional_broker_files_are_complete():
         assert (ROOT/name).is_file(), name
 
 
-def test_optional_signal_has_private_service_and_no_published_gateway_port():
-    config=yaml.safe_load((ROOT/"compose.signal.yaml").read_text())
-    service=config["services"]["signal-api"]
-    assert "ports" not in service
-    assert service["environment"]["MODE"]=="json-rpc"
-    assert "kilowatch-signal:/home/.local/share/signal-cli" in service["volumes"]
-
-
 def test_platform_is_only_chosen_during_setup():
-    for name in ["compose.build.yaml","compose.yaml","compose.mqtt.yaml","compose.signal.yaml"]:
+    for name in ["compose.build.yaml","compose.yaml","compose.mqtt.yaml"]:
         for service in yaml.safe_load((ROOT/name).read_text())["services"].values():
             assert service.get("platform") in (None,"${KILOWATCH_PLATFORM:-}"), name
 
@@ -106,7 +98,7 @@ def test_version_is_maintained_only_in_the_app_package():
 
 
 def test_containers_have_stable_names_and_default_file_is_prebuilt():
-    names={"compose.yaml":"kilowatch","compose.build.yaml":"kilowatch","compose.signal.yaml":"kilowatch-signal","compose.mqtt.yaml":"kilowatch-mqtt"}
+    names={"compose.yaml":"kilowatch","compose.build.yaml":"kilowatch","compose.mqtt.yaml":"kilowatch-mqtt"}
     for file,name in names.items():
         service=next(iter(yaml.safe_load((ROOT/file).read_text())["services"].values()))
         assert service["container_name"]==name, file

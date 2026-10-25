@@ -135,22 +135,21 @@ def test_bridge_secret_never_follows_a_changed_target(bridge_configured):
     assert vault.get("bridge_password") == "NEW-SECRET"
 
 
-def test_notification_secrets_never_follow_a_changed_target(authenticated):
+def test_smtp_password_never_follows_a_changed_server(authenticated):
     client = authenticated
     vault = client.app.state.vault
     base = {"enabled": True, "email_enabled": True, "smtp_host": "smtp.example.org", "smtp_port": 587, "smtp_user": "me",
-            "smtp_from": "me@example.org", "email_to": ["me@example.org"], "signal_enabled": True,
-            "signal_url": "http://192.168.1.30:8080", "signal_number": "+491701234567", "signal_to": ["+491701234567"]}
-    assert client.put("/api/notifications", json=dict(base, smtp_password="SMTP-SECRET", signal_token="SIGNAL-SECRET")).status_code == 200
-    for change in ({"smtp_host": "smtp.attacker.example"}, {"smtp_port": 465}, {"smtp_user": "other"}, {"smtp_security": "ssl"},
-                   {"signal_url": "http://192.168.1.31:8080"}):
+            "smtp_from": "me@example.org", "email_to": ["me@example.org"]}
+    assert client.put("/api/notifications", json=dict(base, smtp_password="SMTP-SECRET")).status_code == 200
+    for change in ({"smtp_host": "smtp.attacker.example"}, {"smtp_port": 465}, {"smtp_user": "other"}, {"smtp_security": "ssl"}):
         response = client.put("/api/notifications", json=dict(base, **change))
         assert response.status_code == 400, change
-    assert (vault.get("smtp_password"), vault.get("signal_token")) == ("SMTP-SECRET", "SIGNAL-SECRET")
+    assert vault.get("smtp_password") == "SMTP-SECRET"
     assert client.get("/api/notifications").json()["settings"]["smtp_host"] == "smtp.example.org"
     # Empfänger oder Absender ändern behält die Zugangsdaten.
     assert client.put("/api/notifications", json=dict(base, email_to=["other@example.org"])).status_code == 200
     # Neues Ziel mit neuem Secret oder mit ausdrücklichem Entfernen ist erlaubt.
     assert client.put("/api/notifications", json=dict(base, smtp_host="smtp.new.example", smtp_password="NEW")).status_code == 200
-    assert client.put("/api/notifications", json=dict(base, smtp_host="smtp.new.example", signal_url="http://192.168.1.31:8080", clear_signal_token=True)).status_code == 200
-    assert (vault.get("smtp_password"), vault.get("signal_token", None)) == ("NEW", None)
+    assert vault.get("smtp_password") == "NEW"
+    assert client.put("/api/notifications", json=dict(base, smtp_host="smtp.other.example", clear_smtp_password=True)).status_code == 200
+    assert vault.get("smtp_password", None) is None

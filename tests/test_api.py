@@ -134,3 +134,22 @@ def test_overview_offers_the_monthly_target_as_daily_reference(authenticated):
     assert authenticated.get("/api/overview").json()["targets"]["daily_kwh"] is None
     assert authenticated.put("/api/budget",json={"monthly_eur":None,"monthly_kwh":365.25,"abschlag_eur":None}).status_code==200
     assert authenticated.get("/api/overview").json()["targets"]["daily_kwh"]==pytest.approx(12)
+
+
+def test_minute_views_use_minute_values_for_energy_and_power(authenticated):
+    now=datetime.now(timezone.utc).timestamp()
+    for index in range(31):
+        authenticated.app_store.ingest(Reading(600,100+index*.001,0,"SYNTHETIC"),now-300+index*10)
+    data=authenticated.get("/api/overview?minutes=5").json()
+    start,end=data["summary"]["start"],data["summary"]["end"]
+    assert start%60==0 and 300<=end-start<360
+    assert data["series"]["group"]=="minute" and data["series"]["power_resolution_seconds"]==0
+    assert all(item["ts"]%60==0 for item in data["series"]["energy"])
+    # Nur die Energie dieser Minuten, nicht die der ganzen Viertelstunde.
+    assert 0.02<=data["summary"]["import_kwh"]<=0.031
+    assert data["previous"] is None or data["previous"]["end"]<=start
+    fifteen=authenticated.get("/api/overview?minutes=15").json()
+    assert fifteen["series"]["group"]=="minute" and 900<=fifteen["summary"]["end"]-fifteen["summary"]["start"]<960
+    for bad in ("4","121"):
+        assert authenticated.get("/api/overview?minutes="+bad).status_code==400
+    assert authenticated.get("/api/analysis?minutes=15").status_code==200

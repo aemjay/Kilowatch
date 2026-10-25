@@ -39,11 +39,11 @@ function panel(title, subtitle, content, extra = '') { return `<div class="panel
 function stat(label, value) { return `<div class="stat-line"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`; }
 function metric(label, value, suffix, note, icon, highlight = false) { return `<div class="card metric-card${highlight ? ' highlight' : ''}"><div class="metric-label">${esc(label)}<span class="metric-icon">${icon}</span></div><div class="metric-value">${value}<small>${esc(suffix)}</small></div><div class="metric-note">${esc(note)}</div></div>`; }
 function coverage(summary) { const percent = Math.min(100,Math.max(0,(summary?.coverage || 0)*100)); return `<div class="quality-row"><span>${t('Datenabdeckung')}</span><div class="quality-track"><span style="width:${percent}%"></span></div><strong>${number(percent,1)} %</strong></div>`; }
-// Stundenansicht (letzte 1 oder 6 Stunden) oder Kalendertage aus den Datumsfeldern.
-let rangeHours=null, lastPageRefresh=0;
+// Minuten- oder Stundenansicht (letzte 5/15 Minuten, 1/6 Stunden) oder Kalendertage aus den Datumsfeldern.
+let rangeHours=null, rangeMinutes=null, lastPageRefresh=0;
 function datesText() { return `${dateLabel($('#range-start').value)} – ${dateLabel($('#range-end').value)}`; }
-function periodText() { return rangeHours ? t('Letzte {count} Std.',{count:rangeHours}) : datesText(); }
-function query() { return new URLSearchParams(rangeHours?{hours:rangeHours}:{start:$('#range-start').value,end:$('#range-end').value}).toString(); }
+function periodText() { return rangeMinutes ? t('Letzte {count} Min.',{count:rangeMinutes}) : rangeHours ? t('Letzte {count} Std.',{count:rangeHours}) : datesText(); }
+function query() { return new URLSearchParams(rangeMinutes?{minutes:rangeMinutes}:rangeHours?{hours:rangeHours}:{start:$('#range-start').value,end:$('#range-end').value}).toString(); }
 function totalNote(summary) { return summary.gap_count ? `${t('{count} Lücke(n)',{count:summary.gap_count})} · ${t('{value} nur als Gesamtmenge bekannt',{value:unit(summary.recovered_import_kwh,'kWh')})}` : t('{percent} % zeitlich erfasst',{percent:number(summary.coverage*100,1)}); }
 
 function lineChart(data, field = 'power_w', label = 'W', xField = 'ts', options = {}) {
@@ -96,7 +96,7 @@ function barChart(data, field = 'import_kwh', label = 'kWh', overlays = []) {
 }
 
 function powerPanel(data) {
-  const isShort = data.series.group === 'quarter', resolution = data.series.power_resolution_seconds, raw = resolution === 0;
+  const isShort = ['minute','quarter'].includes(data.series.group), resolution = data.series.power_resolution_seconds, raw = resolution === 0;
   const highLoad = {key:'highload', label:t('Grenze hohe Last {watts}',{watts:unit(settings.high_load_w,'W',0)}), value:settings.high_load_w};
   const spec = isShort
     ? {chart:'power', data:data.series.power, field:'power_w', xField:'ts', gapLimit:raw?120:resolution*2.5, ...powerWindow(resolution), references:[highLoad]}
@@ -172,7 +172,7 @@ function renderDashboard(data) {
 
 function renderHistory(data) {
   const rows=data.series.energy;
-  const table=rows.length?`<div class="table-wrap"><table><thead><tr><th>${t('Zeitpunkt / Zeitraum')}</th><th>${t('Bezug kWh')}</th><th>${t('Einspeisung kWh')}</th><th>${t('Erfasster Bezug')}</th><th>${t('Spitze W')}</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${esc(data.series.group==='quarter'?localTime(row.ts,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}):localDate(row.ts))}</td><td>${number(row.import_kwh,3)}</td><td>${number(row.export_kwh,3)}</td><td>${unit(row.import_s/3600,'h',2)}</td><td>${number(row.peak_w,0)}</td></tr>`).join('')}</tbody></table></div>`:empty();
+  const table=rows.length?`<div class="table-wrap"><table><thead><tr><th>${t('Zeitpunkt / Zeitraum')}</th><th>${t('Bezug kWh')}</th><th>${t('Einspeisung kWh')}</th><th>${t('Erfasster Bezug')}</th><th>${t('Spitze W')}</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${esc(['minute','quarter'].includes(data.series.group)?localTime(row.ts,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}):localDate(row.ts))}</td><td>${number(row.import_kwh,3)}</td><td>${number(row.export_kwh,3)}</td><td>${unit(row.import_s/3600,'h',2)}</td><td>${number(row.peak_w,0)}</td></tr>`).join('')}</tbody></table></div>`:empty();
   const gaps=data.gaps.length?`<div class="table-wrap"><table><thead><tr><th>${t('Beginn')}</th><th>${t('Ende')}</th><th>${t('Bezug gesamt')}</th><th>${t('Grund')}</th></tr></thead><tbody>${data.gaps.slice(0,100).map(g=>`<tr><td>${esc(localTime(g.start))}</td><td>${esc(localTime(g.end))}</td><td>${unit(g.import_kwh,'kWh',3)}</td><td>${esc(String(g.reason).split('; ').map(part=>t(part)).join('; '))}</td></tr>`).join('')}</tbody></table></div><p class="copy-footnote">${t('Max. 100 angezeigt; vollständig unter Export → Lücken.')}</p>`:`<p class="muted">${t('Keine Messlücken in diesem Zeitraum.')}</p>`;
   $('#page-history').innerHTML=powerPanel(data)+panel(t('Verbrauch im Detail.'),periodText(),table)+panel(t('Messlücken'),'',gaps);
   mountOverlayToggles($('#page-history'),()=>renderHistory(overview));
@@ -238,7 +238,7 @@ function renderEvents(events) {
 
 function renderReports(data) {
   const s=data.summary;
-  const rows=data.series.energy.map(r=>`<tr><td>${esc(localTime(r.ts,{day:'2-digit',month:'2-digit',year:'numeric',...(data.series.group==='quarter'?{hour:'2-digit',minute:'2-digit',timeZoneName:'short'}:{})}))}</td><td>${number(r.import_kwh,3)}</td><td>${number(r.export_kwh,3)}</td><td>${unit(r.import_s/3600,'h',2)}</td></tr>`).join('');
+  const rows=data.series.energy.map(r=>`<tr><td>${esc(localTime(r.ts,{day:'2-digit',month:'2-digit',year:'numeric',...(['minute','quarter'].includes(data.series.group)?{hour:'2-digit',minute:'2-digit',timeZoneName:'short'}:{})}))}</td><td>${number(r.import_kwh,3)}</td><td>${number(r.export_kwh,3)}</td><td>${unit(r.import_s/3600,'h',2)}</td></tr>`).join('');
   const content=`<div class="report-heading"><h1>${t('Kilowatch · Energiebericht')}</h1><p>${esc(t(settings.name))} · ${esc(periodText())}</p></div><div class="report-actions button-row"><button class="primary" id="print-report">${t('Drucken / als PDF speichern')}</button><button class="secondary" id="month-report">${t('Aktueller Monat')}</button><button class="secondary" id="year-report">${t('Aktuelles Jahr')}</button></div><div class="report-summary"><p><strong>${esc(periodText())}</strong> · ${esc(t('Erstellt {time}',{time:localTime(Date.now()/1000)}))}</p><p>${t('Netzbezug:')} <strong>${unit(s.import_kwh,'kWh',3)}</strong> · ${t('Einspeisung:')} <strong>${unit(s.export_kwh,'kWh',3)}</strong></p><p>${t('Bekannte Kosten:')} <strong>${unit(s.known_cost_eur,'€',2)}</strong> · ${s.cost_complete?t('Nahezu vollständiger Zeitraum'):t('Unvollständiger Betrag')} · ${t('Datenabdeckung:')} ${unit(s.coverage*100,'%',2)}</p><p>${esc(t('Lückenenergie im Bezug: {energy}',{energy:unit(s.recovered_import_kwh,'kWh',3)}))} · ${esc(t('{count} Lücke(n)',{count:s.gap_count}))} · ${esc(t('{count} über die Zeitraumgrenzen',{count:s.crossing_gaps}))}</p></div>${rows?`<div class="table-wrap"><table><thead><tr><th>${t('Zeitraum')}</th><th>${t('Bezug kWh')}</th><th>${t('Einspeisung kWh')}</th><th>${t('Erfasster Bezug')}</th></tr></thead><tbody>${rows}</tbody></table></div>`:empty()}<p class="copy-footnote">${esc(t('Geschätzter Bezug aus Leistungsintegration: {energy}',{energy:unit(s.estimated_import_kwh,'kWh',3)}))}</p>`;
   const exports=`<div class="form-grid"><label>${t('Datentyp')}<select id="export-kind"><option value="quarters">${t('Viertelstunden · dauerhaft')}</option><option value="minutes">${t('Minutenwerte · innerhalb Aufbewahrung')}</option><option value="samples">${t('Einzelmessungen · innerhalb Aufbewahrung')}</option><option value="gaps">${t('Messlücken · separat')}</option></select></label><label>${t('Format')}<select id="export-format"><option value="csv">${t('CSV (Semikolon / UTF-8)')}</option><option value="json">JSON</option></select></label></div><div class="form-actions"><button class="primary" id="export-data">${t('Datei herunterladen')}</button><a href="/api/backup" class="secondary" download>${t('Datenbank sichern')}</a></div><p class="copy-footnote">${t('Max. 100.000 Zeilen pro Datei.')}</p>`;
   $('#page-reports').innerHTML=panel(t('Dein Energiebericht.'),periodText(),content)+`<div class="report-actions">${panel(t('Export'),'',exports)}</div>`;
@@ -319,6 +319,7 @@ async function navigate(value, updateHash=true) {
 async function applyRange(value) {
   const now=today();let start=now,end=now;
   rangeHours=value.startsWith('hours')?Number(value.slice(5)):null;
+  rangeMinutes=value.startsWith('minutes')?Number(value.slice(7)):null;
   if(value==='yesterday')start=end=shiftDay(now,-1);
   if(value==='week')start=shiftDay(now,-6);
   if(value==='month')start=now.slice(0,7)+'-01';
@@ -350,7 +351,7 @@ $('#login-language').addEventListener('change',safely(async event=>{await setLan
 $('#logout').addEventListener('click',safely(async()=>{await api('/api/logout','POST');showLogin();}));
 $$('[data-page]').forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.page)));
 $$('[data-range]').forEach(button=>button.addEventListener('click',()=>applyRange(button.dataset.range)));
-$('#range-form').addEventListener('submit',event=>{event.preventDefault();if($('#range-end').value<$('#range-start').value){toast(t('Das Ende liegt vor dem Beginn.'),true);return;}$$('[data-range]').forEach(button=>button.classList.remove('selected'));rangeHours=null;loadPage();});
+$('#range-form').addEventListener('submit',event=>{event.preventDefault();if($('#range-end').value<$('#range-start').value){toast(t('Das Ende liegt vor dem Beginn.'),true);return;}$$('[data-range]').forEach(button=>button.classList.remove('selected'));rangeHours=rangeMinutes=null;loadPage();});
 $('#mobile-menu').addEventListener('click',()=>$('.sidebar').classList.toggle('open'));
 // Farbschema: Auto → Hell → Dunkel; Diagramme neu zeichnen, weil Heatmap-Farben vom Schema abhängen.
 window.kilowatchTheme?.refresh();
@@ -365,6 +366,6 @@ setInterval(async()=>{
     lastLiveRefresh=Date.now();
     try{live=await api('/api/live');updateLiveParts();}catch(error){if(!$('#application').hidden)toast(error.message,true);}
   }
-  if(['dashboard','history'].includes(page)&&Date.now()-lastPageRefresh>=(rangeHours?15000:60000))loadPage({background:true});
+  if(['dashboard','history'].includes(page)&&Date.now()-lastPageRefresh>=(rangeMinutes?5000:rangeHours?15000:60000))loadPage({background:true});
 },1000);
 setLanguage(pickLanguage(),false).then(start).catch(error=>{showLogin();if(error.status!==401)$('#login-error').textContent=error.message;});

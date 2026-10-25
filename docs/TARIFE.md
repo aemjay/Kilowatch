@@ -46,6 +46,6 @@ Unter **Budget & Abschlag** lassen sich ein Monatsbudget in €, ein Monatsziel 
 
 - **Monat:** bisherige Kosten und Prognose bis Monatsende (bisherige Kosten + prognostizierte Rest-kWh × bisheriger mittlerer Arbeitspreis + voller Monatsgrundpreis). Die Prognose braucht dieselbe Datenbasis wie die Monatsprognose der Analysen.
 - **Jahr:** Hochrechnung aus vollständig erfassten Tagen der letzten 365 Tage, erst ab 60 solchen Tagen. Ohne Jahreszeitbereinigung; bei weniger als einem Jahr Daten kann die Zahl deutlich abweichen. Die angezeigte Spanne beschreibt nur die Tagesstreuung. Einspeisung bleibt unberücksichtigt.
-- Optional meldet die Alarmregel **Monatsbudget erreicht** per E-Mail oder Signal, sobald die erfassten Kosten das Budget erreichen.
+- Optional meldet die Alarmregel **Monatsbudget erreicht** per E-Mail, sobald die erfassten Kosten das Budget erreichen.
 
 Primärquelle: [aWATTar/tado° DE API-Dokumentation](https://energy.tado.com/services/api). Monatlicher Grundpreis und Einspeisevergütung werden weiter unabhängig davon lokal hinterlegt.

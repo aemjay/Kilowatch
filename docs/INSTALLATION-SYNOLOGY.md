@@ -54,7 +54,7 @@ Die Adresse wird **ohne `http://`, Port und Pfad** eingegeben. **Verbindung prü
 
 Die Bridge-Eingaben werden nach einem Neustart weiterverwendet. Unter **Einstellungen** lassen sich FQDN/IP, Benutzer und Passwort später ändern. Ein leeres Passwortfeld behält ein bereits gespeichertes Passwort bei. **Gespeichertes Bridge-Passwort entfernen** löscht es und pausiert die Erfassung; die Historie bleibt erhalten.
 
-Anschließend unter **Kosten & Tarife** den eigenen vollständigen Bruttopreis eintragen: eine Tarifstufe oder zwei HT/NT-Preise mit Umschaltzeiten. [Tarifanleitung](TARIFE.md). Unter **Benachrichtigungen** E-Mail oder Signal einrichten; siehe [separate Anleitung](BENACHRICHTIGUNGEN.md). Die Historie beginnt mit der ersten erfolgreichen Erfassung.
+Anschließend unter **Kosten & Tarife** den eigenen vollständigen Bruttopreis eintragen: eine Tarifstufe oder zwei HT/NT-Preise mit Umschaltzeiten. [Tarifanleitung](TARIFE.md). Unter **Benachrichtigungen** E-Mail einrichten; siehe [separate Anleitung](BENACHRICHTIGUNGEN.md). Die Historie beginnt mit der ersten erfolgreichen Erfassung.
 
 ## 4. DHCP und FQDN
 
@@ -90,7 +90,7 @@ Beide Varianten verwenden den Ordner `data/` im Projektordner und das Volume `ki
 - Die Bridge spricht nur HTTP mit Basic Auth; das kann Kilowatch nicht ändern. Diesen Netzabschnitt klein halten: Bridge und NAS im selben vertrauenswürdigen LAN oder in einem IoT-Segment, das nur das NAS erreicht.
 - Optionaler MQTT-Broker: anonyme Verbindungen sind für die Bridge-Firmware nötig. In der DSM-Firewall Port 1883 **nur für die Bridge-Adresse** freigeben (Pflichtschritt, nicht optional).
 - Kilowatch nie per Portweiterleitung aus dem Internet erreichbar machen. Für den Zugriff von unterwegs VPN verwenden (z. B. VPN Server in DSM oder WireGuard am Router).
-- App-Limit: 512 MiB RAM; optional Mosquitto 64 MiB, optional Signal 1024 MiB. Kein CPU-Limit: Der DSM-Kernel unterstützt keine CFS-Quota (`cpus` bricht den Containerstart ab). Kein eigener Logtreiber, damit das Protokoll im Container Manager sichtbar bleibt.
+- App-Limit: 512 MiB RAM; optional Mosquitto 64 MiB. Kein CPU-Limit: Der DSM-Kernel unterstützt keine CFS-Quota (`cpus` bricht den Containerstart ab). Kein eigener Logtreiber, damit das Protokoll im Container Manager sichtbar bleibt.
 - Mehrere GB freie Reserve vorsehen. Sieben vollständige Datenbanksicherungen können deutlich mehr Platz als die Datenbank allein benötigen. Freien Speicher und tatsächliches Wachstum überwachen.
 - Der Projektordner muss auf einem lokalen NAS-Volume liegen (z. B. `/volume1/docker`). Keine aktive Datenbank auf SMB/NFS verlagern; Sicherungen dürfen dort liegen.
 - `data/` vor dem ersten Start selbst anlegen (Abschnitt 1). [Speicherorte und Sicherung](BETRIEB.md#speicherorte).

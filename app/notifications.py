@@ -1,6 +1,7 @@
 """Lokale Alarmregeln, persistente Warteschlange und konfigurierbare Zustellung."""
 import asyncio
 from datetime import datetime
+from email.headerregistry import Address
 from email.message import EmailMessage
 import re
 import shutil
@@ -13,8 +14,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .analytics import Analytics, local_day, midnight
-from .network import local_request, local_url
-from .i18n import UserError, translate
+from .i18n import translate
 
 
 class NotificationSettings(BaseModel):
@@ -26,11 +26,10 @@ class NotificationSettings(BaseModel):
     smtp_security: str = "starttls"
     smtp_user: str = Field(default="", max_length=200)
     smtp_from: str = Field(default="", max_length=254)
+    smtp_from_name: str = Field(default="Kilowatch", max_length=80)
+    # Selbst gewähltes Erkennungswort vor jedem Betreff: Nachrichten ohne dieses Wort stammen nicht von Kilowatch.
+    subject_code: str = Field(default="", max_length=40)
     email_to: list[str] = Field(default_factory=list, max_length=5)
-    signal_enabled: bool = False
-    signal_url: str = Field(default="", max_length=500)
-    signal_number: str = Field(default="", max_length=20)
-    signal_to: list[str] = Field(default_factory=list, max_length=5)
     quiet_enabled: bool = False
     quiet_start: str = "22:00"
     quiet_end: str = "07:00"
@@ -55,7 +54,7 @@ class NotificationSettings(BaseModel):
             raise ValueError("SMTP benötigt STARTTLS oder direktes TLS.")
         return value
 
-    @field_validator("smtp_host", "smtp_user", "smtp_from")
+    @field_validator("smtp_host", "smtp_user", "smtp_from", "smtp_from_name", "subject_code")
     @classmethod
     def no_controls(cls, value):
         if any(ord(c) < 32 for c in value) or any(c in value for c in "\r\n"):
@@ -68,27 +67,6 @@ class NotificationSettings(BaseModel):
         if any(not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", v) for v in values):
             raise ValueError("Gültige E-Mail-Adressen ohne Anzeigenamen angeben.")
         return list(dict.fromkeys(values))
-
-    @field_validator("signal_number")
-    @classmethod
-    def number(cls, value):
-        if value and not re.fullmatch(r"\+[1-9][0-9]{6,14}", value):
-            raise ValueError("Signal-Nummer im internationalen Format mit + angeben.")
-        return value
-
-    @field_validator("signal_to")
-    @classmethod
-    def recipients(cls, values):
-        if any(not re.fullmatch(r"\+[1-9][0-9]{6,14}", v) for v in values):
-            raise ValueError("Signal-Empfänger im internationalen Rufnummernformat angeben.")
-        return list(dict.fromkeys(values))
-
-    @field_validator("signal_url")
-    @classmethod
-    def gateway(cls, value):
-        if value:
-            local_url(value)
-        return value.rstrip("/")
 
     @field_validator("quiet_start", "quiet_end")
     @classmethod
@@ -105,12 +83,8 @@ def check_channel(config, channel):
         NotificationSettings.emails([config.smtp_from])
         if not config.email_to:
             raise ValueError("Mindestens einen E-Mail-Empfänger angeben.")
-    elif channel == "signal":
-        if not config.signal_url or not config.signal_number or not config.signal_to:
-            raise ValueError("Signal-Gateway, gekoppelte Absendernummer und Empfänger fehlen.")
-        local_url(config.signal_url)
     else:
-        raise ValueError("Kanal muss email oder signal sein.")
+        raise ValueError("Unbekannter Benachrichtigungskanal.")
 
 
 def quiet_now(config, now, zone):
@@ -126,7 +100,8 @@ def send_email(config, password, subject, body):
     check_channel(config, "email")
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = config.smtp_from
+    # Address kodiert Umlaute im Anzeigenamen korrekt (RFC 2047).
+    message["From"] = Address(display_name=config.smtp_from_name, addr_spec=config.smtp_from) if config.smtp_from_name else config.smtp_from
     message["To"] = ", ".join(config.email_to)
     message.set_content(body)
     context = ssl.create_default_context()
@@ -151,15 +126,6 @@ def send_email(config, password, subject, body):
         raise ValueError("E-Mail-Zustellung fehlgeschlagen. SMTP-Server, TLS und Empfänger prüfen.") from None
 
 
-async def send_signal(config, token, subject, body):
-    check_channel(config, "signal")
-    status, _, _ = await local_request(config.signal_url, "/v2/send", "POST",
-                                      {"number": config.signal_number, "recipients": config.signal_to,
-                                       "message": subject + "\n\n" + body}, token)
-    if status not in (200, 201, 202, 204):
-        raise UserError("Signal-Zustellung fehlgeschlagen (HTTP {status}). Kopplung und Gateway prüfen.", status=status)
-
-
 class Notifications:
     def __init__(self, store, vault, collector, demo=False):
         self.store, self.vault, self.collector = store, vault, collector
@@ -176,9 +142,13 @@ class Notifications:
                 id INTEGER PRIMARY KEY,rule_key TEXT,kind TEXT,channel TEXT,
                 subject TEXT,body TEXT,status TEXT,attempts INTEGER DEFAULT 0,
                 created REAL,next_try REAL,last_error TEXT DEFAULT '')""")
+            # Wartende Nachrichten des entfernten Signal-Kanals nicht mehr zustellen.
+            store.conn.execute("UPDATE notifications SET status='cancelled' WHERE channel='signal' AND status='pending'")
 
     def config(self):
-        return NotificationSettings(**self.store.state("notification_settings", {}))
+        saved = self.store.state("notification_settings", {})
+        # Felder früherer Versionen (z. B. der entfernte Signal-Kanal) ignorieren.
+        return NotificationSettings(**{key: value for key, value in saved.items() if key in NotificationSettings.model_fields})
 
     def validate(self, config):
         if not config.enabled:
@@ -197,7 +167,7 @@ class Notifications:
         self.validate(config)
         self.store.set_state("notification_settings", config.model_dump())
         destinations_changed = any(getattr(old, key) != getattr(config, key) for key in
-                                   ("email_enabled", "email_to", "smtp_from", "signal_enabled", "signal_url", "signal_number", "signal_to"))
+                                   ("email_enabled", "email_to", "smtp_from"))
         if not config.enabled or destinations_changed:
             with self.store.transaction():
                 self.store.conn.execute("UPDATE notifications SET status='cancelled' WHERE status='pending'")
@@ -219,7 +189,7 @@ class Notifications:
         self.wakeup.set()
 
     def channels(self, config):
-        return [name for name, enabled in [("email", config.email_enabled), ("signal", config.signal_enabled)] if enabled]
+        return ["email"] if config.email_enabled else []
 
     def enqueue(self, key, kind, channel, subject, body, now):
         with self.store.transaction():
@@ -330,10 +300,11 @@ class Notifications:
         self.store.set_state("notification_rules", self.rule_state)
 
     async def send(self, channel, subject, body, config):
+        # Erst beim Versand ergänzt, damit ein geändertes Erkennungswort auch für wartende Nachrichten gilt.
+        if config.subject_code:
+            subject = f"[{config.subject_code}] {subject}"
         if channel == "email":
             await asyncio.to_thread(send_email, config, self.vault.get("smtp_password"), subject, body)
-        elif channel == "signal":
-            await send_signal(config, self.vault.get("signal_token"), subject, body)
         else:
             raise ValueError("Unbekannter Benachrichtigungskanal.")
 
