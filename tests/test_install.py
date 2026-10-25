@@ -12,6 +12,11 @@ case "$*" in
   "compose version") exit 0 ;;
   "compose up -d") printf 'Kilowatch-Setup-Code: TESTCODE\\n' > data/SETUP-CODE.txt ;;
   inspect*) echo healthy ;;
+  *"config --images"*) echo ghcr.io/aemjay/kilowatch:1 ;;
+  "run --rm ghcr.io/sigstore/cosign/cosign:"*)
+    [ -n "$STUB_UNSIGNED" ] && { echo "no signatures found" >&2; exit 1; }
+    case "$*" in *"--certificate-identity-regexp ^https://github"*"nas-image"*) ;; *) exit 1 ;; esac
+    printf '[{"critical":{"image":{"docker-manifest-digest":"sha256:%064d"}}}]\n' 7 ;;
 esac
 """
 
@@ -60,3 +65,25 @@ def test_installer_keeps_existing_env_and_backs_up_changed_compose(tmp_path):
 def test_installer_rejects_invalid_input(tmp_path, args, message):
     result = run(tmp_path, *args)
     assert result.returncode != 0 and message in result.stderr
+
+
+def test_installer_pulls_exactly_the_verified_digest(tmp_path):
+    result = run(tmp_path, "--user", "nobody", "--dir", str(tmp_path / "kw"))
+    assert result.returncode == 0, result.stderr
+    log = (tmp_path / "log").read_text()
+    digest = "sha256:" + "0" * 63 + "7"
+    assert f"docker pull ghcr.io/aemjay/kilowatch@{digest}" in log
+    assert f"docker tag ghcr.io/aemjay/kilowatch@{digest} ghcr.io/aemjay/kilowatch:1" in log
+    assert log.index("docker tag") < log.index("docker compose up -d")
+    assert "compose -f compose.yaml pull" not in log
+
+
+def test_unsigned_image_aborts_before_anything_is_pulled_or_started(tmp_path):
+    target = tmp_path / "kw"
+    run(tmp_path, "--user", "nobody", "--dir", str(target), "--no-start")
+    env = dict(os.environ, PATH=f"{tmp_path / 'bin'}:{os.environ['PATH']}", STUB_LOG=str(tmp_path / "log"), STUB_UNSIGNED="1")
+    (tmp_path / "log").write_text("")
+    result = subprocess.run(["sh", str(target / "tools/update.sh")], capture_output=True, text=True, env=env)
+    assert result.returncode == 1 and "Signatur" in result.stderr
+    log = (tmp_path / "log").read_text()
+    assert "pull" not in log and " up " not in log

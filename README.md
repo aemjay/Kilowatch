@@ -59,9 +59,11 @@ Die optionale `.env.example` enthält ausschließlich Betriebsoptionen wie HTTP-
 
 Releases erscheinen als signierte Multi-Arch-Images (amd64/arm64) unter `ghcr.io/aemjay/kilowatch`. `compose.yaml` verwendet standardmäßig die neueste 1.x-Version; mit `KILOWATCH_VERSION=1.2.3` in der `.env` lässt sich eine feste Version wählen. Für NAS ohne Internet hängen Importdateien an jedem Release.
 
-Kilowatch aktualisiert sich nie selbst. Optional zeigt die App neue Versionen an (standardmäßig aus, eine Abfrage pro Tag bei GitHub). Aktualisiert wird per Container Manager, per SSH oder automatisch über den DSM-Aufgabenplaner mit `tools/update.sh`. Vor jeder Datenbankänderung legt Kilowatch selbst eine Sicherung an. Details und Rückweg: **[Updates](docs/UPDATES.md)**.
+Kilowatch aktualisiert sich nie selbst. Optional zeigt die App neue Versionen an (standardmäßig aus, eine Abfrage pro Tag bei GitHub). Aktualisiert wird per Container Manager, per SSH oder automatisch über den DSM-Aufgabenplaner mit `tools/update.sh`, der vorher die Image-Signatur prüft. Vor jeder Datenbankänderung legt Kilowatch selbst eine Sicherung an. Details und Rückweg: **[Updates](docs/UPDATES.md)**.
 
 Der [GitHub-Workflow](.github/workflows/nas-image.yml) prüft Tests und Compose-Konfigurationen, startet die Images für beide Plattformen mit echtem Datenordner und prüft Einrichtung, Dateirechte, API, Sicherung, Persistenz, das Update von der letzten veröffentlichten Version und den optionalen MQTT-Broker.
+
+Empfohlen ist der Zugriff per HTTPS über den DSM-Reverse-Proxy ([Anleitung](docs/INSTALLATION-SYNOLOGY.md#7-https-über-den-dsm-reverse-proxy)); Sicherheitslücken bitte vertraulich melden ([SECURITY.md](SECURITY.md)).
 
 ## E-Mail und Signal
 

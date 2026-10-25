@@ -26,4 +26,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3).read()"]
 ENTRYPOINT ["kilowatch-entrypoint"]
-CMD ["python", "-m", "uvicorn", "app.main:factory", "--factory", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--no-access-log"]
+CMD ["python", "-m", "uvicorn", "app.main:factory", "--factory", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--limit-concurrency", "64", "--no-proxy-headers", "--no-access-log"]

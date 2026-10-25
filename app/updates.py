@@ -1,5 +1,6 @@
 """Optionaler Hinweis auf neue Kilowatch-Versionen; installiert nie selbst."""
 import asyncio
+import json
 import re
 import time
 
@@ -74,15 +75,19 @@ class Updates:
             try:
                 # Nur das öffentliche Release abfragen: keine Cookies, keine Kennung, keine Messdaten.
                 async with httpx.AsyncClient(timeout=10, trust_env=False, follow_redirects=False, transport=self.transport) as client:
-                    response = await client.get(f"https://api.github.com/repos/{self.repository}/releases/latest",
-                                                headers={"Accept": "application/vnd.github+json", "User-Agent": "Kilowatch"})
-                if response.status_code == 404:
-                    raise ValueError("Noch keine veröffentlichte Version gefunden.")
-                if response.status_code != 200:
-                    raise UserError("Update-Prüfung momentan nicht möglich (HTTP {status}).", status=response.status_code)
-                if len(response.content) > 200000:
-                    raise ValueError("Antwort von GitHub ist zu groß.")
-                saved = dict(parse_release(response.json()), checked_at=now, error="")
+                    async with client.stream("GET", f"https://api.github.com/repos/{self.repository}/releases/latest",
+                                             headers={"Accept": "application/vnd.github+json", "User-Agent": "Kilowatch"}) as response:
+                        if response.status_code == 404:
+                            raise ValueError("Noch keine veröffentlichte Version gefunden.")
+                        if response.status_code != 200:
+                            raise UserError("Update-Prüfung momentan nicht möglich (HTTP {status}).", status=response.status_code)
+                        # Größe schon während des Empfangs begrenzen.
+                        body = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            body.extend(chunk)
+                            if len(body) > 200000:
+                                raise ValueError("Antwort von GitHub ist zu groß.")
+                saved = dict(parse_release(json.loads(body)), checked_at=now, error="")
             except (ValueError, httpx.HTTPError) as exc:
                 message = str(exc) if isinstance(exc, ValueError) else "GitHub nicht erreichbar. Später erneut versuchen."
                 self.store.set_state("update_status", dict(self.store.state("update_status", {}), checked_at=now, error=message))

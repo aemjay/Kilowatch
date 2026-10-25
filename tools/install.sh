@@ -93,7 +93,8 @@ if [ "$START" = 0 ]; then
 fi
 
 cd "$DIR"
-info "Image laden und starten …"
+info "Image laden, Signatur prüfen und starten …"
+sh tools/update.sh --pull-only
 docker compose up -d
 state=unknown
 for i in $(seq 1 60); do

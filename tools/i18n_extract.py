@@ -25,7 +25,7 @@ HTML_TEXT = re.compile(r"<(\w+)[^>]*\bdata-i18n\b(?!-)[^>]*>([^<]*)</\1>")
 HTML_ATTR = re.compile(r'data-i18n-(?:placeholder|aria-label|title)="([^"]*)"')
 # Aufrufname -> Positionen der Meldungen (None = alle Argumente).
 CALLS = {"ValueError": None, "UserError": None, "BridgeError": None, "HTTPException": None, "_": None,
-         "text": None, "failure": None, "translate": [0], "rule": [2, 3], "issue": [1]}
+         "text": None, "failure": None, "translate": [0], "rule": [2, 3], "issue": [1], "reserve_attempt": [2]}
 FIELDS = {"reason", "method", "title", "text", "message", "forecast_reason"}
 
 
