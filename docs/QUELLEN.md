@@ -31,6 +31,11 @@ FQDN-Verhalten wird mit wechselnden simulierten DNS-Antworten getestet. Ob die e
 
 [aWATTar/tado° DE API](https://energy.tado.com/services/api): veröffentlichte Börsenwerte mit Millisekunden-Zeitstempeln und Einheit EUR/MWh. Daraus werden keine vollständigen Vertragspreise abgeleitet.
 
+## Preisquellen für dynamische Tarife
+
+- [Tibber GraphQL-API](https://developer.tibber.com/api/reference.md): `priceInfo(resolution: QUARTER_HOURLY)` für heute/morgen und `priceInfoRange` (höchstens 672 Viertelstunden je Abfrage) für den Rückblick. `total` = Energie + Abgaben laut Referenz (in Schweden inklusive Energiesteuer, überall inklusive MwSt); was darüber hinaus auf der Rechnung steht (z. B. Netzentgelt in Norwegen), trägt man als Aufschlag ein. Persönlicher Token unter developer.tibber.com.
+- [Energy-Charts](https://api.energy-charts.info/) `price?bzn=…`: Day-Ahead-Preis der Gebotszone in EUR/MWh, Daten der Bundesnetzagentur | SMARD.de unter CC BY 4.0. Nur Gebotszonen in Euro, weil die Schnittstelle auch für Norwegen oder Schweden EUR/MWh liefert.
+
 ## Strommix und CO₂
 
 [Energy-Charts API](https://api.energy-charts.info/) des Fraunhofer ISE, Daten unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), Quellenangabe „Energy-Charts.info“ in der Oberfläche:

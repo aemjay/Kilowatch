@@ -28,6 +28,7 @@ from .discovery import Discovery, suggestions
 from .market import Market
 from .updates import Updates
 from .grid import COUNTRIES, Grid
+from . import prices as price_feed
 from . import insights
 from .i18n import CURRENCIES, LANGUAGES, UserError, translate_error
 
@@ -185,6 +186,37 @@ class Event(StrictModel):
     note: str = Field(default="", max_length=2000)
 
 
+class PriceSource(StrictModel):
+    source: str
+    zone: str = "DE-LU"
+    markup_ct: float = Field(default=0, ge=-100, le=200)
+    vat_percent: float = Field(default=0, ge=0, le=50)
+    tibber_home: str = Field(default="", max_length=80)
+    tibber_token: str | None = Field(default=None, max_length=200)
+    clear_tibber_token: bool = False
+
+    @field_validator("source")
+    @classmethod
+    def known_source(cls, value):
+        if value not in price_feed.SOURCES:
+            raise ValueError("Preisquelle muss leer, tibber oder spot sein.")
+        return value
+
+    @field_validator("zone")
+    @classmethod
+    def known_zone(cls, value):
+        if value not in price_feed.ZONES:
+            raise ValueError("Unbekannte Gebotszone.")
+        return value
+
+    @field_validator("tibber_token")
+    @classmethod
+    def token_text(cls, value):
+        if value is not None and (any(ord(c) < 33 for c in value)):
+            raise ValueError("Steuer- und Leerzeichen sind nicht erlaubt.")
+        return value
+
+
 class PriceImport(StrictModel):
     csv: str = Field(max_length=1500000)
 
@@ -298,6 +330,7 @@ def create_app(config=None):
     market = Market(store, config.demo)
     updates = Updates(store, config.update_repository, config.demo)
     grid = Grid(store, config.demo)
+    feed = price_feed.PriceFeed(store, vault, config.demo)
     sessions, attempts = {}, {}
     attempt_lock = threading.Lock()
     # Setup-Code zusätzlich als Datei im Datenordner, damit er ohne Container-Protokoll in der
@@ -352,7 +385,7 @@ def create_app(config=None):
             from .demo import seed
             await asyncio.to_thread(seed, store)
         tasks = [asyncio.create_task(collector.run()), asyncio.create_task(notifier.run()),
-                 asyncio.create_task(updates.run()), asyncio.create_task(grid.run())] if not config.testing else []
+                 asyncio.create_task(updates.run()), asyncio.create_task(grid.run()), asyncio.create_task(feed.run())] if not config.testing else []
         yield
         for task in tasks:
             task.cancel()
@@ -369,6 +402,7 @@ def create_app(config=None):
     app.state.auth, app.state.vault, app.state.notifier = auth, vault, notifier
     app.state.updates = updates
     app.state.grid = grid
+    app.state.feed = feed
 
     def language(request):
         """Sprache der Anfrage (Kopfzeile der Oberfläche), sonst die gespeicherte Einstellung."""
@@ -617,7 +651,36 @@ def create_app(config=None):
         schedules = store.state("tariff_schedules", {})
         return {"tariffs": [dict(row, **schedules.get(row["start_date"], {})) for row in store.rows("SELECT * FROM tariffs ORDER BY start_date")],
                 "prices": store.rows("SELECT COUNT(*) AS count,MIN(start) AS start,MAX(end) AS end FROM prices")[0], "market":market.cached(),
-                "spot_history": market.history_status()}
+                "spot_history": market.history_status(), "price_feed": price_feed_state()}
+
+    def price_feed_state():
+        return dict(feed.config(), status=feed.status(), tibber_token_configured=bool(vault.get("tibber_token")),
+                    zones=list(price_feed.ZONES), spot_source=price_feed.SPOT_SOURCE)
+
+    @app.put("/api/prices/source")
+    async def save_price_source(data: PriceSource):
+        values = data.model_dump(exclude={"tibber_token", "clear_tibber_token"})
+        if data.clear_tibber_token:
+            vault.update({"tibber_token": None})
+        elif data.tibber_token:
+            vault.update({"tibber_token": data.tibber_token})
+        old = feed.config()
+        store.set_state("price_feed", values)
+        # Andere Quelle oder Formel: Zeitraum neu nachladen und alle Preise neu berechnen.
+        if any(old[key] != values[key] for key in ("source", "zone", "markup_ct", "vat_percent", "tibber_home")) or data.tibber_token:
+            feed.reset()
+        # Gleich abrufen, damit Fehler (Token, Währung, Zuhause) sofort sichtbar sind.
+        await feed.refresh()
+        return price_feed_state()
+
+    @app.post("/api/prices/refresh")
+    async def refresh_prices():
+        if not feed.config()["source"]:
+            raise ValueError("Zuerst eine Preisquelle wählen.")
+        if time.time() - (feed.status().get("fetched_at") or 0) < 30:
+            raise ValueError("Bitte 30 Sekunden zwischen Abrufen warten.")
+        await feed.refresh()
+        return price_feed_state()
 
     @app.get("/api/insights")
     def insight_data(start: str | None = None, end: str | None = None):

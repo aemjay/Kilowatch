@@ -52,7 +52,7 @@ Adressen, Benutzernamen, Empfänger und Regeln sind Einstellungen in SQLite; ebe
 
 - **Hyper Backup:** den Ordner `docker/kilowatch` (oder nur `data/`) aufnehmen. Für eine Wiederherstellung die geprüften Dateien aus `data/live/backups/` verwenden; die laufende `kilowatch.sqlite3` allein ist wegen WAL keine verlässliche Sicherung.
 - **Sofort:** In **System & Datenqualität → Jetzt konsistent sichern** eine `.sqlite3`-Datei herunterladen. Die SQLite-Backup-API liefert auch im laufenden Betrieb einen konsistenten Stand; danach wird `integrity_check` geprüft.
-- **Zugangsdaten:** werden absichtlich nicht mitgesichert. Nach einer Wiederherstellung auf einem neuen NAS über den Setup-Code ein neues App-Passwort setzen und Bridge-Passwort (Aufkleber) sowie SMTP-Zugangsdaten neu eingeben. Wer das vermeiden möchte, sichert das Volume separat auf verschlüsseltem Speicher – niemals zusammen mit `data/`.
+- **Zugangsdaten:** werden absichtlich nicht mitgesichert. Nach einer Wiederherstellung auf einem neuen NAS über den Setup-Code ein neues App-Passwort setzen und Bridge-Passwort (Aufkleber) sowie SMTP-Zugangsdaten und gegebenenfalls den Tibber-Token neu eingeben. Wer das vermeiden möchte, sichert das Volume separat auf verschlüsseltem Speicher – niemals zusammen mit `data/`.
 
 Eine Kopie auf einem anderen Datenträger ist nötig, um einen vollständigen NAS-Ausfall abzudecken.
 

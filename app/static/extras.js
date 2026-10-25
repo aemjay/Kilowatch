@@ -15,14 +15,14 @@ function tariffExtraValues(values) {
 
 function tariffRateLabel(tariff) {
   if(tariff.mode==='dual')return esc(`${unit(tariff.eur_kwh*100,'ct',2)} HT / ${unit(tariff.low_eur_kwh*100,'ct',2)} NT · NT ${tariff.low_start}–${tariff.low_end}${tariff.weekend_low?' + '+t('Wochenende'):''}`);
-  return tariff.mode==='fixed'?unit(tariff.eur_kwh*100,'ct',2):t('CSV-Bruttopreise');
+  return tariff.mode==='fixed'?unit(tariff.eur_kwh*100,'ct',2):t('Je Viertelstunde');
 }
 
 function mountTariffOptions(data) {
   const form=$('#tariff-form'),mode=form.elements.mode,price=form.elements.ct_kwh;
   mode.options[0].textContent=t('1 Tarifstufe · ein Preis');
   const dual=document.createElement('option');dual.value='dual';dual.textContent=t('2 Tarifstufen · HT/NT');mode.add(dual,1);
-  mode.options[2].textContent=t('Variabel · vollständige Preise per CSV');
+  mode.options[2].textContent=t('Dynamisch · Preise aus Preisquelle oder CSV');
   price.value='';price.placeholder=t('Dein Bruttopreis');
   form.querySelector('.form-grid').insertAdjacentHTML('beforeend',`<label data-dual hidden>${t('Niedertarif NT brutto (ct/kWh)')}<input name="low_ct" type="number" step=".001" min="-500" max="1000" required disabled></label><label data-dual hidden>${t('NT beginnt um')}<input name="low_start" type="time" step="900" value="22:00" required disabled></label><label data-dual hidden>${t('NT endet um')}<input name="low_end" type="time" step="900" value="06:00" required disabled></label><label data-dual hidden>${t('Samstag und Sonntag')}<select name="weekend_low" disabled><option value="false">${t('Gleiche Uhrzeiten wie werktags')}</option><option value="true">${t('Ganztägig NT')}</option></select></label>`);
   const note=document.createElement('p');note.className='copy-footnote';note.textContent=t('HT gilt außerhalb des NT-Zeitfensters. Europe/Berlin, Viertelstundenraster, auch über Mitternacht. Feiertage werden nicht gesondert erkannt. Dies ist eine zeitliche Preiszuordnung und keine direkte T1-/T2-Abrechnung.');form.append(note);
@@ -38,4 +38,27 @@ function mountMarket(data) {
   const rows=(data.rows||[]).map(row=>`<tr><td>${esc(localTime(row.start,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}))}</td><td>${esc(localTime(row.end,{hour:'2-digit',minute:'2-digit',timeZoneName:'short'}))}</td><td>${number(row.ct_kwh,3)}</td></tr>`).join('');
   $('#page-costs').insertAdjacentHTML('beforeend',panel(t('Börsenpreise'),t('Internetabruf · aWATTar DE'),`<p class="muted">${t('Netto-Börsenpreise in ct/kWh, nicht Teil der Kostenberechnung.')}</p><div class="form-actions"><button class="secondary" id="market-refresh" type="button"${settings.demo?' disabled':''}>${t('Verfügbare Börsenpreise abrufen')}</button></div><p class="copy-footnote">${data.fetched_at?t('Stand: ')+esc(localTime(data.fetched_at))+(stale?t(' · veraltet'):''):t('Noch nicht abgerufen.')}</p>${data.error?`<div class="notice">${esc(data.error)}</div>`:''}${rows?`<details><summary>${t('{count} Preisintervalle anzeigen',{count:data.rows.length})}</summary><div class="table-wrap" style="max-height:350px;overflow:auto"><table><thead><tr><th>${t('Beginn')}</th><th>${t('Ende')}</th><th>${t('Börse netto ct/kWh')}</th></tr></thead><tbody>${rows}</tbody></table></div></details>`:''}`));
   $('#market-refresh').addEventListener('click',safely(async event=>{const button=event.target;button.disabled=true;try{await api('/api/market/refresh','POST');toast(t('Börsenpreise geladen. Deine gespeicherten Vertragspreise bleiben maßgeblich.'));await loadPage();}finally{button.disabled=false;}}));
+}
+
+// Automatische Preisquelle für dynamische Tarife: Tibber oder Börsenpreis + Aufschlag.
+function mountPriceSource(feed) {
+  const slot=$('#price-source-slot');if(!slot||!feed)return;
+  const status=feed.status||{}, homes=status.homes||[];
+  const option=(value,label,current)=>`<option value="${esc(value)}"${value===current?' selected':''}>${esc(label)}</option>`;
+  const state=status.error?`<div class="notice">${esc(t(status.error,status.error_params||{}))}</div>`:status.fetched_at?`<p class="copy-footnote">${t('Zuletzt abgerufen {time} · Preise bis {until}',{time:localTime(status.fetched_at,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),until:status.latest_end?localTime(status.latest_end,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'–'})}</p>`:'';
+  slot.innerHTML=`<form id="price-source-form"><div class="form-grid">
+<label>${t('Preisquelle')}<select name="source">${option('',t('Keine · nur CSV-Import'),feed.source)}${option('tibber',t('Tibber · Preise deines Vertrags'),feed.source)}${option('spot',t('Börsenpreis + Aufschlag'),feed.source)}</select></label>
+<label data-price-source="tibber">${t('Tibber-API-Token')}<input name="tibber_token" type="password" autocomplete="new-password" placeholder="${esc(feed.tibber_token_configured?t('Gespeichert · leer lassen zum Beibehalten'):t('developer.tibber.com → Access Token'))}"></label>
+${homes.length>1?`<label data-price-source="tibber">${t('Tibber-Zuhause')}<select name="tibber_home">${option('',t('Bitte wählen'),feed.tibber_home)}${homes.map(h=>option(h.id,h.name||h.id,feed.tibber_home)).join('')}</select></label>`:''}
+<label data-price-source="spot">${t('Gebotszone')}<select name="zone">${feed.zones.map(z=>option(z,z,feed.zone)).join('')}</select></label>
+<label data-price-source="tibber spot">${t('Aufschlag (ct/kWh)')}<input name="markup_ct" type="number" step=".001" min="-100" max="200" value="${esc(feed.markup_ct)}" required><small data-price-source="tibber">${t('Nur Bestandteile, die nicht im Tibber-Preis stecken (z. B. Netzentgelt in Norwegen, brutto). Sonst 0.')}</small><small data-price-source="spot">${t('Netzentgelt, Umlagen, Stromsteuer und Anbietermarge netto laut Preisblatt.')}</small></label>
+<label data-price-source="spot">${t('Mehrwertsteuer (%)')}<input name="vat_percent" type="number" step=".1" min="0" max="50" value="${esc(feed.vat_percent)}" required></label>
+</div><div class="form-actions"><button class="primary" type="submit">${t('Speichern & Preise abrufen')}</button>${feed.source?`<button class="secondary" type="button" id="price-refresh">${t('Jetzt abrufen')}</button>`:''}${feed.tibber_token_configured?`<button class="danger-button" type="button" id="tibber-forget">${t('Tibber-Token entfernen')}</button>`:''}</div></form>${state}<p class="copy-footnote" data-price-source="spot">${t('Quelle: {source}. Preise erscheinen täglich am frühen Nachmittag für den Folgetag.',{source:feed.spot_source})}</p><p class="copy-footnote" data-price-source="tibber">${t('Der Token bleibt verschlüsselt auf dem NAS und wird nur an Tibber gesendet.')}</p><div class="divider"></div>`;
+  const form=$('#price-source-form'),source=form.elements.source;
+  const change=()=>{for(const element of slot.querySelectorAll('[data-price-source]')){element.hidden=!element.dataset.priceSource.split(' ').includes(source.value);for(const input of element.querySelectorAll('input,select'))input.disabled=element.hidden;}};
+  source.addEventListener('change',change);change();
+  const values=extra=>{const v=Object.fromEntries(new FormData(form));return {source:v.source,zone:v.zone||feed.zone,markup_ct:Number(v.markup_ct??feed.markup_ct),vat_percent:Number(v.vat_percent??feed.vat_percent),tibber_home:v.tibber_home??feed.tibber_home,...(v.tibber_token?{tibber_token:v.tibber_token}:{}),...extra};};
+  form.addEventListener('submit',safely(async event=>{event.preventDefault();const button=form.querySelector('button[type="submit"]');button.disabled=true;try{const result=await api('/api/prices/source','PUT',values());toast(result.status?.error?t('Gespeichert, aber der Abruf ist fehlgeschlagen.'):t('Preisquelle gespeichert.'),!!result.status?.error);await loadPage();}finally{button.disabled=false;}}));
+  $('#price-refresh')?.addEventListener('click',safely(async event=>{event.target.disabled=true;try{await api('/api/prices/refresh','POST');toast(t('Preise abgerufen.'));await loadPage();}finally{event.target.disabled=false;}}));
+  $('#tibber-forget')?.addEventListener('click',safely(async()=>{await api('/api/prices/source','PUT',values({clear_tibber_token:true,...(feed.source==='tibber'?{source:''}:{})}));toast(t('Tibber-Token entfernt.'));await loadPage();}));
 }
