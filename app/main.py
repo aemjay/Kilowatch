@@ -523,8 +523,11 @@ def create_app(config=None):
         # Historische Teilviertelstunden nicht als zeitgenau rekonstruieren.
         previous_end = int(previous_end // 900) * 900
         previous = a.summary(previous_start, previous_end) if previous_end > previous_start else None
+        # Referenzwert für Tagesbalken: Monatsziel als durchschnittlicher Tagesanteil.
+        monthly_kwh = store.state("budget", {}).get("monthly_kwh")
+        targets = {"daily_kwh": monthly_kwh * 12 / 365.25 if monthly_kwh else None}
         return {"summary": a.summary(s, e), "previous": previous, "series": a.series(s, e),
-                "gaps": store.gap_rows(s, e), "timezone": a.zone}
+                "gaps": store.gap_rows(s, e), "timezone": a.zone, "targets": targets}
 
     @app.get("/api/analysis")
     def analysis(start: str | None = None, end: str | None = None, hours: int | None = None):

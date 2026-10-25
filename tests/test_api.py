@@ -128,3 +128,9 @@ def test_hour_views_show_individual_readings_and_compare_with_the_hour_before(au
     for bad in ("0","49"):
         assert authenticated.get("/api/overview?hours="+bad).status_code==400
     assert authenticated.get("/api/analysis?hours=6").status_code==200
+
+
+def test_overview_offers_the_monthly_target_as_daily_reference(authenticated):
+    assert authenticated.get("/api/overview").json()["targets"]["daily_kwh"] is None
+    assert authenticated.put("/api/budget",json={"monthly_eur":None,"monthly_kwh":365.25,"abschlag_eur":None}).status_code==200
+    assert authenticated.get("/api/overview").json()["targets"]["daily_kwh"]==pytest.approx(12)

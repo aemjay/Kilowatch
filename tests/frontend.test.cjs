@@ -63,7 +63,8 @@ async function harness(options={}) {
     }else if(path==='/api/notifications')data=notes;
     else if(path==='/api/discovery/network')data={suggestions:[{network:'192.168.1.0/24',reason:'Synthetic network'}]};
     else if(path==='/api/discovery/scan')data={network:body.network,checked:254,devices:[{ip:'192.168.1.10',host:'bridge.fritz.box',fqdn:'bridge.fritz.box'}]};
-    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0}};
+    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null},
+      series:{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:i*60,power_w:i===30?4000:300+i,seconds:60}))}};
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
     else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market};
     else if(path==='/api/market/refresh'){market={rows:[{start:1800,end:5400,ct_kwh:-5}],fetched_at:2000000000,error:''};data=market;}
@@ -75,9 +76,9 @@ async function harness(options={}) {
     else if(path==='/api/bridge/test')data={protocol:'SML',endpoint:'/node_data.json',resolved_addresses:['192.168.1.10'],has_import:true};
     return {ok:status===200,status,json:async()=>structuredClone(data),blob:async()=>new w.Blob(['synthetic-image'],{type:'image/png'})};
   };
-  for(const name of ['theme.js','i18n.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
+  for(const name of ['theme.js','i18n.js','overlays.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
-    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form'}[options.page])||'#settings-form'));
+    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
 }
 
@@ -301,5 +302,31 @@ test('hour views request the last hours and calendar dates switch back',async t=
   submit(w,'range-form');
   await until(()=>h.calls.filter(c=>c.path.startsWith('/api/overview?start=')).length>=2);
   assert.equal(w.document.querySelector('[data-range="hours6"]').classList.contains('selected'),false);
+  assert.deepEqual(h.errors,[]);
+});
+
+test('rolling mean and min/max follow the window and restart after gaps',async t=>{
+  const h=await harness({settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  const data=[{ts:0,v:1},{ts:60,v:3},{ts:120,v:5},{ts:1000,v:10},{ts:1060,v:null},{ts:1120,v:20}];
+  const plain=value=>JSON.parse(JSON.stringify(value));
+  const out=plain(w.rolling(data,'v','ts',150,false,300));
+  assert.deepEqual(out.map(p=>p.mean),[1,2,3,10,null,15]);
+  assert.deepEqual(out.map(p=>[p.low,p.high]),[[1,1],[1,3],[1,5],[10,10],[null,null],[10,20]]);
+  assert.deepEqual(plain(w.rolling([{x:1,v:2},{x:2,v:4},{x:3,v:6}],'v','x',2,true)).map(p=>p.mean),[2,3,5]);
+});
+
+test('chart overlays can be switched on, are drawn and remembered',async t=>{
+  const h=await harness({page:'history',settings:{setup_required:false,high_load_w:3000}});t.after(()=>h.dom.window.close());const {w}=h;
+  const toggles=[...w.document.querySelectorAll('[data-overlay-chart="power"] input')].map(input=>input.value);
+  assert.deepEqual(toggles,['mean','moving','range','highload']);
+  assert.equal(w.document.querySelector('#page-history .overlay-line'),null);
+  for(const key of ['moving','range','highload']){
+    const input=w.document.querySelector(`[data-overlay-chart="power"] input[value="${key}"]`);
+    input.checked=true;input.dispatchEvent(new w.Event('change',{bubbles:true}));
+  }
+  await until(()=>!!w.document.querySelector('#page-history .overlay-line'));
+  assert.ok(w.document.querySelector('#page-history .overlay-band'));
+  assert.ok(w.document.querySelector('#page-history .overlay-hline.overlay-reference'));
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('kilowatch-overlays-power')),['moving','range','highload']);
   assert.deepEqual(h.errors,[]);
 });

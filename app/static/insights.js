@@ -22,7 +22,8 @@ async function mountAnalysisInsights() {
   const bars=trend.points.map(p=>({ts:p.start,baseline_w:p.baseline_w,import_s:p.quarters*900}));
   const stats=`<div class="stats-list">${stat(trend.group==='week'?t('Letzte Woche'):t('Letzter Monat'),last?unit(last.baseline_w,'W',0):t('Zu wenig Nachtdaten'))}${stat(t('Grundlast pro Jahr'),last?unit(last.annual_kwh,'kWh',0):'—')}${stat(t('Kosten der Grundlast pro Jahr'),last&&last.annual_eur!=null?unit(last.annual_eur,'€',0):t('Tarif fehlt'))}${stat(t('Veränderung (2. gegen 1. Hälfte)'),trend.change_w==null?t('Zu wenige Punkte'):unit(trend.change_w,'W',0))}</div>`;
   const note=`<p class="copy-footnote">${esc(t(trend.method))} ${esc(t('Punkte mit weniger als {count} erfassten Nachtviertelstunden bleiben leer. Nächte mit Einspeisung oder Batterieentladung zählen nicht als Grundlast.',{count:trend.min_quarters}))}</p>`;
-  target.insertAdjacentHTML('beforeend',panel(t('Grundlast-Entwicklung'),trend.group==='week'?t('Nachtgrundlast je Woche'):t('Nachtgrundlast je Monat'),barChart(bars,'baseline_w','W')+stats+note));
+  target.insertAdjacentHTML('beforeend',panel(t('Grundlast-Entwicklung'),trend.group==='week'?t('Nachtgrundlast je Woche'):t('Nachtgrundlast je Monat'),baselineChart(trend,bars)+stats+note));
+  mountOverlayToggles(target,()=>loadPage());
   const feed=data.feedin;
   if(feed.total_kwh){
     target.insertAdjacentHTML('beforeend',panel(t('Einspeisung'),t('Mittlere Einspeiseleistung nach Tageszeit'),hourChart(feed.profile,'average_kw','kW')+`<div class="stats-list">${stat(t('Eingespeist im Zeitraum'),unit(feed.total_kwh,'kWh',2))}</div><p class="copy-footnote">${t('Gemessen wird nur der Überschuss am Netzanschluss. Eigenverbrauch und Autarkie lassen sich daraus nicht bestimmen.')}</p>`));
@@ -45,6 +46,13 @@ function simulationResult(r) {
   if(r.difference_eur!=null)difference=`<p class="inline-result">${esc(r.difference_eur<0?t('Günstiger als dein Tarif: {amount} im Zeitraum',{amount:unit(-r.difference_eur,'€',2)}):t('Teurer als dein Tarif: {amount} im Zeitraum',{amount:unit(r.difference_eur,'€',2)}))}${r.paired_share<.995?' · '+esc(t('verglichen über {share} des Bezugs, der in beiden Tarifen bepreist ist',{share:unit(r.paired_share*100,'%',1)})):''}</p>`;
   const spotNote=r.spot_weighted_ct!=null?`<p class="copy-footnote">${t('Liegt dein verbrauchsgewichteter Börsenpreis über dem Zeitmittel, fällt dein Bezug eher in teure Stunden; Verschieben in günstige Zeiten könnte sich lohnen.')}</p>`:'';
   return `<div class="divider"></div><div class="stats-list">${lines.join('')}</div>${difference}${spotNote}<p class="copy-footnote">${t('Annahme: gleicher Verbrauch zur gleichen Zeit. Eine Verhaltensänderung durch den anderen Tarif ist nicht berücksichtigt.')}</p>`;
+}
+
+// Grundlast-Entwicklung mit gleitendem Ø und Min/Max über vier Wochen bzw. drei Monate.
+function baselineChart(trend, bars) {
+  const week=trend.group==='week';
+  const spec={chart:'baseline-'+trend.group, data:bars, field:'baseline_w', xField:'ts', byCount:true, window:week?4:3, windowLabel:week?t('4 Wochen'):t('3 Monate')};
+  return overlayToggles(spec)+barChart(bars,'baseline_w','W',buildOverlays(spec));
 }
 
 function mountSimulation(data) {
