@@ -73,7 +73,7 @@ def main():
         print("Wiederhergestellt:", restore(args.source, directory, args.confirm_stopped))
     elif args.command == "reset-login":
         print("Bisherigen Passwort-Hash gesichert:", reset_login(config.secrets_folder, args.confirm_stopped))
-        print("App starten und neuen Setup-Code aus dem Container-Protokoll verwenden. Messdaten und Zugangsdaten bleiben erhalten.")
+        print("App starten und den neuen Setup-Code aus data/SETUP-CODE.txt oder dem Container-Protokoll verwenden. Messdaten und Zugangsdaten bleiben erhalten.")
     else:
         source = directory / "kilowatch.sqlite3"
         if not source.exists():

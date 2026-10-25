@@ -15,8 +15,8 @@ services:
     environment:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       DEMO_MODE: ${DEMO_MODE:-false}
-      PUID: ${PUID:-10001}
-      PGID: ${PGID:-10001}
+      PUID: ${PUID:-}
+      PGID: ${PGID:-}
       TZ: Europe/Berlin
     volumes:
       # Messdaten und tägliche Sicherungen im Projektordner (sichtbar und mitgesichert).

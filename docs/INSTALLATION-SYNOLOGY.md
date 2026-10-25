@@ -2,19 +2,19 @@
 
 Voraussetzung: ein Synology-NAS mit installiertem **Container Manager** (DSM 7.2 oder neuer). Unterstützt werden Modelle mit Intel/AMD-CPU (`linux/amd64`) und ARM64-Modelle (`linux/arm64`), sowohl beim Quellbuild als auch beim vorgebauten Image. Ohne weitere Angabe verwendet Docker die Plattform des NAS. Ältere 32-Bit-ARM-Modelle werden nicht unterstützt. Die Anleitung verändert DSM nicht. Auf anderen Docker-Hosts gelten dieselben Compose-Befehle.
 
-## 1. Projektordner, Datenordner und Berechtigung
+## 1. Projektordner und Datenordner
 
-**Diese Reihenfolge einhalten.** Ohne vorab angelegten Ordner `data` mit passender Berechtigung scheitert der erste Start auf Synology: Der Container Manager legt fehlende Ordner nicht zuverlässig selbst an, und Synology-ACLs verweigern einer unbekannten Benutzer-ID den Zugriff, auch wenn der Container den Eigentümer setzt.
+Kurzfassung mit Bildern: [Schnellstart](SCHNELLSTART.md). Dort ist auch der Installer beschrieben, der diesen Abschnitt und Abschnitt 2 automatisch erledigt.
 
-1. **Dateien kopieren.** Im GitHub-Repository **Code → Download ZIP** wählen, entpacken und den Inhalt nach beispielsweise `/volume1/docker/kilowatch` kopieren. Für das fertige Image genügen `compose.yaml`, `.env.example` und der Ordner `tools/`; zum Selbstbauen wird der vollständige Inhalt gebraucht.
-2. **Benutzer wählen, dem die Daten gehören sollen.** Am einfachsten ein eigener DSM-Benutzer, z. B. `kilowatch` (Systemsteuerung → Benutzer und Gruppe → Erstellen; Anmeldung an DSM-Anwendungen darf verweigert werden). Alternativ das eigene Konto. Benutzer- und Gruppen-ID per SSH ermitteln: `id kilowatch` ergibt z. B. `uid=1030 gid=100`.
-3. **Ordner `data` anlegen.** In der File Station unter `docker/kilowatch` den Ordner `data` erstellen.
-4. **Berechtigung setzen.** File Station → `data` → Eigenschaften → Berechtigung → Erstellen: den Benutzer aus Schritt 2 mit **Lesen und Schreiben** eintragen und „Auf diesen Ordner, Unterordner und Dateien anwenden“ wählen.
-5. **`.env` anlegen** mit `PUID` und `PGID` dieses Benutzers. Per SSH im Projektordner erledigt `python3 tools/setup.py` die Schritte 3 und 5 und fragt dabei Port, Plattform und IDs ab; nicht interaktiv: `python3 tools/setup.py --platform auto --puid 1030 --pgid 100`. Ohne SSH `.env.example` als `.env` kopieren (ohne `.txt`) und `PUID=`/`PGID=` ausfüllen.
+1. **Datei holen.** Für das fertige Image genügt `compose.yaml` vom neuesten Release (Releases-Seite des GitHub-Repositorys). Zum Selbstbauen den vollständigen Quellcode über **Code → Download ZIP** holen.
+2. **Projektordner anlegen**, z. B. `/volume1/docker/kilowatch`, und die Datei(en) dorthin kopieren.
+3. **Ordner `data` selbst anlegen** – in der File Station unter `docker/kilowatch`, angemeldet als der Benutzer, dem die Daten gehören sollen (meist das eigene Konto).
+
+**Warum `data` selbst anlegen?** Kilowatch läuft automatisch unter dem Eigentümer dieses Ordners. Wer ihn in der File Station anlegt, ist Eigentümer und hat laut Synology-ACL Zugriff. Legt dagegen der Container den Ordner an, gehört er root, und Kilowatch weicht auf eine interne Benutzer-ID aus, der die ACL den Zugriff verweigert. Dann bricht der Start mit der Meldung „Kilowatch kann nicht in /data schreiben …“ ab: Projekt stoppen, den leeren Ordner `data` löschen, selbst neu anlegen, Projekt starten.
+
+**Optional:** Soll Kilowatch unter einem bestimmten anderen Benutzer laufen (z. B. einem eigenen Konto `kilowatch`), dessen IDs als `PUID`/`PGID` in eine `.env` schreiben (`id kilowatch` per SSH) und diesem Benutzer Lesen/Schreiben auf `data` geben. `python3 tools/setup.py` fragt Port, Plattform und IDs ab und legt `.env` und `data` an.
 
 **Keine Zugangsdaten in Dateien eintragen.** Bridge-, Mail- und App-Passwörter werden nur im Browser eingegeben.
-
-Stimmt die Berechtigung nicht, bricht der Container beim Start mit einer Meldung im Protokoll ab („Kilowatch kann nicht in /data schreiben …“). Dann Schritt 4 und die IDs in der `.env` prüfen und das Projekt neu starten.
 
 ## 2. Projekt starten
 
@@ -31,7 +31,7 @@ Der Container Manager speichert die gewählte Datei im Projektordner immer als `
 
 Danach:
 
-5. Container → Kilowatch → **Protokoll** öffnen. Dort steht beim ersten Start `Ersteinrichtung: Setup-Code …`. Den aktuellen Code lokal ablesen; nicht veröffentlichen.
+5. Den Setup-Code aus `data/SETUP-CODE.txt` (File Station) ablesen; er steht auch im Container-Protokoll (`Ersteinrichtung: Setup-Code …`). Nicht veröffentlichen; die Datei verschwindet nach der Einrichtung.
 6. Im Browser **`http://<NAS-FQDN>:8088`** öffnen. Auch die aktuelle NAS-IP ist möglich. Der NAS-Name muss vom eigenen Heimnetz auflösbar sein.
 
 Falls Container Manager die Konfiguration als `docker-compose.yml` ablegt, den Dateinamen in SSH-Befehlen entsprechend anpassen. Ein Docker-Status `healthy` prüft Webserver und Datenbank, nicht den Empfang der Bridge.
@@ -90,7 +90,7 @@ Beide Varianten verwenden den Ordner `data/` im Projektordner und das Volume `ki
 - App-Limit: 512 MiB RAM; optional Mosquitto 64 MiB, optional Signal 1024 MiB. Kein CPU-Limit: Der DSM-Kernel unterstützt keine CFS-Quota (`cpus` bricht den Containerstart ab). Kein eigener Logtreiber, damit das Protokoll im Container Manager sichtbar bleibt.
 - Mehrere GB freie Reserve vorsehen. Sieben vollständige Datenbanksicherungen können deutlich mehr Platz als die Datenbank allein benötigen. Freien Speicher und tatsächliches Wachstum überwachen.
 - Der Projektordner muss auf einem lokalen NAS-Volume liegen (z. B. `/volume1/docker`). Keine aktive Datenbank auf SMB/NFS verlagern; Sicherungen dürfen dort liegen.
-- `data/` vor dem ersten Start anlegen und dem Benutzer aus `PUID`/`PGID` Schreibrecht geben (Abschnitt 1). [Speicherorte und Sicherung](BETRIEB.md#speicherorte).
+- `data/` vor dem ersten Start selbst anlegen (Abschnitt 1). [Speicherorte und Sicherung](BETRIEB.md#speicherorte).
 
 Die Anwendung nutzt vorhandene Geräte und verändert keine Bridge-Parameter. Aktuelle Firmware liefert Daten unter `/node_data.json`, ältere unter `/data.json`; Kilowatch probiert beide Pfade automatisch.
 

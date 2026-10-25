@@ -12,10 +12,15 @@ def test_first_start_requires_own_password_and_has_no_personal_defaults(tmp_path
     with TestClient(app, headers={"X-Kilowatch-Request":"1"}) as client:
         assert client.get("/healthz").status_code==200
         assert client.get("/api/setup/status").json()=={"needs_setup":True}
+        # Setup-Code ohne Container-Protokoll: als private Datei im Datenordner.
+        code_file=tmp_path/"SETUP-CODE.txt"
+        assert app.state.auth.setup_code in code_file.read_text()
+        assert code_file.stat().st_mode & 0o077 == 0
         assert "setup_code" not in client.get("/api/setup/status").text
         assert client.get("/api/settings").status_code==401
         assert client.post("/api/setup",json={"setup_code":"wrong","password":"own-synthetic-password"}).status_code==400
         assert client.post("/api/setup",json={"setup_code":app.state.auth.setup_code,"password":"own-synthetic-password"}).status_code==200
+        assert not code_file.exists()
         assert client.post("/api/setup",json={"setup_code":"replay","password":"own-synthetic-password"}).status_code==400
         assert client.post("/api/login",json={"password":"own-synthetic-password"}).status_code==200
         settings=client.get("/api/settings").json()
@@ -78,3 +83,11 @@ def test_secrets_are_kept_outside_the_data_folder(tmp_path):
     assert not data_files & {"secrets.key","secrets.enc","app-auth.json"}
     assert {"secrets.key","secrets.enc","app-auth.json"} <= {p.name for p in (tmp_path/"secrets/live").iterdir()}
     app.state.store.close()
+
+
+def test_stale_setup_code_file_is_removed_when_already_configured(tmp_path):
+    app=create_app(Config(tmp_path, testing=True))
+    app.state.auth.initialize("own-synthetic-password", app.state.auth.setup_code)
+    (tmp_path/"SETUP-CODE.txt").write_text("old")
+    with TestClient(app):
+        assert not (tmp_path/"SETUP-CODE.txt").exists()

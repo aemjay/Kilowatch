@@ -36,7 +36,7 @@ Docker-Volume kilowatch-secrets  # nicht im Projektordner
 
 **Warum getrennt?** Läge der Schlüssel neben den verschlüsselten Passwörtern im gesicherten Ordner, enthielte jede Sicherung beides zusammen, und die Verschlüsselung wäre wertlos. So landen in Hyper Backup nur Messdaten, Einstellungen und Sicherungen, aber keine Geheimnisse. Das Volume liegt unter `@docker` und wird von einer Sicherung des Ordners `docker` nicht erfasst.
 
-Die Dateien in `data/` gehören dem DSM-Benutzer aus `PUID`/`PGID` in der `.env` (ohne Angabe der internen ID 10001, die auf Synology wegen der ACLs meist nicht schreiben darf). Dieser Benutzer braucht in der File Station Lese-/Schreibrecht auf `data`. Beim Start passt der Container die Eigentümer an, prüft das Schreibrecht und läuft danach ohne Root-Rechte.
+Kilowatch läuft unter dem Eigentümer des Ordners `data` (wer ihn in der File Station angelegt hat) oder, falls gesetzt, unter `PUID`/`PGID` aus der `.env`. Beim Start passt der Container die Eigentümer an, prüft das Schreibrecht und läuft danach ohne Root-Rechte.
 
 Passwörter und Token werden atomar mit Dateirechten 0600 geschrieben. Wer als NAS-Administrator auf das Volume zugreifen kann, kann die Geheimnisse entschlüsseln; für Schutz bei Datenträgerverlust zusätzlich NAS-Verschlüsselung verwenden. Die API liefert gespeicherte Passwörter und Schlüssel nicht zurück.
 
@@ -79,7 +79,7 @@ docker compose -f compose.yaml up -d --no-build kilowatch
 docker compose -f compose.yaml logs --tail=50 kilowatch
 ```
 
-Danach den neuen Setup-Code aus dem Protokoll verwenden und ein neues App-Passwort setzen. Messdaten und verschlüsselte Bridge-/SMTP-Zugänge bleiben erhalten. Der alte Passwort-Hash wird lokal als `app-auth.before-reset-…json` gesichert. Eine versehentliche Rücksetzung kann bei gestoppter App durch Zurückkopieren dieser Datei nach `app-auth.json` rückgängig gemacht werden.
+Danach den neuen Setup-Code aus `data/SETUP-CODE.txt` oder dem Protokoll verwenden und ein neues App-Passwort setzen. Messdaten und verschlüsselte Bridge-/SMTP-Zugänge bleiben erhalten. Der alte Passwort-Hash wird lokal als `app-auth.before-reset-…json` gesichert. Eine versehentliche Rücksetzung kann bei gestoppter App durch Zurückkopieren dieser Datei nach `app-auth.json` rückgängig gemacht werden.
 
 ## Update
 

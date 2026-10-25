@@ -111,3 +111,12 @@ def test_containers_have_stable_names_and_default_file_is_prebuilt():
         assert service["container_name"]==name, file
     # Der Container Manager speichert die gewählte Datei als compose.yaml: Standard ist das fertige Image.
     assert "build" not in yaml.safe_load((ROOT/"compose.yaml").read_text())["services"]["kilowatch"]
+
+
+def test_user_is_detected_automatically_unless_set():
+    for name in ["compose.yaml","compose.build.yaml"]:
+        environment=yaml.safe_load((ROOT/name).read_text())["services"]["kilowatch"]["environment"]
+        assert environment["PUID"]=="${PUID:-}" and environment["PGID"]=="${PGID:-}"
+    entrypoint=(ROOT/"docker-entrypoint.sh").read_text()
+    assert "stat -c %u" in entrypoint and "SCHNELLSTART" in entrypoint
+    assert (ROOT/"tools/install.sh").is_file() and (ROOT/"docs/SCHNELLSTART.md").is_file()
