@@ -16,6 +16,12 @@ Unter **Einstellungen** lassen sich Bridge-FQDN/IP, Benutzer und Passwort sowie 
 
 Es sind keine persönlichen Daten oder Passwörter im Image enthalten. Die Standardeinrichtung benötigt keine Zugangsdaten in `.env`.
 
+## Abfrageintervall und Auflösung
+
+Das **Abfrageintervall** (Einstellungen → Erweitert, 2 bis 60 Sekunden) bestimmt, wie oft Kilowatch die Bridge abfragt. Die Live-Anzeige aktualisiert sich im selben Takt. Neue Werte gibt es aber nur so oft, wie der Zähler über den Pulse Telegramme liefert; fragt Kilowatch öfter, kommt mehrfach derselbe Wert und die Anzeige meldet nach 30 Sekunden ein unverändertes Telegramm.
+
+Gespeichert werden alle einzelnen Messwerte (Aufbewahrung „Einzelwerte“, Standard 90 Tage), Minutenwerte (Standard drei Jahre) und dauerhaft Viertelstundenwerte. Die Ansicht **1 Std.** zeigt die einzelnen Messwerte, **6 Std.** und einzelne Tage zeigen Minutenmittel, längere Zeiträume Viertelstunden, Tage oder Monate.
+
 ## Speicherorte
 
 Messdaten und Zugangsdaten liegen bewusst an zwei Orten:

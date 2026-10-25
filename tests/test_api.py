@@ -108,3 +108,29 @@ def test_bridge_test_never_sends_stored_password_to_new_host(authenticated):
     assert "erneut eingeben" in response.json()["detail"]
     response=authenticated.post("/api/bridge/test",json={"bridge_user":"another-user"})
     assert response.status_code==400
+
+
+def test_hour_views_show_individual_readings_and_compare_with_the_hour_before(authenticated):
+    now=datetime.now(timezone.utc).timestamp()
+    for index,watts in enumerate([300,320,2500,310]):
+        authenticated.app_store.ingest(Reading(watts,100+index*.001,0,"SYNTHETIC"),now-40+index*10)
+    data=authenticated.get("/api/overview?hours=1").json()
+    series=data["series"]
+    assert series["power_resolution_seconds"]==0
+    assert [round(p["power_w"]) for p in series["power"]][-4:]==[300,320,2500,310]
+    start,end=data["summary"]["start"],data["summary"]["end"]
+    # Beginn auf die Viertelstunde gerundet, damit die Energie vollständig im Fenster liegt.
+    assert start%900==0 and 3600<=end-start<3600+900
+    assert data["previous"] is None or data["previous"]["end"]<=start
+    # Sechs Stunden: Minutenwerte, Kalendertage unverändert.
+    assert authenticated.get("/api/overview?hours=6").json()["series"]["power_resolution_seconds"]==60
+    assert authenticated.get("/api/overview").json()["series"]["power_resolution_seconds"] in (60,900)
+    for bad in ("0","49"):
+        assert authenticated.get("/api/overview?hours="+bad).status_code==400
+    assert authenticated.get("/api/analysis?hours=6").status_code==200
+
+
+def test_overview_offers_the_monthly_target_as_daily_reference(authenticated):
+    assert authenticated.get("/api/overview").json()["targets"]["daily_kwh"] is None
+    assert authenticated.put("/api/budget",json={"monthly_eur":None,"monthly_kwh":365.25,"abschlag_eur":None}).status_code==200
+    assert authenticated.get("/api/overview").json()["targets"]["daily_kwh"]==pytest.approx(12)

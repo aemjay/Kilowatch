@@ -8,7 +8,7 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <script src="/theme.js"></script>
-  <script src="/i18n.js" defer></script>
+  <script src="/i18n.js" defer></script><script src="/overlays.js" defer></script>
   <script src="/configure.js" defer></script>
   <script src="/extras.js" defer></script>
   <script src="/insights.js" defer></script>
@@ -41,7 +41,7 @@
       <div class="content">
         <div class="page-heading"><div><h1 id="page-title"><bdi data-i18n>Übersicht</bdi></h1></div><div class="date-display"><span>◷</span><div><b id="today-label"></b></div></div></div>
         <div id="connection-alert" class="notice" hidden></div>
-        <div id="range-bar" class="range-bar"><div class="segments" aria-label="Zeitraum" data-i18n-aria-label="Zeitraum"><button data-range="today" class="selected"><bdi data-i18n>Heute</bdi></button><button data-range="yesterday"><bdi data-i18n>Gestern</bdi></button><button data-range="week"><bdi data-i18n>7 Tage</bdi></button><button data-range="month"><bdi data-i18n>Monat</bdi></button><button data-range="year"><bdi data-i18n>Jahr</bdi></button></div><form id="range-form" class="date-range"><label class="sr-only" for="range-start"><bdi data-i18n>Beginn</bdi></label><input type="date" id="range-start" required><span>—</span><label class="sr-only" for="range-end"><bdi data-i18n>Ende einschließlich</bdi></label><input type="date" id="range-end" required><button class="subtle" type="submit"><bdi data-i18n>Anzeigen</bdi></button></form></div>
+        <div id="range-bar" class="range-bar"><div class="segments" aria-label="Zeitraum" data-i18n-aria-label="Zeitraum"><button data-range="hours1"><bdi data-i18n>1 Std.</bdi></button><button data-range="hours6"><bdi data-i18n>6 Std.</bdi></button><button data-range="today" class="selected"><bdi data-i18n>Heute</bdi></button><button data-range="yesterday"><bdi data-i18n>Gestern</bdi></button><button data-range="week"><bdi data-i18n>7 Tage</bdi></button><button data-range="month"><bdi data-i18n>Monat</bdi></button><button data-range="year"><bdi data-i18n>Jahr</bdi></button></div><form id="range-form" class="date-range"><label class="sr-only" for="range-start"><bdi data-i18n>Beginn</bdi></label><input type="date" id="range-start" required><span>—</span><label class="sr-only" for="range-end"><bdi data-i18n>Ende einschließlich</bdi></label><input type="date" id="range-end" required><button class="subtle" type="submit"><bdi data-i18n>Anzeigen</bdi></button></form></div>
         <section id="page-dashboard" class="page"></section>
         <section id="page-history" class="page" hidden></section>
         <section id="page-analysis" class="page" hidden></section>

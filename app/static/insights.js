@@ -22,7 +22,8 @@ async function mountAnalysisInsights() {
   const bars=trend.points.map(p=>({ts:p.start,baseline_w:p.baseline_w,import_s:p.quarters*900}));
   const stats=`<div class="stats-list">${stat(trend.group==='week'?t('Letzte Woche'):t('Letzter Monat'),last?unit(last.baseline_w,'W',0):t('Zu wenig Nachtdaten'))}${stat(t('Grundlast pro Jahr'),last?unit(last.annual_kwh,'kWh',0):'—')}${stat(t('Kosten der Grundlast pro Jahr'),last&&last.annual_eur!=null?unit(last.annual_eur,'€',0):t('Tarif fehlt'))}${stat(t('Veränderung (2. gegen 1. Hälfte)'),trend.change_w==null?t('Zu wenige Punkte'):unit(trend.change_w,'W',0))}</div>`;
   const note=`<p class="copy-footnote">${esc(t(trend.method))} ${esc(t('Punkte mit weniger als {count} erfassten Nachtviertelstunden bleiben leer. Nächte mit Einspeisung oder Batterieentladung zählen nicht als Grundlast.',{count:trend.min_quarters}))}</p>`;
-  target.insertAdjacentHTML('beforeend',panel(t('Grundlast-Entwicklung'),trend.group==='week'?t('Nachtgrundlast je Woche'):t('Nachtgrundlast je Monat'),barChart(bars,'baseline_w','W')+stats+note));
+  target.insertAdjacentHTML('beforeend',panel(t('Grundlast-Entwicklung'),trend.group==='week'?t('Nachtgrundlast je Woche'):t('Nachtgrundlast je Monat'),baselineChart(trend,bars)+stats+note));
+  mountOverlayToggles(target,()=>loadPage());
   const feed=data.feedin;
   if(feed.total_kwh){
     target.insertAdjacentHTML('beforeend',panel(t('Einspeisung'),t('Mittlere Einspeiseleistung nach Tageszeit'),hourChart(feed.profile,'average_kw','kW')+`<div class="stats-list">${stat(t('Eingespeist im Zeitraum'),unit(feed.total_kwh,'kWh',2))}</div><p class="copy-footnote">${t('Gemessen wird nur der Überschuss am Netzanschluss. Eigenverbrauch und Autarkie lassen sich daraus nicht bestimmen.')}</p>`));
@@ -47,13 +48,20 @@ function simulationResult(r) {
   return `<div class="divider"></div><div class="stats-list">${lines.join('')}</div>${difference}${spotNote}<p class="copy-footnote">${t('Annahme: gleicher Verbrauch zur gleichen Zeit. Eine Verhaltensänderung durch den anderen Tarif ist nicht berücksichtigt.')}</p>`;
 }
 
+// Grundlast-Entwicklung mit gleitendem Ø und Min/Max über vier Wochen bzw. drei Monate.
+function baselineChart(trend, bars) {
+  const week=trend.group==='week';
+  const spec={chart:'baseline-'+trend.group, data:bars, field:'baseline_w', xField:'ts', byCount:true, window:week?4:3, windowLabel:week?t('4 Wochen'):t('3 Monate')};
+  return overlayToggles(spec)+barChart(bars,'baseline_w','W',buildOverlays(spec));
+}
+
 function mountSimulation(data) {
   const slot=$('#simulation-slot');if(!slot)return;
   const history=data.spot_history||{count:0};
   const historyText=history.count?esc(t('{count} Börsenpreis-Intervalle gespeichert · {start} – {end}',{count:history.count,start:localDate(history.start),end:localDate(history.end)})):t('Noch keine Börsenpreise gespeichert.');
   const form=`<form id="simulation-form"><div class="form-grid"><label>${t('Tarifart')}<select name="mode"><option value="fixed">${t('Festpreis')}</option><option value="dual">HT/NT</option>${CURRENCY===CURRENCIES.EUR?`<option value="spot">${t('Dynamisch (Börsenpreis + Aufschlag)')}</option>`:''}</select></label><label data-sim="fixed dual">${t('Arbeitspreis bzw. HT brutto (ct/kWh)')}<input name="ct_kwh" type="number" step=".001" value="30" required></label><label data-sim="dual">${t('NT brutto (ct/kWh)')}<input name="low_ct" type="number" step=".001" value="22"></label><label data-sim="dual">${t('NT von')}<input name="low_start" type="time" step="900" value="22:00"></label><label data-sim="dual">${t('NT bis')}<input name="low_end" type="time" step="900" value="06:00"></label><label data-sim="dual">${t('Wochenende NT')}<select name="weekend_low"><option value="false">${t('Nein')}</option><option value="true">${t('Ja')}</option></select></label><label data-sim="spot">${t('Aufschlag netto (ct/kWh)')}<input name="markup_ct" type="number" step=".01" value="17"><small>${t('Netzentgelt, Umlagen, Steuern und Marge des Anbieters')}</small></label><label data-sim="spot">${t('Mehrwertsteuer (%)')}<input name="vat_percent" type="number" step=".1" min="0" max="30" value="19"></label><label>${t('Grundpreis brutto (€/Monat)')}<input name="base_month" type="number" step=".01" min="0" value="12" required></label><label>${t('Einspeisevergütung (ct/kWh)')}<input name="feedin_ct" type="number" step=".001" value="0" required></label></div><div class="form-actions"><button type="submit" class="primary">${t('Für den Zeitraum berechnen')}</button></div></form>`;
   const spot=`<div data-sim="spot"><p class="muted">${historyText}</p><div class="form-actions"><button class="secondary" id="spot-history" type="button"${settings.demo?' disabled':''}>${t('Börsenpreise für den Zeitraum nachladen')}</button></div><p class="copy-footnote">${t('Internetabruf bei aWATTar DE, höchstens 62 Tage je Abruf. Es werden keine Messdaten übertragen.')}</p></div>`;
-  slot.innerHTML=panel(t('Tarif simulieren'),t('Derselbe Lastgang mit einem anderen Tarif · ')+periodText(),form+spot+'<div id="simulation-result"></div>');
+  slot.innerHTML=panel(t('Tarif simulieren'),t('Derselbe Lastgang mit einem anderen Tarif · ')+datesText(),form+spot+'<div id="simulation-result"></div>');
   const element=$('#simulation-form'),mode=element.elements.mode;
   const change=()=>{for(const node of slot.querySelectorAll('[data-sim]')){node.hidden=!node.dataset.sim.split(' ').includes(mode.value);for(const input of node.querySelectorAll('input,select'))input.disabled=node.hidden;}};
   mode.addEventListener('change',change);change();

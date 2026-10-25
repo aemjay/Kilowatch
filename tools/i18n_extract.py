@@ -154,7 +154,7 @@ def js_literals(code):
     return found
 
 
-MARKUP = re.compile(r'="|[<>&]|/api/|hsl\(|prefers-color|#page|#settings|start,end')
+MARKUP = re.compile(r'="|[<>&]|/api/|hsl\(|prefers-color|#page|#settings|start,end|:not\(')
 
 
 def untranslated():

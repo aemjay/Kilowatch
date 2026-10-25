@@ -19,10 +19,6 @@ def catalog(language):
     return json.loads((ROOT / "app/static/i18n" / f"{language}.json").read_text(encoding="utf-8"))
 
 
-def forms(value):
-    return list(value.values()) if isinstance(value, dict) else [value]
-
-
 def test_every_language_has_a_catalog():
     assert set(LANGUAGES) == {"de", *extract.LANGUAGES}
 
@@ -39,9 +35,11 @@ def test_translations_keep_placeholders_units_and_plain_text(language):
     for key, value in catalog(language).items():
         if isinstance(value, dict):
             assert "{count}" in key and set(value) <= {"zero", "one", "two", "few", "many", "other"} and "other" in value, key
-        for text in forms(value):
+        for form, text in (value.items() if isinstance(value, dict) else [("other", value)]):
             assert isinstance(text, str) and text.strip(), key
-            assert set(PLACEHOLDER.findall(text)) == set(PLACEHOLDER.findall(key)), (key, text)
+            # Die Einzahl darf die Zahl weglassen ("Last hour"); alle anderen Formen behalten alle Platzhalter.
+            expected, found = set(PLACEHOLDER.findall(key)), set(PLACEHOLDER.findall(text))
+            assert found == expected if form != "one" else found <= expected, (key, text)
             assert not re.search(r"[<>]", text), (key, text)
             # Währungen tauscht die Oberfläche zur Laufzeit über € und ct aus.
             # Ausnahme: Texte über die Börsenpreisquelle, die immer in Euro liefert.
