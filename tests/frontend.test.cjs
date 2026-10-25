@@ -12,12 +12,10 @@ const settings={name:'Synthetic home',bridge_host:'',bridge_user:'admin',passwor
   setup_required:true,demo:false,version:'1.0.0',node_id:1,enabled:true,poll_seconds:5,
   high_load_w:3000,raw_retention_days:90,minute_retention_days:1095,max_gap_seconds:90,max_power_w:100000};
 const notification={settings:{enabled:false,email_enabled:false,smtp_host:'',smtp_port:587,
-  smtp_security:'starttls',smtp_user:'',smtp_from:'',email_to:[],signal_enabled:false,
-  signal_url:'',signal_number:'',signal_to:[],quiet_enabled:false,quiet_start:'22:00',
+  smtp_security:'starttls',smtp_user:'',smtp_from:'',smtp_from_name:'Kilowatch',subject_code:'',email_to:[],quiet_enabled:false,quiet_start:'22:00',
   quiet_end:'07:00',recovery:true,cooldown_minutes:60,offline_enabled:true,offline_seconds:120,
   load_enabled:false,load_w:3000,load_minutes:10,daily_kwh:0,battery_enabled:true,battery_v:2.7,
-  disk_enabled:true,disk_free_mb:512},history:[],last_error:'',smtp_password_configured:false,
-  signal_token_configured:false};
+  disk_enabled:true,disk_free_mb:512},history:[],last_error:'',smtp_password_configured:false};
 
 async function until(condition) {
   for(let i=0;i<50;i++){if(condition())return;await new Promise(resolve=>setImmediate(resolve));}
@@ -28,6 +26,7 @@ async function harness(options={}) {
   const errors=[],calls=[];
   let saved=structuredClone({...settings,...options.settings});
   let notes=structuredClone(notification), needsSetup=!!options.needsSetup;
+  let priceFeed={source:'',zone:'DE-LU',markup_ct:0,vat_percent:0,tibber_home:'',tibber_token_configured:false,zones:['DE-LU','AT','NL','BE','FR'],spot_source:'Energy-Charts',status:{fetched_at:null,error:'',homes:[]}};
   let tariffs=structuredClone(options.tariffs||[]),market={rows:[],fetched_at:null,error:''};
   let budget={settings:{monthly_eur:null,monthly_kwh:null,abschlag_eur:null},month:{observed_eur:3,observed_kwh:10,forecast_eur:null,forecast_kwh:null,forecast_reason:'Zu wenig Daten'},annual:{available:false,reason:'Mindestens 60 vollständig erfasste Tage erforderlich.'}};
   const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error));
@@ -57,16 +56,16 @@ async function harness(options={}) {
     }else if(path==='/api/settings')data=saved;
     else if(path==='/api/live')data={collector:{state:'setup'},reading:null,stale:true};
     else if(path==='/api/notifications'&&config.method==='PUT'){
-      const {smtp_password,signal_token,...plain}=body;notes.settings=plain;
+      const {smtp_password,...plain}=body;notes.settings=plain;
       if(smtp_password)notes.smtp_password_configured=true;
-      if(signal_token)notes.signal_token_configured=true;
     }else if(path==='/api/notifications')data=notes;
     else if(path==='/api/discovery/network')data={suggestions:[{network:'192.168.1.0/24',reason:'Synthetic network'}]};
     else if(path==='/api/discovery/scan')data={network:body.network,checked:254,devices:[{ip:'192.168.1.10',host:'bridge.fritz.box',fqdn:'bridge.fritz.box'}]};
     else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null,household:options.household??null},co2:options.co2??null,
       series:{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:i*60,power_w:i===30?4000:300+i,seconds:60}))}};
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
-    else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market};
+    else if(path==='/api/prices/source'){priceFeed={...priceFeed,...body,tibber_token_configured:!!body.tibber_token||priceFeed.tibber_token_configured};delete priceFeed.tibber_token;data=priceFeed;}
+    else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market,price_feed:priceFeed};
     else if(path==='/api/market/refresh'){market={rows:[{start:1800,end:5400,ct_kwh:-5}],fetched_at:2000000000,error:''};data=market;}
     else if(path==='/api/budget'&&config.method==='PUT'){budget.settings=body;}
     else if(path==='/api/budget')data={...budget,reference:options.household??null};
@@ -156,17 +155,19 @@ test('forget bridge password pauses acquisition without erasing address',async t
   assert.ok(h.calls.some(c=>c.path==='/api/credentials/bridge'&&c.method==='DELETE'));
 });
 
-test('Signal pairing saves gateway and requests a protected local QR image',async t=>{
+test('sender name and subject code are saved; no Signal fields remain',async t=>{
   const h=await harness({page:'notifications',settings:{setup_required:false}});
   t.after(()=>h.dom.window.close());const {w}=h;
-  input(w,'notification-form','signal_url','http://signal-api:8080');
-  w.document.querySelector('#signal-qr-button').click();
-  await until(()=>!!w.document.querySelector('#signal-qr img'));
-  const request=h.calls.find(c=>c.path==='/api/notifications/signal/qr');
-  assert.equal(request.method,'POST');
-  assert.equal(request.headers['X-Kilowatch-Request'],'1');
-  assert.equal(w.document.querySelector('#signal-qr').hidden,false);
-  assert.match(w.document.querySelector('#signal-qr img').alt,/QR-Code/);
+  assert.equal(w.document.querySelector('[name="smtp_from_name"]').value,'Kilowatch');
+  assert.equal(w.document.querySelector('[name^="signal"]'),null);
+  input(w,'notification-form','smtp_from_name','Stromzähler');
+  input(w,'notification-form','subject_code','Kuckuck-17');
+  w.document.querySelector('#notification-form button[type="submit"]').click();
+  await until(()=>h.calls.some(c=>c.path==='/api/notifications'&&c.method==='PUT'));
+  const update=h.calls.find(c=>c.path==='/api/notifications'&&c.method==='PUT');
+  assert.equal(update.body.smtp_from_name,'Stromzähler');
+  assert.equal(update.body.subject_code,'Kuckuck-17');
+  assert.ok(!Object.keys(update.body).some(key=>key.includes('signal')));
   assert.deepEqual(h.errors,[]);
 });
 
@@ -180,6 +181,24 @@ test('subnet discovery works before credentials and adopts discovered FQDN',asyn
   w.document.querySelector('[data-use-device]').click();
   assert.equal(w.document.querySelector('[name="bridge_host"]').value,'bridge.fritz.box');
   assert.equal(w.document.querySelector('[name="bridge_password"]').value,'');
+  assert.deepEqual(h.errors,[]);
+});
+
+test('price source shows only the fields of the chosen source and never echoes the token',async t=>{
+  const h=await harness({page:'costs',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#price-source-form'));
+  const form=w.document.querySelector('#price-source-form');
+  assert.equal(form.elements.tibber_token.closest('label').hidden,true);
+  form.elements.source.value='spot';form.elements.source.dispatchEvent(new w.Event('change'));
+  assert.equal(form.elements.zone.disabled,false);assert.equal(form.elements.tibber_token.disabled,true);
+  form.elements.source.value='tibber';form.elements.source.dispatchEvent(new w.Event('change'));
+  input(w,'price-source-form','tibber_token','synthetic-token');
+  submit(w,'price-source-form');
+  await until(()=>h.calls.some(c=>c.path==='/api/prices/source'));
+  const request=h.calls.find(c=>c.path==='/api/prices/source');
+  assert.equal(request.body.source,'tibber');assert.equal(request.body.tibber_token,'synthetic-token');assert.equal(request.body.markup_ct,0);
+  await until(()=>!!w.document.querySelector('#tibber-forget'));
+  assert.equal(w.document.querySelector('#price-source-form').elements.tibber_token.value,'');
   assert.deepEqual(h.errors,[]);
 });
 
@@ -292,16 +311,21 @@ test('login screen offers all languages and switches immediately',async t=>{
   assert.deepEqual(h.errors,[]);
 });
 
-test('hour views request the last hours and calendar dates switch back',async t=>{
+test('minute and hour views request their window and calendar dates switch back',async t=>{
   const h=await harness({page:'costs',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
   w.document.querySelector('[data-range="hours1"]').click();
   await until(()=>h.calls.some(c=>c.path==='/api/overview?hours=1'));
   assert.ok(w.document.querySelector('[data-range="hours1"]').classList.contains('selected'));
   w.document.querySelector('[data-range="hours6"]').click();
   await until(()=>h.calls.some(c=>c.path==='/api/overview?hours=6'));
+  w.document.querySelector('[data-range="minutes15"]').click();
+  await until(()=>h.calls.some(c=>c.path==='/api/overview?minutes=15'));
+  w.document.querySelector('[data-range="minutes5"]').click();
+  await until(()=>h.calls.some(c=>c.path==='/api/overview?minutes=5'));
+  assert.ok(w.document.querySelector('[data-range="minutes5"]').classList.contains('selected'));
   submit(w,'range-form');
   await until(()=>h.calls.filter(c=>c.path.startsWith('/api/overview?start=')).length>=2);
-  assert.equal(w.document.querySelector('[data-range="hours6"]').classList.contains('selected'),false);
+  assert.equal(w.document.querySelector('[data-range="minutes5"]').classList.contains('selected'),false);
   assert.deepEqual(h.errors,[]);
 });
 

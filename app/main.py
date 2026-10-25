@@ -24,11 +24,11 @@ from .config import Config
 from .storage import Store
 from .security import Auth, Vault, private_write
 from .notifications import NotificationSettings, Notifications
-from .network import local_request
 from .discovery import Discovery, suggestions
 from .market import Market
 from .updates import Updates
 from .grid import COUNTRIES, Grid
+from . import prices as price_feed
 from . import insights
 from .i18n import CURRENCIES, LANGUAGES, UserError, translate_error
 
@@ -88,9 +88,7 @@ class PasswordChange(StrictModel):
 
 class NotificationUpdate(NotificationSettings):
     smtp_password: str | None = Field(default=None, max_length=500)
-    signal_token: str | None = Field(default=None, max_length=1000)
     clear_smtp_password: bool = False
-    clear_signal_token: bool = False
 
 
 class SettingsUpdate(StrictModel):
@@ -186,6 +184,37 @@ class Event(StrictModel):
     end_date: date
     title: str = Field(min_length=1, max_length=120)
     note: str = Field(default="", max_length=2000)
+
+
+class PriceSource(StrictModel):
+    source: str
+    zone: str = "DE-LU"
+    markup_ct: float = Field(default=0, ge=-100, le=200)
+    vat_percent: float = Field(default=0, ge=0, le=50)
+    tibber_home: str = Field(default="", max_length=80)
+    tibber_token: str | None = Field(default=None, max_length=200)
+    clear_tibber_token: bool = False
+
+    @field_validator("source")
+    @classmethod
+    def known_source(cls, value):
+        if value not in price_feed.SOURCES:
+            raise ValueError("Preisquelle muss leer, tibber oder spot sein.")
+        return value
+
+    @field_validator("zone")
+    @classmethod
+    def known_zone(cls, value):
+        if value not in price_feed.ZONES:
+            raise ValueError("Unbekannte Gebotszone.")
+        return value
+
+    @field_validator("tibber_token")
+    @classmethod
+    def token_text(cls, value):
+        if value is not None and (any(ord(c) < 33 for c in value)):
+            raise ValueError("Steuer- und Leerzeichen sind nicht erlaubt.")
+        return value
 
 
 class PriceImport(StrictModel):
@@ -294,10 +323,14 @@ def create_app(config=None):
 
     collector = Collector(store, get_password, config.demo)
     notifier = Notifications(store, vault, collector, config.demo)
+    if vault.get("signal_token", None) is not None:
+        # Reste des in 1.2 entfernten Signal-Kanals.
+        vault.update({"signal_token": None})
     discovery = Discovery()
     market = Market(store, config.demo)
     updates = Updates(store, config.update_repository, config.demo)
     grid = Grid(store, config.demo)
+    feed = price_feed.PriceFeed(store, vault, config.demo)
     sessions, attempts = {}, {}
     attempt_lock = threading.Lock()
     # Setup-Code zusätzlich als Datei im Datenordner, damit er ohne Container-Protokoll in der
@@ -352,7 +385,7 @@ def create_app(config=None):
             from .demo import seed
             await asyncio.to_thread(seed, store)
         tasks = [asyncio.create_task(collector.run()), asyncio.create_task(notifier.run()),
-                 asyncio.create_task(updates.run()), asyncio.create_task(grid.run())] if not config.testing else []
+                 asyncio.create_task(updates.run()), asyncio.create_task(grid.run()), asyncio.create_task(feed.run())] if not config.testing else []
         yield
         for task in tasks:
             task.cancel()
@@ -369,6 +402,7 @@ def create_app(config=None):
     app.state.auth, app.state.vault, app.state.notifier = auth, vault, notifier
     app.state.updates = updates
     app.state.grid = grid
+    app.state.feed = feed
 
     def language(request):
         """Sprache der Anfrage (Kopfzeile der Oberfläche), sonst die gespeicherte Einstellung."""
@@ -549,33 +583,25 @@ def create_app(config=None):
     def notification_settings():
         return {"settings": notifier.config().model_dump(),
                 "smtp_password_configured": bool(vault.get("smtp_password")),
-                "signal_token_configured": bool(vault.get("signal_token")),
                 "last_error": notifier.last_error,
                 "history": store.rows("SELECT id,rule_key,kind,channel,subject,status,attempts,created,next_try,last_error FROM notifications ORDER BY id DESC LIMIT 100")}
 
     @app.put("/api/notifications")
     async def save_notifications(data: NotificationUpdate):
-        private = {"smtp_password", "signal_token", "clear_smtp_password", "clear_signal_token"}
+        private = {"smtp_password", "clear_smtp_password"}
         updated = NotificationSettings(**data.model_dump(exclude=private))
         # Vor dem Speichern von Geheimnissen prüfen; save() prüft erneut mit derselben Logik.
         notifier.validate(updated)
-        # Gespeicherte Geheimnisse gehören zu ihrem Ziel und gehen nie an ein geändertes.
+        # Das gespeicherte Passwort gehört zu seinem Server und geht nie an einen geänderten.
         saved = notifier.config()
-        targets = {"smtp_password": ("smtp_security", "smtp_host", "smtp_port", "smtp_user"), "signal_token": ("signal_url",)}
-        for field, keys in targets.items():
-            moved = any(str(getattr(saved, key)).lower() != str(getattr(updated, key)).lower() for key in keys)
-            if moved and vault.get(field) and not getattr(data, field) and not getattr(data, "clear_" + field):
-                raise ValueError("Für einen geänderten SMTP-Server das SMTP-Passwort erneut eingeben oder entfernen." if field == "smtp_password"
-                                 else "Für eine geänderte Gateway-URL den Gateway-Token erneut eingeben oder entfernen.")
-        values = {}
-        for field in ("smtp_password", "signal_token"):
-            value = getattr(data, field)
-            if getattr(data, "clear_" + field):
-                values[field] = None
-            elif value:
-                values[field] = value
-        if values:
-            vault.update(values)
+        moved = any(str(getattr(saved, key)).lower() != str(getattr(updated, key)).lower()
+                    for key in ("smtp_security", "smtp_host", "smtp_port", "smtp_user"))
+        if moved and vault.get("smtp_password") and not data.smtp_password and not data.clear_smtp_password:
+            raise ValueError("Für einen geänderten SMTP-Server das SMTP-Passwort erneut eingeben oder entfernen.")
+        if data.clear_smtp_password:
+            vault.update({"smtp_password": None})
+        elif data.smtp_password:
+            vault.update({"smtp_password": data.smtp_password})
         notifier.save(updated)
         return {"ok": True}
 
@@ -583,26 +609,16 @@ def create_app(config=None):
     async def test_notifications(channel: str):
         return await notifier.test(channel)
 
-    @app.post("/api/notifications/signal/qr")
-    async def signal_qr():
-        if config.demo:
-            raise ValueError("Signal-Kopplung ist im Demo-Modus ausgeschaltet.")
-        saved = notifier.config()
-        if not saved.signal_url:
-            raise ValueError("Zuerst die lokale Signal-Gateway-URL speichern.")
-        status, body, kind = await local_request(saved.signal_url, "/v1/qrcodelink?device_name=Kilowatch", token=vault.get("signal_token"), max_bytes=1024*1024)
-        if status != 200 or not body.startswith(b"\x89PNG\r\n\x1a\n"):
-            raise ValueError("Gateway liefert keinen Kopplungs-QR-Code als PNG. Erreichbarkeit und Gateway-Modus prüfen.")
-        return Response(body, media_type="image/png", headers={"Cache-Control": "no-store"})
-
-    def range_for(start, end, hours=None):
-        return period(start, end, store.settings()["timezone"], time.time(), hours)
+    def range_for(start, end, hours=None, minutes=None):
+        return period(start, end, store.settings()["timezone"], time.time(), hours, minutes)
 
     @app.get("/api/overview")
-    def overview(start: str | None = None, end: str | None = None, hours: int | None = None):
-        s, e = range_for(start, end, hours)
+    def overview(start: str | None = None, end: str | None = None, hours: int | None = None, minutes: int | None = None):
+        s, e = range_for(start, end, hours, minutes)
         a = Analytics(store)
-        if hours is not None:
+        # Minutenfenster rechnen mit Minutenwerten, alles andere mit Viertelstunden.
+        step = 60 if minutes is not None else 900
+        if hours is not None or minutes is not None:
             # Vergleich mit dem gleich langen Abschnitt direkt davor.
             previous_start, previous_end = s - (e - s), s
         else:
@@ -612,19 +628,21 @@ def create_app(config=None):
             previous_start = midnight(selected_start - timedelta(days=days), a.zone)
             previous_end = min(s, previous_start + (e - s))
         # Historische Teilviertelstunden nicht als zeitgenau rekonstruieren.
-        previous_end = int(previous_end // 900) * 900
-        previous = a.summary(previous_start, previous_end) if previous_end > previous_start else None
+        previous_end = int(previous_end // step) * step
+        previous = a.summary(previous_start, previous_end, step) if previous_end > previous_start else None
         # Referenzwert für Tagesbalken: Monatsziel als durchschnittlicher Tagesanteil.
         monthly_kwh = store.state("budget", {}).get("monthly_kwh")
         targets = {"daily_kwh": monthly_kwh * 12 / 365.25 if monthly_kwh else None,
                    "household": insights.household_reference(store.settings())}
-        return {"summary": a.summary(s, e), "previous": previous, "series": a.series(s, e),
+        # CO₂-Werte gibt es je Viertelstunde; Minutenwerte der jeweiligen Viertelstunde zuordnen.
+        buckets = [dict(row, ts=row["ts"] // 900 * 900) for row in store.bucket_rows(s, e, step)]
+        return {"summary": a.summary(s, e, step), "previous": previous, "series": a.series(s, e),
                 "gaps": store.gap_rows(s, e), "timezone": a.zone, "targets": targets,
-                "co2": grid.balance(store.bucket_rows(s, e), s, e)}
+                "co2": grid.balance(buckets, s, e)}
 
     @app.get("/api/analysis")
-    def analysis(start: str | None = None, end: str | None = None, hours: int | None = None):
-        s, e = range_for(start, end, hours)
+    def analysis(start: str | None = None, end: str | None = None, hours: int | None = None, minutes: int | None = None):
+        s, e = range_for(start, end, hours, minutes)
         a = Analytics(store)
         return dict(a.patterns(s, e), forecast=a.forecast(time.time()))
 
@@ -633,7 +651,36 @@ def create_app(config=None):
         schedules = store.state("tariff_schedules", {})
         return {"tariffs": [dict(row, **schedules.get(row["start_date"], {})) for row in store.rows("SELECT * FROM tariffs ORDER BY start_date")],
                 "prices": store.rows("SELECT COUNT(*) AS count,MIN(start) AS start,MAX(end) AS end FROM prices")[0], "market":market.cached(),
-                "spot_history": market.history_status()}
+                "spot_history": market.history_status(), "price_feed": price_feed_state()}
+
+    def price_feed_state():
+        return dict(feed.config(), status=feed.status(), tibber_token_configured=bool(vault.get("tibber_token")),
+                    zones=list(price_feed.ZONES), spot_source=price_feed.SPOT_SOURCE)
+
+    @app.put("/api/prices/source")
+    async def save_price_source(data: PriceSource):
+        values = data.model_dump(exclude={"tibber_token", "clear_tibber_token"})
+        if data.clear_tibber_token:
+            vault.update({"tibber_token": None})
+        elif data.tibber_token:
+            vault.update({"tibber_token": data.tibber_token})
+        old = feed.config()
+        store.set_state("price_feed", values)
+        # Andere Quelle oder Formel: Zeitraum neu nachladen und alle Preise neu berechnen.
+        if any(old[key] != values[key] for key in ("source", "zone", "markup_ct", "vat_percent", "tibber_home")) or data.tibber_token:
+            feed.reset()
+        # Gleich abrufen, damit Fehler (Token, Währung, Zuhause) sofort sichtbar sind.
+        await feed.refresh()
+        return price_feed_state()
+
+    @app.post("/api/prices/refresh")
+    async def refresh_prices():
+        if not feed.config()["source"]:
+            raise ValueError("Zuerst eine Preisquelle wählen.")
+        if time.time() - (feed.status().get("fetched_at") or 0) < 30:
+            raise ValueError("Bitte 30 Sekunden zwischen Abrufen warten.")
+        await feed.refresh()
+        return price_feed_state()
 
     @app.get("/api/insights")
     def insight_data(start: str | None = None, end: str | None = None):

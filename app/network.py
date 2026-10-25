@@ -1,11 +1,9 @@
-"""Lokale Namen regelmäßig auflösen und HTTP-Ziele auf die geprüfte IP binden."""
+"""Lokale Namen regelmäßig auflösen und nur private Zieladressen zulassen."""
 import asyncio
 import ipaddress
 import re
 import socket
-from urllib.parse import urlsplit
 
-import httpx
 
 
 def private_address(value):
@@ -50,41 +48,3 @@ async def resolve_local(host):
         raise ValueError("Gerätename zeigt nicht ausschließlich auf lokale Adressen; Zugriff abgelehnt.")
     return addresses[:4]
 
-
-def local_url(url):
-    try:
-        parsed = urlsplit(url)
-        if parsed.scheme not in ("http", "https") or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError()
-        host = validate_host(parsed.hostname or "", single_label=True)
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
-        if not 1 <= port <= 65535:
-            raise ValueError()
-    except ValueError:
-        raise ValueError("Lokale Gateway-URL ohne Zugangsdaten, Abfrage oder Fragment angeben.") from None
-    return parsed, host, port
-
-
-async def local_request(url, path, method="GET", payload=None, token="", max_bytes=65536, transport=None):
-    parsed, host, port = local_url(url)
-    addresses = await resolve_local(host)
-    default_port = 443 if parsed.scheme == "https" else 80
-    original_host = host + (f":{port}" if port != default_port else "")
-    async with httpx.AsyncClient(timeout=40, trust_env=False, follow_redirects=False, transport=transport) as client:
-        for address in addresses:
-            try:
-                headers = {"Host": original_host}
-                if token:
-                    headers["Authorization"] = "Bearer " + token
-                target = f"{parsed.scheme}://{address}:{port}{parsed.path.rstrip('/')}{path}"
-                async with client.stream(method, target, json=payload, headers=headers,
-                                         extensions={"sni_hostname": host}) as response:
-                    body = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        body.extend(chunk)
-                        if len(body) > max_bytes:
-                            raise ValueError("Gateway-Antwort ist zu groß.")
-                    return response.status_code, bytes(body), response.headers.get("Content-Type", "")
-            except httpx.HTTPError:
-                continue
-    raise ValueError("Signal-Gateway nicht erreichbar. Container, DNS und lokalen Port prüfen.")

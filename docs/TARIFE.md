@@ -21,9 +21,23 @@ Beispiel ausschließlich zur Erklärung: HT 35 ct/kWh, NT 25 ct/kWh, NT von 22:0
 - Feiertage und Sonderkalender werden nicht automatisch erkannt. Die Funktion ordnet Preise nach Uhrzeit zu; sie ist keine direkte Abrechnung separater T1-/T2-Zählerregister.
 - Die Rechnung verwendet die bekannten Viertelstunden-Energiemengen. Fehlende Daten und längerfristige Lücken werden weiterhin nicht erfunden oder willkürlich auf HT/NT verteilt.
 
-## Variable Tarife und Börsenpreisvorschau
+## Dynamische Tarife
 
-Für einen echten variablen Vertrag enthält die Preis-CSV die **vollständigen Bruttopreise je Zeitintervall**, siehe [API/CSV-Format](API.md). Fehlende Preise bleiben als unbepreiste Energie sichtbar. Es gibt keinen Rückfall auf Null oder einen festen Preis.
+Für einen dynamischen Vertrag einen Tarif mit der Preisart **Dynamisch** anlegen (Grundpreis und Einspeisevergütung wie gewohnt). Die Preise je Viertelstunde kommen dann aus einer Preisquelle unter **Kosten & Tarife → Dynamische Preise**:
+
+| Preisquelle | Einrichtung | Preis je kWh |
+|---|---|---|
+| **Tibber** | persönlicher API-Token von [developer.tibber.com](https://developer.tibber.com) (Anmelden → Access Token). Bei mehreren Zuhause eines auswählen. | Tibber-Gesamtpreis des eigenen Vertrags + optionaler Aufschlag |
+| **Börsenpreis + Aufschlag** | Gebotszone (z. B. DE-LU), Aufschlag netto in ct/kWh und Mehrwertsteuer aus dem Preisblatt des Anbieters | (Börsenpreis + Aufschlag) × (1 + MwSt) |
+| **CSV** | vollständige Bruttopreise je Zeitintervall importieren, siehe [API/CSV-Format](API.md) | wie importiert |
+
+- Kilowatch ruft die gewählte Quelle stündlich ab, beim ersten Mal rückwirkend bis zu 31 Tage. Preise für morgen erscheinen am frühen Nachmittag. Gesendet werden nur Zeitraum bzw. die Tibber-Abfrage, keine Messwerte. Der Tibber-Token liegt verschlüsselt im Zugangsdaten-Volume und wird nie an den Browser zurückgegeben.
+- Beim Tibber-Preis ist nur einzutragen, was **nicht** im Tibber-Preis steckt, z. B. das separat abgerechnete Netzentgelt in Norwegen. Sonst 0. Der Abgleich mit einer Rechnung zeigt, ob noch etwas fehlt.
+- Die Währung von Tibber muss zur Währungseinstellung passen; sonst speichert Kilowatch nichts und zeigt einen Hinweis. Börsenpreis + Aufschlag gibt es nur für Gebotszonen in Euro.
+- Ein Quellenwechsel oder geänderter Aufschlag berechnet den Rückblick neu. Automatische Preise ersetzen im abgedeckten Zeitraum vorhandene CSV-Preise.
+- Fehlende Preise bleiben als unbepreiste Energie sichtbar. Es gibt keinen Rückfall auf Null oder einen festen Preis. Das Ergebnis ist eine nachvollziehbare Rechnung aus Messwerten und Preisen, keine Abrechnung des Anbieters.
+
+## Börsenpreisvorschau
 
 Zusätzlich kann unter **Börsenpreise ansehen** per Knopfdruck der technisch ohne Token lesbare DE-Feed von aWATTar abgerufen werden. Er liefert veröffentlichte Börsenintervalle für heute und, sobald vorhanden, morgen. Die App überträgt dabei nur die angefragten Zeitgrenzen, keine Messdaten oder Zugangsdaten. Es gibt keinen Hintergrundabruf und keinen Tibber-Tarifzwang. Erfolgreiche Antworten bleiben eine Stunde im Cache; nach Fehlern gilt eine 15-Minuten-Pause. Im Demo-Modus wird nichts abgerufen.
 
@@ -46,6 +60,6 @@ Unter **Budget & Abschlag** lassen sich ein Monatsbudget in €, ein Monatsziel 
 
 - **Monat:** bisherige Kosten und Prognose bis Monatsende (bisherige Kosten + prognostizierte Rest-kWh × bisheriger mittlerer Arbeitspreis + voller Monatsgrundpreis). Die Prognose braucht dieselbe Datenbasis wie die Monatsprognose der Analysen.
 - **Jahr:** Hochrechnung aus vollständig erfassten Tagen der letzten 365 Tage, erst ab 60 solchen Tagen. Ohne Jahreszeitbereinigung; bei weniger als einem Jahr Daten kann die Zahl deutlich abweichen. Die angezeigte Spanne beschreibt nur die Tagesstreuung. Einspeisung bleibt unberücksichtigt.
-- Optional meldet die Alarmregel **Monatsbudget erreicht** per E-Mail oder Signal, sobald die erfassten Kosten das Budget erreichen.
+- Optional meldet die Alarmregel **Monatsbudget erreicht** per E-Mail, sobald die erfassten Kosten das Budget erreichen.
 
 Primärquelle: [aWATTar/tado° DE API-Dokumentation](https://energy.tado.com/services/api). Monatlicher Grundpreis und Einspeisevergütung werden weiter unabhängig davon lokal hinterlegt.

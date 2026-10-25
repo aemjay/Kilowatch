@@ -29,17 +29,17 @@ Ein HttpOnly-Cookie gilt zwölf Stunden. Beim App-Neustart werden alle Sitzungen
 | GET `/api/discovery/network` | lokale /24-Netzvorschläge; tatsächliche Netzmaske ist zu prüfen |
 | POST `/api/discovery/scan` | `{ "network": "192.168.1.0/24" }`, begrenzte lokale Suche ohne Zugangsdaten |
 | POST `/api/market/refresh` | bewusster Abruf öffentlicher DE-Börsenpreise; keine Änderung der Vertragspreise |
-| GET/PUT `/api/notifications` | Kanal-/Regeleinstellungen, Geheimnis-Status und Zustellverlauf |
+| GET/PUT `/api/notifications` | E-Mail-/Regeleinstellungen, Geheimnis-Status und Zustellverlauf |
 | POST `/api/notifications/test/email` | bewusster einzelner E-Mail-Test ohne Messwerte |
-| POST `/api/notifications/test/signal` | bewusster einzelner Signal-Test ohne Messwerte |
-| POST `/api/notifications/signal/qr` | authentifizierter PNG-Proxy für Kopplungs-QR, kein Cache |
 | GET `/api/live` | letzter Messpunkt, Alter, Collectorstatus und verfügbare Register |
-| GET `/api/overview` | Summen, Vorperiode, Serien und Lücken; `start`/`end` (Datum) oder `hours=1…48` für die letzten Stunden; `co2` mit CO₂-Bilanz, sobald `grid_country` gesetzt ist |
+| GET `/api/overview` | Summen, Vorperiode, Serien und Lücken; `start`/`end` (Datum) oder `hours=1…48` für die letzten Stunden oder `minutes=5…120` für die letzten Minuten (Energie dann aus Minutenwerten); `co2` mit CO₂-Bilanz, sobald `grid_country` gesetzt ist |
 | GET `/api/analysis` | Muster, Lastdauerlinie, Regelhinweis und Monatsprognose |
 | GET/PUT `/api/tariffs` | Tarifhistorie / Tarif ab Anfangsdatum speichern |
 | DELETE `/api/tariffs/YYYY-MM-DD` | Tarif entfernen |
 | POST `/api/prices/import` | JSON `{ "csv": "..." }` |
 | DELETE `/api/prices` | alle importierten Preise entfernen |
+| PUT `/api/prices/source` | Preisquelle für dynamische Tarife: `source` (`""`, `tibber`, `spot`), `zone` (Euro-Gebotszone), `markup_ct`, `vat_percent`, `tibber_home`, optional `tibber_token` oder `clear_tibber_token`; ruft sofort ab und liefert den Status |
+| POST `/api/prices/refresh` | Preise der gewählten Quelle jetzt abrufen (höchstens alle 30 Sekunden) |
 | GET/POST `/api/events` | Ereignisse lesen/anlegen |
 | DELETE `/api/events/ID` | Ereignis entfernen |
 | GET `/api/events/ID/comparison` | Ereignis und Vorperiode vergleichen |
@@ -67,9 +67,9 @@ Das Enddatum ist **einschließlich** und wird bei laufenden Zeiträumen auf jetz
 
 Fehlermeldungen (`detail`) kommen in der Sprache der optionalen Kopfzeile `X-Kilowatch-Language`, sonst in der gespeicherten Sprache, sonst auf Deutsch.
 
-`GET /api/notifications` liefert `settings`, `smtp_password_configured`, `signal_token_configured`, `last_error` und die letzten 100 Verlaufseinträge ohne Nachrichtentexte. **`PUT /api/notifications` ersetzt die vollständige Kanal-/Regelkonfiguration**; vorher `settings` lesen und vollständig zurücksenden. Ausgelassene Konfigurationsfelder erhalten ihre Standardwerte. Zusätzlich sind `smtp_password`, `signal_token`, `clear_smtp_password` und `clear_signal_token` zulässig. Ausgelassene/leere Geheimnisse bleiben erhalten; die Clear-Schalter entfernen sie ausdrücklich. Passwörter/Token werden nie ausgegeben.
+`GET /api/notifications` liefert `settings`, `smtp_password_configured`, `last_error` und die letzten 100 Verlaufseinträge ohne Nachrichtentexte. **`PUT /api/notifications` ersetzt die vollständige E-Mail-/Regelkonfiguration**; vorher `settings` lesen und vollständig zurücksenden. Ausgelassene Konfigurationsfelder erhalten ihre Standardwerte. Zusätzlich sind `smtp_password` und `clear_smtp_password` zulässig. Ein ausgelassenes/leeres Passwort bleibt erhalten; `clear_smtp_password` entfernt es ausdrücklich. Das Passwort wird nie ausgegeben. Gespeicherte Felder früherer Versionen, die das Modell nicht mehr kennt, werden ignoriert.
 
-Feldnamen und Grenzen stehen im Modell `NotificationSettings` in `app/notifications.py`. Empfänger sind Listen von höchstens fünf Adressen beziehungsweise internationalen Rufnummern. Signal-URL ist eine lokale HTTP(S)-Gateway-URL, nicht die Bridge-Adresse. Automatische Nachrichten erfordern Hauptschalter und mindestens einen gültigen Kanal. Tests umgehen Hauptschalter und Ruhezeit, nicht die Anmeldung; maximal ein Test je Kanal in 30 Sekunden. Demo-Modus erlaubt keinen Versand. Einrichtung: [BENACHRICHTIGUNGEN.md](BENACHRICHTIGUNGEN.md).
+Feldnamen und Grenzen stehen im Modell `NotificationSettings` in `app/notifications.py`. Empfänger sind Listen von höchstens fünf E-Mail-Adressen. `smtp_from_name` ist der Absendername (Standard `Kilowatch`, leer = nur Adresse); `subject_code` (höchstens 40 Zeichen, leer = aus) steht als `[Wort]` vor jedem Betreff. Automatische Nachrichten erfordern Hauptschalter und gültig eingerichtete E-Mail. Tests umgehen Hauptschalter und Ruhezeit, nicht die Anmeldung; maximal ein Test in 30 Sekunden. Demo-Modus erlaubt keinen Versand. Einrichtung: [BENACHRICHTIGUNGEN.md](BENACHRICHTIGUNGEN.md).
 
 ## Tarifbeispiel
 

@@ -50,7 +50,6 @@ jobs:
           docker compose -f compose.yaml config --quiet
           docker compose -f compose.build.yaml config --quiet
           docker compose -f compose.yaml -f compose.mqtt.yaml config --quiet
-          docker compose -f compose.yaml -f compose.signal.yaml config --quiet
   image:
     needs: test
     if: github.event_name != 'pull_request'

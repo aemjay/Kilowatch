@@ -8,8 +8,6 @@ Eclipse Mosquitto wird ausschließlich als optionales unverändertes offizielles
 
 Die lokale Geheimnisspeicherung verwendet [cryptography/Fernet](https://cryptography.io/en/latest/fernet/); die mitgelieferten Apache-/BSD-Lizenzhinweise sowie die Lizenzen der CFFI-/OpenSSL-Komponenten gelten weiter. Passende Paketversionen stehen in `requirements.txt`.
 
-Der optionale Container [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api) wird unverändert aus dem Upstream-Image verwendet. Seine Lizenz und die jeweiligen Lizenzen von signal-cli, Java und weiteren enthaltenen Komponenten gelten separat. Er ist kein Teil des App-Images. Signal ist eine Drittanwendung; dieses Projekt stellt keine offizielle Signal-Integration bereit.
-
 Die DOM-Tests nutzen [jsdom](https://github.com/jsdom/jsdom) und seine Abhängigkeiten ausschließlich auf Entwicklungsrechnern und in CI. `package-lock.json` legt die Versionen fest; diese Pakete werden nicht ins NAS-App-Image kopiert.
 
 Die Bridge-Vorbereitung und das Nichtkunden-Konzept wurden anhand der Dokumentation von [marq24/ha-tibber-pulse-local](https://github.com/marq24/ha-tibber-pulse-local) geprüft. Es wurde kein Home-Assistant-Integrationscode in dieses Projekt übernommen. Die konkrete SML-Verarbeitung verwendet die reguläre Python-Bibliothek, die separaten Unit-Test-Telegramme sind künstlich erzeugt.

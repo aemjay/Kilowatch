@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.bridge import Bridge
-from app.network import local_request, resolve_local, validate_host
+from app.network import resolve_local, validate_host
 
 
 @pytest.mark.parametrize("host,result",[("bridge.fritz.box","bridge.fritz.box"),("BRIDGE.FRITZ.BOX.","bridge.fritz.box"),("192.168.1.10","192.168.1.10"),("meter.home.arpa","meter.home.arpa")])
@@ -63,21 +63,3 @@ def test_dns_failure_is_actionable(monkeypatch):
     monkeypatch.setattr(socket,"getaddrinfo",fail)
     with pytest.raises(ValueError,match="DNS"):
         asyncio.run(resolve_local("bridge.fritz.box"))
-
-
-def test_signal_https_pins_ip_and_preserves_sni(monkeypatch):
-    monkeypatch.setattr(socket,"getaddrinfo",lambda *args:[dns_record("192.168.1.20")])
-    def handler(request):
-        assert request.url.host=="192.168.1.20"
-        assert request.extensions["sni_hostname"]=="signal.home.arpa"
-        assert request.headers["host"]=="signal.home.arpa"
-        assert request.headers["authorization"]=="Bearer synthetic-token"
-        return httpx.Response(200,json={"timestamp":1})
-    status,_,_=asyncio.run(local_request("https://signal.home.arpa","/v2/send","POST",{},"synthetic-token",transport=httpx.MockTransport(handler)))
-    assert status==200
-
-
-def test_loopback_gateway_url_is_rejected():
-    from app.network import local_url
-    with pytest.raises(ValueError):
-        local_url("http://127.0.0.1:8080")

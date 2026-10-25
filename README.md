@@ -8,7 +8,7 @@ Kilowatch liest die vorhandene Bridge im Heimnetz aus und speichert Messwerte un
 
 **Keine persönliche Adresse und keine Zugangsdaten sind vorbelegt.** Beim ersten Öffnen führt ein Assistent durch die Einrichtung. Bridge-Adresse, Benutzer, Passwort und Benachrichtigungen bleiben später in der Oberfläche änderbar. Passwörter und Gateway-Token werden lokal verschlüsselt gespeichert; das App-Passwort als gesalzener Hash. Nach einem Neustart ist keine erneute Eingabe der Bridge-Zugangsdaten nötig.
 
-Für die laufende Messung braucht die Anwendung keine Tibber-API, kein Tibber-Konto und keine Internetverbindung. Installation, Updates, optionaler E-Mail-/Signal-Versand und die optionale CO₂-Bilanz benötigen Internet. Für die CO₂-Bilanz sendet Kilowatch nur Land und Zeitraum an Energy-Charts.info, keine Messwerte. Lokales Auslesen beendet einen eventuell bestehenden Cloud-Upload der Bridge nicht automatisch.
+Für die laufende Messung braucht die Anwendung keine Tibber-API, kein Tibber-Konto und keine Internetverbindung. Installation, Updates, optionaler E-Mail-Versand und die optionale CO₂-Bilanz benötigen Internet. Für die CO₂-Bilanz sendet Kilowatch nur Land und Zeitraum an Energy-Charts.info, keine Messwerte. Lokales Auslesen beendet einen eventuell bestehenden Cloud-Upload der Bridge nicht automatisch.
 
 Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer) oder ein anderer Docker-Host mit Docker Compose, eine Tibber Pulse IR mit Bridge im selben Heimnetz und ein Zähler, der SML oder lesbare OBIS-Werte über die optische Schnittstelle ausgibt. Unterstützt werden **linux/amd64** (Intel/AMD) und **linux/arm64**; die Plattform wird bei der Einrichtung gewählt oder automatisch vom Host übernommen. Für die App sind 512 MiB RAM als Obergrenze konfiguriert; der tatsächliche Bedarf hängt von Datenmenge und Ansichten ab. Das Zählermodell muss nicht ausgewählt werden; maßgeblich ist das tatsächlich gelieferte Telegramm.
 
@@ -20,17 +20,17 @@ Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer)
 | Live | Netzleistung mit Vorzeichen, Bezug, Einspeisung, Aktualität und Empfangsdiagnose |
 | Verlauf | Letzte Stunde (Einzelwerte im Abfrageintervall), letzte 6 Stunden (Minutenwerte), Tag, Woche, Monat, Jahr, eigener Zeitraum, Vorperioden und Messlücken |
 | Analyse | Stunden-Heatmap, Tagesprofile, Nachtgrundlast und deren Entwicklung samt Kosten pro Jahr, Lastdauerlinie, Spitzen, Einspeiseprofil und Monatsprognose |
-| Kosten | Einzeltarif oder HT/NT nach Uhrzeit, Tarifwechsel, Grundpreis, Einspeisevergütung, dynamische Bruttopreise per CSV, Tarifsimulation (Fest, HT/NT, Börsenpreis + Aufschlag), Monatsbudget und Abschlags-Hochrechnung, optionale Börsenpreise |
+| Kosten | Einzeltarif oder HT/NT nach Uhrzeit, Tarifwechsel, Grundpreis, Einspeisevergütung, dynamische Preise automatisch von Tibber oder als Börsenpreis + Aufschlag (oder per CSV), Tarifsimulation (Fest, HT/NT, Börsenpreis + Aufschlag), Monatsbudget und Abschlags-Hochrechnung, optionale Börsenpreise |
 | Vergleichswerte | Optional: typischer Haushalt gleicher Größe (Personen, Wohnung oder Haus, Warmwasser) als Referenzlinie in Tages- und Monatsbalken, im Zeitraumvergleich, beim Monatsziel und in der Jahreshochrechnung (Stromspiegel für Deutschland) |
 | Strommix und CO₂ | Optional für Deutschland, Niederlande, Norwegen und Schweden: CO₂-Bilanz des Netzbezugs aus gemessener Netzintensität je Viertelstunde, Ökostromanteil im Netz und aktueller Wert (Quelle: Energy-Charts.info, Fraunhofer ISE, CC BY 4.0) |
-| Benachrichtigungen | E-Mail über eigenen SMTP-Server; optional Signal über lokal gekoppelten Zusatzcontainer |
+| Benachrichtigungen | E-Mail über eigenen SMTP-Server |
 | Alarmregeln | Fehlende Daten, anhaltend hohe Last, Tagesbudget, Monatsbudget, niedrige Batteriespannung und knapper Datenspeicher |
 | Versand | Ruhezeiten, Entwarnungen, Mindestabstand, persistente Warteschlange, begrenzte Wiederholungen und Zustellverlauf |
 | Berichte | Druckansicht, PDF über Browserdruck, CSV/JSON-Export und lokale HTTP-API |
 | Oberfläche | Deutsch, English, Norsk bokmål, Svenska, Nederlands; helles, dunkles oder automatisches Farbschema; Währungszeichen € (ct), NOK (øre) oder SEK (öre) |
 | Betrieb | Wiederanlauf, Aufbewahrung, konsistente SQLite-Sicherungen, Restore, lokale Passwort-Wiederherstellung, optionaler Update-Hinweis und Datenbank-Migrationen mit automatischer Vorab-Sicherung |
 
-Die Oberfläche liefert JavaScript, SVG und Schriften lokal aus. Server: Python/FastAPI, Datenbank: SQLite mit WAL. Es gibt keinen Node-Build auf dem NAS. Mosquitto und Signal sind getrennte, optionale Container.
+Die Oberfläche liefert JavaScript, SVG und Schriften lokal aus. Server: Python/FastAPI, Datenbank: SQLite mit WAL. Es gibt keinen Node-Build auf dem NAS. Mosquitto ist ein getrennter, optionaler Container.
 
 ![Dashboard mit ausschließlich künstlichen Beispieldaten im Demo-Modus](docs/vorschau.png)
 
@@ -65,11 +65,11 @@ Der [GitHub-Workflow](.github/workflows/nas-image.yml) prüft Tests und Compose-
 
 Empfohlen ist der Zugriff per HTTPS über den DSM-Reverse-Proxy ([Anleitung](docs/INSTALLATION-SYNOLOGY.md#7-https-über-den-dsm-reverse-proxy)); Sicherheitslücken bitte vertraulich melden ([SECURITY.md](SECURITY.md)).
 
-## E-Mail und Signal
+## E-Mail-Benachrichtigungen
 
 **[Einrichtung und Grenzen der Benachrichtigungen](docs/BENACHRICHTIGUNGEN.md)**.
 
-E-Mail verwendet den eigenen SMTP-Server mit STARTTLS oder direktem TLS und Zertifikatsprüfung. Signal verwendet optional `signal-cli-rest-api` als Community-Anbindung. Der Gateway-Port wird nicht ins LAN veröffentlicht; die App zeigt den Kopplungs-QR nach Anmeldung an. Beide Kanäle sind zunächst ausgeschaltet. Erst die eigene Konfiguration und ein erfolgreicher Test bestätigen den Versand vor Ort.
+E-Mail verwendet den eigenen SMTP-Server mit STARTTLS oder direktem TLS und Zertifikatsprüfung, einstellbarem Absendernamen und optionalem Erkennungswort im Betreff. Der Versand ist zunächst ausgeschaltet. Erst die eigene Konfiguration und ein erfolgreicher Test bestätigen den Versand vor Ort.
 
 Weitere sinnvolle Schutzfunktionen sind bereits enthalten: keine Nullwerte bei Messausfällen, Überwachung der Datenaktualität, Alarmberuhigung durch Ruhezeiten und Entwarnungen, Aufbewahrungsgrenzen und Wiederherstellung bei vergessenem App-Passwort. Ein komplett ausgeschaltetes NAS kann selbst keine Ausfallnachricht versenden; dafür wäre ein zusätzlicher unabhängiger Monitor nötig.
 
