@@ -64,6 +64,8 @@ function numberParams(params = {}) {
 
 // Markiert Quelltexte für die Extraktion, ohne sie sofort zu übersetzen.
 const tk = text => text;
+// Vorgegebene Namen des Zuhauses (Standard und Demo) erscheinen übersetzt; eigene Namen bleiben unverändert.
+tk('Mein Zuhause'); tk('Beispielhaushalt');
 
 let CURRENCY_CODE = 'EUR';
 function setCurrency(code) { CURRENCY_CODE = CURRENCIES[code] ? code : 'EUR'; CURRENCY = CURRENCIES[CURRENCY_CODE]; }
@@ -76,6 +78,12 @@ function localCurrency(text) {
 
 function t(text, params = {}) {
   let value = CATALOG[text] ?? FALLBACK[text] ?? DE_PLURALS[text] ?? text;
+  if (typeof params.count === 'number') {
+    // Mehrzahl nach der Zahl selbst wählen, angezeigt wird sie im Format der Sprache.
+    const count = params.count;
+    params = {...params, count: count.toLocaleString(LOCALE)};
+    if (value && typeof value === 'object') value = value[new Intl.PluralRules(LOCALE).select(count)] ?? value.other ?? text;
+  }
   if (value && typeof value === 'object') {
     const category = new Intl.PluralRules(LOCALE).select(Number(params.count ?? 0));
     value = value[category] ?? value.other ?? text;

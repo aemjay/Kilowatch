@@ -9,7 +9,7 @@ Die Oberfläche gibt es auf Deutsch, Englisch, Norwegisch (Bokmål), Schwedisch 
 - `{name}` ist ein Platzhalter und muss unverändert bleiben.
 - Hängt ein Text von einer Anzahl ab, kann der Wert ein Objekt mit Mehrzahlformen sein, zum Beispiel `{"one": "{count} gap", "other": "{count} gaps"}`.
 - Beträge stehen in den Texten immer als `€` und `ct`. Bei der Währung NOK oder SEK ersetzt Kilowatch nur diese Zeichen durch `kr` und `øre` bzw. `öre`. Es wird nichts umgerechnet: Eigene Tarife trägst du direkt in deiner Währung ein.
-- Fehlermeldungen und Benachrichtigungen übersetzt der Server mit denselben Katalogen. Benachrichtigungen verwenden die zuletzt in der Oberfläche gewählte Sprache.
+- Fehlermeldungen und Benachrichtigungen übersetzt der Server mit denselben Katalogen. Benachrichtigungen verwenden die unter **Einstellungen → Sprache und Währung** gespeicherte Sprache (beim ersten Anmelden die Sprache des Browsers).
 
 ## Einschränkungen
 
