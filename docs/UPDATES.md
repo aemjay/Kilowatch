@@ -68,6 +68,6 @@ Messwerte, die zwischen Update und Rückweg erfasst wurden, fehlen nach dem Eins
 ## Für Maintainer: Release erstellen
 
 1. Version in `app/__init__.py` erhöhen (einzige Stelle). Hat sich das Schema geändert, in die Release-Notizen `<!-- schema: N -->` mit der neuen `SCHEMA_VERSION` schreiben.
-2. Tag setzen und pushen: `git tag v1.2.3 && git push origin v1.2.3`.
+2. Tag setzen und pushen: `git tag v1.2.3 && git push origin v1.2.3`. Alternativ in GitHub unter **Releases → Draft a new release** den Tag `v1.2.3` auf `main` neu anlegen und veröffentlichen; der Workflow hängt die Importdateien dann an dieses Release.
 3. Der Workflow prüft, dass Tag und Version übereinstimmen, testet beide Plattformen inklusive Update von der letzten Version, veröffentlicht die Images mit Signatur, SBOM und Provenienz und legt das Release mit Importdateien an.
 4. Nach dem ersten Release das Paket unter GitHub → Packages → `kilowatch` → Package settings einmalig auf **Public** stellen, damit es ohne Anmeldung geladen werden kann.
