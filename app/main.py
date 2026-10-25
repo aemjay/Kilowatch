@@ -28,7 +28,7 @@ from .discovery import Discovery, suggestions
 from .market import Market
 from .updates import Updates
 from . import insights
-from .i18n import CURRENCIES, LANGUAGES, UserError, translate, translate_error
+from .i18n import CURRENCIES, LANGUAGES, UserError, translate_error
 
 
 class StrictModel(BaseModel):

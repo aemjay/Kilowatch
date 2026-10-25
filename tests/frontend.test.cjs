@@ -248,3 +248,45 @@ test('theme toggle cycles auto, light and dark and remembers the choice',async t
   button.click();assert.equal(root.hasAttribute('data-theme'),false);assert.equal(w.localStorage.getItem('kilowatch-theme'),null);
   assert.deepEqual(h.errors,[]);
 });
+
+test('English interface translates static and dynamic texts and tells the server the language',async t=>{
+  const h=await harness({language:'en',page:'costs',settings:{setup_required:false,language:'en'}});t.after(()=>h.dom.window.close());const {w}=h;
+  const en=JSON.parse(readFileSync(join(root,'i18n','en.json'),'utf8'));
+  assert.equal(w.document.documentElement.lang,'en');
+  const nav=w.document.querySelector('[data-page="costs"] bdi').textContent;
+  assert.equal(nav,en['Kosten & Tarife']);assert.notEqual(nav,'Kosten & Tarife');
+  await until(()=>!!w.document.querySelector('#tariff-form'));
+  assert.match(w.document.querySelector('#page-costs').textContent,new RegExp(en['Tarifart'].replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.equal(w.document.title,en['Kilowatch · Energie zu Hause']);
+  assert.ok(h.calls.filter(c=>c.path.startsWith('/api/')).every(c=>c.headers['X-Kilowatch-Language']==='en'));
+  assert.deepEqual(h.errors,[]);
+});
+
+test('language and currency form saves both and hides euro spot prices for other currencies',async t=>{
+  const h=await harness({settings:{setup_required:false,language:'de'}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#locale-form'));
+  input(w,'locale-form','language','nl');input(w,'locale-form','currency','SEK');
+  submit(w,'locale-form');
+  await until(()=>h.calls.some(c=>c.path==='/api/settings'&&c.method==='PUT'&&c.body.currency==='SEK'));
+  assert.deepEqual(h.calls.find(c=>c.body?.currency==='SEK').body,{language:'nl',currency:'SEK'});
+  await until(()=>w.document.documentElement.lang==='nl');
+  assert.equal(w.localStorage.getItem('kilowatch-language'),'nl');
+  w.document.querySelector('[data-page="costs"]').click();
+  await until(()=>!!w.document.querySelector('#simulation-form'));
+  assert.equal(w.document.querySelector('#market-refresh'),null);
+  assert.equal(w.document.querySelector('#simulation-form [name="mode"] option[value="spot"]'),null);
+  assert.match(w.document.querySelector('#page-costs').textContent,/öre/);
+  assert.doesNotMatch(w.document.querySelector('#page-costs').textContent,/\bct\b|€/);
+  assert.deepEqual(h.errors,[]);
+});
+
+test('login screen offers all languages and switches immediately',async t=>{
+  const h=await harness({settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  const select=w.document.querySelector('#login-language');
+  assert.deepEqual([...select.options].map(o=>o.value),['de','en','nb','sv','nl']);
+  select.value='sv';select.dispatchEvent(new w.Event('change'));
+  await until(()=>w.document.documentElement.lang==='sv');
+  const sv=JSON.parse(readFileSync(join(root,'i18n','sv.json'),'utf8'));
+  assert.equal(w.document.querySelector('#login-form h2 bdi').textContent,sv['Anmelden']);
+  assert.deepEqual(h.errors,[]);
+});

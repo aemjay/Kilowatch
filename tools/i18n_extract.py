@@ -23,7 +23,9 @@ LANGUAGES = ("en", "nb", "sv", "nl")
 JS_CALL = re.compile(r"(?<![\w$.])tk?\('((?:[^'\\\n]|\\.)*)'")
 HTML_TEXT = re.compile(r"<(\w+)[^>]*\bdata-i18n\b(?!-)[^>]*>([^<]*)</\1>")
 HTML_ATTR = re.compile(r'data-i18n-(?:placeholder|aria-label|title)="([^"]*)"')
-ERRORS = {"ValueError", "UserError", "BridgeError", "HTTPException", "_", "text", "failure", "rule", "translate", "issue"}
+# Aufrufname -> Positionen der Meldungen (None = alle Argumente).
+CALLS = {"ValueError": None, "UserError": None, "BridgeError": None, "HTTPException": None, "_": None,
+         "text": None, "failure": None, "translate": [0], "rule": [2, 3], "issue": [1]}
 FIELDS = {"reason", "method", "title", "text", "message", "forecast_reason"}
 
 
@@ -56,7 +58,7 @@ def strings(node):
 
 
 def wanted(text):
-    return bool(re.search(r"[A-Za-zÄÖÜäöüß]{2,}", text)) and not text.startswith(("Kilowatch · ", "SELECT", "INSERT", "UPDATE"))
+    return bool(re.search(r"[A-Za-zÄÖÜäöüß]{2,}", text)) and not text.startswith(("SELECT", "INSERT", "UPDATE"))
 
 
 def from_python():
@@ -66,9 +68,11 @@ def from_python():
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Call):
                 name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-                if name in ERRORS:
-                    for arg in node.args:
-                        yield from strings(arg)
+                if name in CALLS:
+                    positions = CALLS[name]
+                    for index, arg in enumerate(node.args):
+                        if positions is None or index in positions:
+                            yield from strings(arg)
                 for keyword in node.keywords:
                     if keyword.arg == "message":
                         yield from strings(keyword.value)
@@ -90,8 +94,94 @@ def keys():
     return sorted(found)
 
 
+def js_literals(code):
+    """String-Literale und Textstücke von Template-Literalen samt Position und dem Text davor."""
+    found, n = [], len(code)
+
+    def quoted(i):
+        j = i + 1
+        while j < n and code[j] != code[i]:
+            j += 2 if code[j] == "\\" else 1
+        found.append((code[i + 1:j], i, code[max(0, i - 4):i]))
+        return j + 1
+
+    def template(i):
+        start, buffer = i, []
+        while i < n:
+            if code[i] == "\\":
+                buffer.append(code[i:i + 2]); i += 2; continue
+            if code[i] == "`":
+                found.append(("".join(buffer), start, "`")); return i + 1
+            if code.startswith("${", i):
+                found.append(("".join(buffer), start, "`")); buffer = []
+                i = expression(i + 2); start = i; continue
+            buffer.append(code[i]); i += 1
+        return i
+
+    def expression(i):
+        depth = 0
+        while i < n:
+            c = code[i]
+            if c in "'\"":
+                i = quoted(i); continue
+            if c == "`":
+                i = template(i + 1); continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                if not depth:
+                    return i + 1
+                depth -= 1
+            i += 1
+        return i
+
+    i = 0
+    while i < n:
+        c = code[i]
+        if code.startswith("//", i):
+            i = code.find("\n", i); i = n if i < 0 else i
+        elif c == "/" and not code.startswith("/*", i) and re.match(r"[=(,:!&|?{};\s]", code[i - 1] if i else " "):
+            j = i + 1  # Regex-Literal überspringen
+            while j < n and code[j] not in "/\n":
+                j += 2 if code[j] == "\\" else 1
+            i = j + 1
+        elif c in "'\"":
+            i = quoted(i)
+        elif c == "`":
+            i = template(i + 1)
+        else:
+            i += 1
+    return found
+
+
+MARKUP = re.compile(r'="|[<>&]|/api/|hsl\(|prefers-color|#page|#settings|start,end')
+
+
+def untranslated():
+    """Deutsch wirkende Texte in JavaScript, die weder in t()/tk() stehen noch Katalogschlüssel sind."""
+    known, result = set(keys()), []
+    for path in sorted(STATIC.glob("*.js")):
+        if path.name == "i18n.js":
+            continue
+        code = path.read_text(encoding="utf-8")
+        for text, position, before in js_literals(code):
+            if before != "`" and re.search(r"(?<![\w$.])tk?\($", before):
+                continue
+            for chunk in re.split(r"<[^>]*>", text) if before == "`" else [text]:
+                stripped = chunk.strip()
+                if (unescape(chunk) in known or not re.search(r"[A-Za-zÄÖÜäöüß]{3,}", chunk) or MARKUP.search(chunk)
+                        or stripped.startswith('"') or re.fullmatch(r"[\w.#\[\]=:/*,-]+", stripped)
+                        or (re.fullmatch(r"[a-z][\w -]*", stripped) and not re.search(r"[äöüß]", stripped))):
+                    continue
+                result.append(f"{path.name}:{code.count(chr(10), 0, position) + 1}: {stripped[:100]}")
+    return result
+
+
 def main():
     result = keys()
+    if "--untranslated" in sys.argv:
+        print("\n".join(untranslated()))
+        return
     if "--missing" in sys.argv:
         for language in LANGUAGES:
             path = CATALOGS / f"{language}.json"

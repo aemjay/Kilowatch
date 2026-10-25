@@ -1,5 +1,7 @@
 # Kilowatch
 
+> **English:** Kilowatch is a self-hosted energy monitor for the Tibber Pulse IR. It reads the Bridge in your home network and keeps all readings on your NAS, with no Tibber account or cloud needed for measuring. The interface is available in English, Norsk bokmål, Svenska, Nederlands and Deutsch, with light and dark themes. The documentation is in German for now.
+
 **Lokale Stromanalyse auf einem Synology-NAS (oder jedem Docker-Host) – mit Tibber Pulse IR, ohne Tibber-Stromtarif.**
 
 Kilowatch liest die vorhandene Bridge im Heimnetz aus und speichert Messwerte und Auswertungen auf dem NAS. Die Adresse kann eine **IPv4-Adresse oder ein FQDN** wie `tibber-bridge.fritz.box` sein. DHCP kann aktiviert bleiben: Der Name wird bei neuen HTTP-Abrufen erneut aufgelöst. Der Beispielname muss im eigenen Router tatsächlich existieren.
@@ -23,6 +25,7 @@ Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer)
 | Alarmregeln | Fehlende Daten, anhaltend hohe Last, Tagesbudget, Monatsbudget, niedrige Batteriespannung und knapper Datenspeicher |
 | Versand | Ruhezeiten, Entwarnungen, Mindestabstand, persistente Warteschlange, begrenzte Wiederholungen und Zustellverlauf |
 | Berichte | Druckansicht, PDF über Browserdruck, CSV/JSON-Export und lokale HTTP-API |
+| Oberfläche | Deutsch, English, Norsk bokmål, Svenska, Nederlands; helles, dunkles oder automatisches Farbschema; Währungszeichen € (ct), NOK (øre) oder SEK (öre) |
 | Betrieb | Wiederanlauf, Aufbewahrung, konsistente SQLite-Sicherungen, Restore, lokale Passwort-Wiederherstellung, optionaler Update-Hinweis und Datenbank-Migrationen mit automatischer Vorab-Sicherung |
 
 Die Oberfläche liefert JavaScript, SVG und Schriften lokal aus. Server: Python/FastAPI, Datenbank: SQLite mit WAL. Es gibt keinen Node-Build auf dem NAS. Mosquitto und Signal sind getrennte, optionale Container.
@@ -88,6 +91,7 @@ Die Historie beginnt mit der ersten Erfassung; ein Cloud-Historienimport ist nic
 - [Bridge im lokalen Subnetz suchen](docs/GERAETESUCHE.md)
 - [API und Preis-CSV](docs/API.md)
 - [Testabdeckung und Abnahme](docs/PRUEFPROTOKOLL.md)
+- [Übersetzungen prüfen und ergänzen](docs/UEBERSETZUNG.md)
 - [Quellen](docs/QUELLEN.md)
 
 ```sh
