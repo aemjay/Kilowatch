@@ -3,6 +3,7 @@ import logging
 import time
 
 from .bridge import Bridge
+from .i18n import UserError
 
 
 log = logging.getLogger("kilowatch")
@@ -13,7 +14,7 @@ class Collector:
         self.store = store
         self.get_password = get_password
         self.demo = demo
-        self.status = {"state": "starting", "message": "Erfassung startet.", "errors": 0}
+        self.status = {"state": "starting", "message": "Erfassung startet.", "params": {}, "errors": 0}
         self.diagnostics = {}
         self.wakeup = asyncio.Event()
         self.last_maintenance = 0
@@ -43,11 +44,11 @@ class Collector:
                     if self.demo:
                         from .demo import live_reading
                         await asyncio.to_thread(lambda: self.store.ingest(live_reading(self.store)))
-                        self.status.update(state="demo", message="Beispieldaten · keine Verbindung zur Bridge.")
+                        self.status.update(state="demo", message="Beispieldaten · keine Verbindung zur Bridge.", params={})
                     elif not settings["enabled"]:
-                        self.status.update(state="paused", message="Erfassung pausiert.")
+                        self.status.update(state="paused", message="Erfassung pausiert.", params={})
                     elif not password or not settings["bridge_host"] or not settings["bridge_user"]:
-                        self.status.update(state="setup", message="Bridge-Adresse und Zugangsdaten im Einrichtungsassistenten eingeben.")
+                        self.status.update(state="setup", message="Bridge-Adresse und Zugangsdaten im Einrichtungsassistenten eingeben.", params={})
                     else:
                         if signature != current_signature:
                             if bridge:
@@ -59,11 +60,11 @@ class Collector:
                         self.status["last_fetch"] = now
                         changed, changed_at = await asyncio.to_thread(self.persist, reading, digest, now)
                         if changed:
-                            self.status.update(state="online", message="Lokale Messung aktiv.", last_success=now)
+                            self.status.update(state="online", message="Lokale Messung aktiv.", params={}, last_success=now)
                         elif now - changed_at > 30:
-                            self.status.update(state="stale", message="Unverändertes Telegramm seit über 30 Sekunden. Empfang prüfen.")
+                            self.status.update(state="stale", message="Unverändertes Telegramm seit über 30 Sekunden. Empfang prüfen.", params={})
                         else:
-                            self.status.update(state="online", message="Warte auf das nächste Zählertelegramm.")
+                            self.status.update(state="online", message="Warte auf das nächste Zählertelegramm.", params={})
                         self.status["endpoint"] = bridge.endpoint
                         self.status["host"] = bridge.host
                         self.status["resolved_addresses"] = bridge.resolved_addresses
@@ -84,7 +85,10 @@ class Collector:
                     failures += 1
                     # Niemals HTTP-Header, Passwörter oder den rohen Response loggen.
                     message = str(exc) if isinstance(exc, ValueError) else "Interner Erfassungsfehler (" + type(exc).__name__ + ")."
-                    self.status.update(state="error", message=message, errors=self.status["errors"] + 1)
+                    # Vorlage und Werte getrennt, damit die Oberfläche die Meldung übersetzen kann.
+                    template, params = (exc.template, exc.params) if isinstance(exc, UserError) else (
+                        (message, {}) if isinstance(exc, ValueError) else ("Interner Erfassungsfehler ({error}).", {"error": type(exc).__name__}))
+                    self.status.update(state="error", message=template, params=params, errors=self.status["errors"] + 1)
                     if failures == 1 or failures % 20 == 0:
                         log.warning("Erfassung: %s", message)
                         try:

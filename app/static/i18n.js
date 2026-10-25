@@ -18,9 +18,17 @@ const CURRENCIES = {
 };
 let LANGUAGE = 'de', LOCALE = 'de-DE', CATALOG = {}, FALLBACK = {}, CURRENCY = CURRENCIES.EUR;
 
+function storedLanguage() {
+  try { return localStorage.getItem('kilowatch-language') || ''; } catch { return ''; }
+}
+
+function languageOptions(selected) {
+  return Object.entries(LANGUAGES).map(([code, item]) => `<option value="${code}"${code === selected ? ' selected' : ''}>${item.name}</option>`).join('');
+}
+
 function pickLanguage(preferred) {
   const candidates = [preferred];
-  try { candidates.push(localStorage.getItem('kilowatch-language')); } catch { /* ohne Speicher */ }
+  candidates.push(storedLanguage());
   for (const value of navigator.languages || [navigator.language]) candidates.push(value);
   for (const value of candidates) {
     const code = String(value || '').toLowerCase().split('-')[0].replace(/^(no|nn)$/, 'nb');
@@ -43,14 +51,22 @@ async function setLanguage(code, remember = true) {
   LANGUAGE = code; LOCALE = LANGUAGES[code].locale; CATALOG = catalog; FALLBACK = fallback;
   if (remember) { try { localStorage.setItem('kilowatch-language', code); } catch { /* nur Sitzung */ } }
   document.documentElement.lang = code;
+  const select = document.getElementById('login-language');
+  if (select) select.innerHTML = languageOptions(code);
   translateStatic(document);
   window.kilowatchTheme?.refresh();
+}
+
+// Zahlen in Parametern vom Server im Format der Sprache.
+function numberParams(params = {}) {
+  return Object.fromEntries(Object.entries(params || {}).map(([key, value]) => [key, typeof value === 'number' ? value.toLocaleString(LOCALE) : value]));
 }
 
 // Markiert Quelltexte für die Extraktion, ohne sie sofort zu übersetzen.
 const tk = text => text;
 
-function setCurrency(code) { CURRENCY = CURRENCIES[code] || CURRENCIES.EUR; }
+let CURRENCY_CODE = 'EUR';
+function setCurrency(code) { CURRENCY_CODE = CURRENCIES[code] ? code : 'EUR'; CURRENCY = CURRENCIES[CURRENCY_CODE]; }
 
 // Geldbeträge: Quelltexte nennen € und ct; bei NOK/SEK werden Zeichen und Untereinheit ersetzt.
 function localCurrency(text) {

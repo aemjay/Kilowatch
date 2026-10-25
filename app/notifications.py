@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .analytics import Analytics, local_day, midnight
 from .network import local_request, local_url
+from .i18n import UserError, translate
 
 
 class NotificationSettings(BaseModel):
@@ -156,7 +157,7 @@ async def send_signal(config, token, subject, body):
                                       {"number": config.signal_number, "recipients": config.signal_to,
                                        "message": subject + "\n\n" + body}, token)
     if status not in (200, 201, 202, 204):
-        raise ValueError(f"Signal-Zustellung fehlgeschlagen (HTTP {status}). Kopplung und Gateway prüfen.")
+        raise UserError("Signal-Zustellung fehlgeschlagen (HTTP {status}). Kopplung und Gateway prüfen.", status=status)
 
 
 class Notifications:
@@ -226,7 +227,16 @@ class Notifications:
                                             (key, kind, channel, subject, body, now, now))
             return cursor.lastrowid
 
-    def rule(self, key, active, title, body, now, config, enabled=True, recovery=True):
+    def text(self, template, **params):
+        """Übersetzt Betreff und Text in die eingestellte Sprache; Zahlen mit passendem Dezimalzeichen."""
+        settings = self.store.settings()
+        language = settings.get("language") or "de"
+        point = "." if language == "en" else ","
+        # Zahlen als (Wert, Nachkommastellen), damit das Dezimalzeichen zur Sprache passt.
+        params = {k: format(v[0], f".{v[1]}f").replace(".", point) if isinstance(v, tuple) else v for k, v in params.items()}
+        return translate(template, language, settings.get("currency", "EUR"), **params)
+
+    def rule(self, key, active, title, body, now, config, enabled=True, recovery=True, params=None):
         previous = self.rule_state.get(key, {"active": False, "notified": [], "last_alert": 0})
         if not enabled:
             with self.store.transaction():
@@ -241,13 +251,13 @@ class Notifications:
         if active:
             if not previous["last_alert"] or now - previous["last_alert"] >= config.cooldown_minutes * 60:
                 for channel in channels:
-                    self.enqueue(key, "alert", channel, "Kilowatch · " + title, body, now)
+                    self.enqueue(key, "alert", channel, "Kilowatch · " + self.text(title), self.text(body, **(params or {})), now)
                 previous["last_alert"] = now
             previous["notified"] = []
         elif recovery and config.recovery:
             for channel in previous["notified"]:
                 if channel in channels:
-                    self.enqueue(key, "recovery", channel, "Kilowatch · Wieder in Ordnung", title + " ist wieder im normalen Bereich.", now)
+                    self.enqueue(key, "recovery", channel, "Kilowatch · " + self.text("Wieder in Ordnung"), self.text("{title} ist wieder im normalen Bereich.", title=self.text(title)), now)
             previous["notified"] = []
         previous["active"] = active
         self.rule_state[key] = previous
@@ -270,7 +280,8 @@ class Notifications:
         offline = now - max(last, self.started) >= config.offline_seconds
         # Eine Neustart-Wartezeit ist noch kein Nachweis der Erholung.
         offline |= self.rule_state.get("offline", {}).get("active", False) and (latest is None or latest["ts"] < self.started)
-        self.rule("offline", offline, "Keine frischen Zählerdaten", f"Seit mindestens {config.offline_seconds} Sekunden fehlen neue Messwerte. Kilowatch versucht die Verbindung weiterherzustellen.", now, config, config.offline_enabled)
+        self.rule("offline", offline, "Keine frischen Zählerdaten", "Seit mindestens {seconds} Sekunden fehlen neue Messwerte. Kilowatch versucht die Verbindung weiterherzustellen.", now, config, config.offline_enabled,
+                  params={"seconds": config.offline_seconds})
         if latest and now - latest["ts"] <= 30 and latest["power_w"] is not None:
             watts = latest["power_w"]
             old_load = self.rule_state.get("load", {}).get("active", False)
@@ -280,7 +291,8 @@ class Notifications:
                 self.high_since = None
             active = ((old_load and watts >= config.load_w * .9) or
                       (self.high_since is not None and now - self.high_since >= config.load_minutes * 60))
-            self.rule("load", active, "Hohe Dauerlast", f"Netzleistung seit mindestens {config.load_minutes} Minuten über {config.load_w} W. Aktuell {watts:.0f} W. Eine Gerätezuordnung ist daraus nicht möglich.", now, config, config.load_enabled)
+            self.rule("load", active, "Hohe Dauerlast", "Netzleistung seit mindestens {minutes} Minuten über {limit} W. Aktuell {watts} W. Eine Gerätezuordnung ist daraus nicht möglich.", now, config, config.load_enabled,
+                      params={"minutes": config.load_minutes, "limit": config.load_w, "watts": (watts, 0)})
         else:
             # Eine Messlücke beweist keine durchgehende hohe Last.
             self.high_since = None
@@ -289,24 +301,27 @@ class Notifications:
         if battery is not None and now - diagnostics.get("checked_at", 0) <= 300:
             old = self.rule_state.get("battery", {}).get("active", False)
             low = battery < config.battery_v + (.15 if old else 0)
-            self.rule("battery", low, "Batteriespannung niedrig", f"Der Pulse meldet {battery:.2f} V. Batterien und Empfang am Lesekopf prüfen. Die Schwelle ist ein konfigurierbarer Hinweis.", now, config, config.battery_enabled)
+            self.rule("battery", low, "Batteriespannung niedrig", "Der Pulse meldet {volts} V. Batterien und Empfang am Lesekopf prüfen. Die Schwelle ist ein konfigurierbarer Hinweis.", now, config, config.battery_enabled,
+                      params={"volts": (battery, 2)})
         free_mb = shutil.disk_usage(self.store.directory).free / 1024 / 1024
         old_disk = self.rule_state.get("disk", {}).get("active", False)
         disk_low = free_mb < config.disk_free_mb * (1.1 if old_disk else 1)
-        self.rule("disk", disk_low, "NAS-Speicher knapp", f"Am Datenpfad sind noch etwa {free_mb:.0f} MiB frei. Aufbewahrung und Sicherungen prüfen.", now, config, config.disk_enabled)
+        self.rule("disk", disk_low, "NAS-Speicher knapp", "Am Datenpfad sind noch etwa {free} MiB frei. Aufbewahrung und Sicherungen prüfen.", now, config, config.disk_enabled,
+                  params={"free": (free_mb, 0)})
         if config.daily_kwh:
             day = local_day(now, settings["timezone"])
             used = Analytics(self.store).summary(midnight(day, settings["timezone"]), now)["import_kwh"]
             self.rule("daily:" + day.isoformat(), used is not None and used >= config.daily_kwh,
-                      "Tagesbudget erreicht", f"Heute sind mindestens {used or 0:.2f} kWh Netzbezug erfasst. Eingestellter Hinweiswert: {config.daily_kwh:.2f} kWh. Fehlende Daten können zusätzlichen Verbrauch enthalten.", now, config, recovery=False)
+                      "Tagesbudget erreicht", "Heute sind mindestens {used} kWh Netzbezug erfasst. Eingestellter Hinweiswert: {limit} kWh. Fehlende Daten können zusätzlichen Verbrauch enthalten.", now, config, recovery=False,
+                      params={"used": (used or 0, 2), "limit": (config.daily_kwh, 2)})
         budget = self.store.state("budget", {}).get("monthly_eur")
         month = local_day(now, settings["timezone"]).strftime("%Y-%m")
         if config.budget_enabled and budget:
             first = local_day(now, settings["timezone"]).replace(day=1)
             spent = Analytics(self.store).summary(midnight(first, settings["timezone"]), now)["known_cost_eur"]
             self.rule("budget:" + month, spent is not None and spent >= budget, "Monatsbudget erreicht",
-                      f"In diesem Monat sind bereits mindestens {spent or 0:.2f} € erfasst. Eingestelltes Budget: {budget:.2f} €. Fehlende Daten oder Preise können weitere Kosten enthalten.",
-                      now, config, recovery=False)
+                      "In diesem Monat sind bereits mindestens {spent} € erfasst. Eingestelltes Budget: {budget} €. Fehlende Daten oder Preise können weitere Kosten enthalten.",
+                      now, config, recovery=False, params={"spent": (spent or 0, 2), "budget": (budget, 2)})
         for key in list(self.rule_state):
             if key.startswith("daily:") and key != "daily:" + local_day(now, settings["timezone"]).isoformat():
                 self.rule(key, False, "", "", now, config, enabled=False)
@@ -366,7 +381,8 @@ class Notifications:
         recent = self.store.rows("SELECT id FROM notifications WHERE kind='test' AND channel=? AND created>?", (channel, now - 30))
         if recent:
             raise ValueError("Bitte 30 Sekunden zwischen Testnachrichten warten.")
-        event_id = self.enqueue("manual-test", "test", channel, "Kilowatch · Testnachricht", "Die konfigurierte Benachrichtigung funktioniert. Diese Testnachricht enthält keine Messwerte.", now)
+        event_id = self.enqueue("manual-test", "test", channel, "Kilowatch · " + self.text("Testnachricht"),
+                                self.text("Die konfigurierte Benachrichtigung funktioniert. Diese Testnachricht enthält keine Messwerte."), now)
         row = self.store.rows("SELECT * FROM notifications WHERE id=?", (event_id,))[0]
         await self.deliver(row, config, now)
         return {"ok": True, "id": event_id, "channel": channel}

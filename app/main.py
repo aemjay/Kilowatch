@@ -10,6 +10,7 @@ import time
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import StarletteHTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -27,6 +28,7 @@ from .discovery import Discovery, suggestions
 from .market import Market
 from .updates import Updates
 from . import insights
+from .i18n import CURRENCIES, LANGUAGES, UserError, translate, translate_error
 
 
 class StrictModel(BaseModel):
@@ -67,6 +69,22 @@ class SettingsUpdate(StrictModel):
     high_load_w: int | None = Field(default=None, ge=100, le=100000)
     enabled: bool | None = None
     name: str | None = Field(default=None, min_length=1, max_length=80)
+    language: str | None = None
+    currency: str | None = None
+
+    @field_validator("language")
+    @classmethod
+    def valid_language(cls, v):
+        if v is not None and v not in LANGUAGES:
+            raise ValueError("Sprache wird nicht unterstützt.")
+        return v
+
+    @field_validator("currency")
+    @classmethod
+    def valid_currency(cls, v):
+        if v is not None and v not in CURRENCIES:
+            raise ValueError("Währung wird nicht unterstützt.")
+        return v
 
     @field_validator("bridge_host")
     @classmethod
@@ -199,7 +217,7 @@ def parse_prices(text):
                 raise ValueError()
         except (ValueError, KeyError, TypeError, AttributeError):
             # Fehlende Spalten liefert DictReader als None.
-            raise ValueError(f"Zeile {index}: UTC-Offset, Viertelstundengrenzen oder Preis ungültig.") from None
+            raise UserError("Zeile {index}: UTC-Offset, Viertelstundengrenzen oder Preis ungültig.", index=index) from None
         result.append((int(start), int(end), rate))
     result.sort()
     if not result:
@@ -277,17 +295,26 @@ def create_app(config=None):
     app.state.auth, app.state.vault, app.state.notifier = auth, vault, notifier
     app.state.updates = updates
 
+    def language(request):
+        """Sprache der Anfrage (Kopfzeile der Oberfläche), sonst die gespeicherte Einstellung."""
+        chosen = request.headers.get("x-kilowatch-language")
+        return chosen if chosen in LANGUAGES else store.settings().get("language") or "de"
+
+    def failure(request, status, error):
+        currency = store.settings().get("currency", "EUR")
+        return JSONResponse({"detail": translate_error(error, language(request), currency)}, status_code=status)
+
     @app.middleware("http")
     async def guard(request: Request, call_next):
         path = request.url.path
         if request.method in ("POST", "PUT", "DELETE", "PATCH"):
             origin = request.headers.get("origin")
             if request.headers.get("x-kilowatch-request") != "1" or (origin and urlparse(origin).netloc != request.headers.get("host")):
-                return JSONResponse({"detail": "Ungültiger Anfrageursprung."}, status_code=403)
+                return failure(request, 403, "Ungültiger Anfrageursprung.")
         if path.startswith("/api/") and path not in ("/api/login", "/api/setup/status", "/api/setup"):
             token = request.cookies.get("kilowatch_session")
             if sessions.get(token, 0) <= time.time():
-                return JSONResponse({"detail": "Bitte anmelden."}, status_code=401)
+                return failure(request, 401, "Bitte anmelden.")
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -298,7 +325,15 @@ def create_app(config=None):
 
     @app.exception_handler(ValueError)
     async def value_error(request, exc):
-        return JSONResponse({"detail": str(exc)}, status_code=400)
+        return failure(request, 400, exc)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request, exc):
+        if not isinstance(exc.detail, str):
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+        response = failure(request, exc.status_code, exc.detail)
+        response.headers.update(exc.headers or {})
+        return response
 
     @app.get("/healthz")
     def health():

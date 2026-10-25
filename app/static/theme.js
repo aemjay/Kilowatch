@@ -3,8 +3,9 @@
 // Ohne Eintrag folgt die Oberfläche der Systemeinstellung (prefers-color-scheme).
 (function () {
   const order = ['auto', 'light', 'dark'];
-  const labels = {auto: 'Farbschema: automatisch', light: 'Farbschema: hell', dark: 'Farbschema: dunkel'};
-  const icons = {auto: 'Auto', light: 'Hell', dark: 'Dunkel'};
+  const tk = text => text; // Markiert Texte für die Übersetzung; i18n.js lädt später.
+  const labels = {auto: tk('Farbschema: automatisch'), light: tk('Farbschema: hell'), dark: tk('Farbschema: dunkel')};
+  const icons = {auto: tk('Auto'), light: tk('Hell'), dark: tk('Dunkel')};
   function stored() { try { return localStorage.getItem('kilowatch-theme') || 'auto'; } catch { return 'auto'; } }
   function apply(mode) {
     if (mode === 'auto') document.documentElement.removeAttribute('data-theme');

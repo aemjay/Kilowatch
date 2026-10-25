@@ -238,7 +238,7 @@ class Analytics:
         if len(recent) >= 24 and len(prior) >= 24:
             delta = statistics.median(recent) - statistics.median(prior)
             if delta > max(80, abs(statistics.median(prior)) * .3):
-                anomalies.append({"title": "Nachtverbrauch gestiegen", "text": f"Median der letzten 7 Nächte liegt {delta:.0f} W über dem vorigen Vergleichsfenster. Ursache prüfen; keine Geräteerkennung."})
+                anomalies.append({"title": "Nachtverbrauch gestiegen", "text": "Median der letzten 7 Nächte liegt {delta} W über dem vorigen Vergleichsfenster. Ursache prüfen; keine Geräteerkennung.", "params": {"delta": round(delta)}})
         if not anomalies:
             anomalies.append({"title": "Keine belastbare Auffälligkeit", "text": "Die Regel benötigt je 24 ausreichend erfasste Viertelstunden in beiden Nachtfenstern. Fehlende Daten sind kein Nachweis für normalen Verbrauch."})
         return {

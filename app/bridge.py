@@ -6,9 +6,10 @@ import httpx
 
 from .decoder import decode
 from .network import resolve_local, validate_host
+from .i18n import UserError
 
 
-class BridgeError(ValueError):
+class BridgeError(UserError):
     pass
 
 
@@ -36,7 +37,7 @@ class Bridge:
                 return await self.request_address(address, path)
             except httpx.HTTPError as exc:
                 last_error = exc
-        raise BridgeError("Bridge nicht erreichbar (" + type(last_error).__name__ + "). LAN und Webserver prüfen.") from None
+        raise BridgeError("Bridge nicht erreichbar ({error}). LAN und Webserver prüfen.", error=type(last_error).__name__) from None
 
     async def request_address(self, address, path):
         async with self.client.stream("GET", f"http://{address}{path}", headers={"Host": self.host, "Cache-Control": "no-cache"}) as response:
@@ -45,7 +46,7 @@ class Bridge:
             if response.status_code in (404, 405):
                 return None
             if response.status_code != 200:
-                raise BridgeError(f"Bridge meldet HTTP {response.status_code}.")
+                raise BridgeError("Bridge meldet HTTP {status}.", status=response.status_code)
             result = bytearray()
             async for chunk in response.aiter_bytes():
                 result.extend(chunk)
