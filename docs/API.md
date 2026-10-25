@@ -38,6 +38,8 @@ Ein HttpOnly-Cookie gilt zwölf Stunden. Beim App-Neustart werden alle Sitzungen
 | DELETE `/api/tariffs/YYYY-MM-DD` | Tarif entfernen |
 | POST `/api/prices/import` | JSON `{ "csv": "..." }` |
 | DELETE `/api/prices` | alle importierten Preise entfernen |
+| PUT `/api/prices/source` | Preisquelle für dynamische Tarife: `source` (`""`, `tibber`, `spot`), `zone` (Euro-Gebotszone), `markup_ct`, `vat_percent`, `tibber_home`, optional `tibber_token` oder `clear_tibber_token`; ruft sofort ab und liefert den Status |
+| POST `/api/prices/refresh` | Preise der gewählten Quelle jetzt abrufen (höchstens alle 30 Sekunden) |
 | GET/POST `/api/events` | Ereignisse lesen/anlegen |
 | DELETE `/api/events/ID` | Ereignis entfernen |
 | GET `/api/events/ID/comparison` | Ereignis und Vorperiode vergleichen |

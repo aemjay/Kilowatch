@@ -26,6 +26,7 @@ async function harness(options={}) {
   const errors=[],calls=[];
   let saved=structuredClone({...settings,...options.settings});
   let notes=structuredClone(notification), needsSetup=!!options.needsSetup;
+  let priceFeed={source:'',zone:'DE-LU',markup_ct:0,vat_percent:0,tibber_home:'',tibber_token_configured:false,zones:['DE-LU','AT','NL','BE','FR'],spot_source:'Energy-Charts',status:{fetched_at:null,error:'',homes:[]}};
   let tariffs=structuredClone(options.tariffs||[]),market={rows:[],fetched_at:null,error:''};
   let budget={settings:{monthly_eur:null,monthly_kwh:null,abschlag_eur:null},month:{observed_eur:3,observed_kwh:10,forecast_eur:null,forecast_kwh:null,forecast_reason:'Zu wenig Daten'},annual:{available:false,reason:'Mindestens 60 vollständig erfasste Tage erforderlich.'}};
   const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error));
@@ -63,7 +64,8 @@ async function harness(options={}) {
     else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null,household:options.household??null},co2:options.co2??null,
       series:{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:i*60,power_w:i===30?4000:300+i,seconds:60}))}};
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
-    else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market};
+    else if(path==='/api/prices/source'){priceFeed={...priceFeed,...body,tibber_token_configured:!!body.tibber_token||priceFeed.tibber_token_configured};delete priceFeed.tibber_token;data=priceFeed;}
+    else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market,price_feed:priceFeed};
     else if(path==='/api/market/refresh'){market={rows:[{start:1800,end:5400,ct_kwh:-5}],fetched_at:2000000000,error:''};data=market;}
     else if(path==='/api/budget'&&config.method==='PUT'){budget.settings=body;}
     else if(path==='/api/budget')data={...budget,reference:options.household??null};
@@ -179,6 +181,24 @@ test('subnet discovery works before credentials and adopts discovered FQDN',asyn
   w.document.querySelector('[data-use-device]').click();
   assert.equal(w.document.querySelector('[name="bridge_host"]').value,'bridge.fritz.box');
   assert.equal(w.document.querySelector('[name="bridge_password"]').value,'');
+  assert.deepEqual(h.errors,[]);
+});
+
+test('price source shows only the fields of the chosen source and never echoes the token',async t=>{
+  const h=await harness({page:'costs',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#price-source-form'));
+  const form=w.document.querySelector('#price-source-form');
+  assert.equal(form.elements.tibber_token.closest('label').hidden,true);
+  form.elements.source.value='spot';form.elements.source.dispatchEvent(new w.Event('change'));
+  assert.equal(form.elements.zone.disabled,false);assert.equal(form.elements.tibber_token.disabled,true);
+  form.elements.source.value='tibber';form.elements.source.dispatchEvent(new w.Event('change'));
+  input(w,'price-source-form','tibber_token','synthetic-token');
+  submit(w,'price-source-form');
+  await until(()=>h.calls.some(c=>c.path==='/api/prices/source'));
+  const request=h.calls.find(c=>c.path==='/api/prices/source');
+  assert.equal(request.body.source,'tibber');assert.equal(request.body.tibber_token,'synthetic-token');assert.equal(request.body.markup_ct,0);
+  await until(()=>!!w.document.querySelector('#tibber-forget'));
+  assert.equal(w.document.querySelector('#price-source-form').elements.tibber_token.value,'');
   assert.deepEqual(h.errors,[]);
 });
 
