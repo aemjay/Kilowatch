@@ -149,3 +149,22 @@ def test_signal_colours_exist_in_every_theme_and_stay_visible_in_dark_mode():
     # Statuspunkt und Hinweise nutzen Signalfarben, keine in Dunkel abgedunkelten Flächenfarben.
     assert ".status-dot,.main-footer i{display:inline-block;width:6px;height:6px;background:var(--signal-ok)" in css
     assert "--signal-ok:#414843" not in css
+
+
+def test_light_mode_text_colours_reach_aa_contrast_on_the_page_background():
+    css=(ROOT/"app/static/style.css").read_text()
+    light=css.split(":root{color-scheme:light",1)[1].split("}",1)[0]
+    colours=dict(re.findall(r"--([\w-]+):(#[0-9a-fA-F]{6})",light))
+    def lum(h):
+        r,g,b=(int(h[i:i+2],16)/255 for i in (1,3,5))
+        f=lambda x:x/12.92 if x<=.03928 else ((x+.055)/1.055)**2.4
+        return .2126*f(r)+.7152*f(g)+.0722*f(b)
+    ratio=lambda a,b:(max(lum(a),lum(b))+.05)/(min(lum(a),lum(b))+.05)
+    paper=colours["paper"]
+    # Dunkle Schriftfarben (auf hellen Flächen) mindestens 4,5:1; ausgenommen rein dekorative Zeichen
+    # und die Versionsnummer, die auf der immer dunklen Seitenleiste steht.
+    decorative={"k-text-a7b795","k-text-b2b9ae","k-text-657d83"}
+    for name,value in colours.items():
+        if (name.startswith("k-text-") or name=="muted") and name not in decorative and lum(value)<0.6:
+            assert ratio(value,paper)>=4.5,(name,value)
+    assert ratio(colours["chart-line"],"#ffffff")>=3
