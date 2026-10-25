@@ -290,3 +290,16 @@ test('login screen offers all languages and switches immediately',async t=>{
   assert.equal(w.document.querySelector('#login-form h2 bdi').textContent,sv['Anmelden']);
   assert.deepEqual(h.errors,[]);
 });
+
+test('hour views request the last hours and calendar dates switch back',async t=>{
+  const h=await harness({page:'costs',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  w.document.querySelector('[data-range="hours1"]').click();
+  await until(()=>h.calls.some(c=>c.path==='/api/overview?hours=1'));
+  assert.ok(w.document.querySelector('[data-range="hours1"]').classList.contains('selected'));
+  w.document.querySelector('[data-range="hours6"]').click();
+  await until(()=>h.calls.some(c=>c.path==='/api/overview?hours=6'));
+  submit(w,'range-form');
+  await until(()=>h.calls.filter(c=>c.path.startsWith('/api/overview?start=')).length>=2);
+  assert.equal(w.document.querySelector('[data-range="hours6"]').classList.contains('selected'),false);
+  assert.deepEqual(h.errors,[]);
+});

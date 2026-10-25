@@ -11,7 +11,8 @@ LANGUAGES = ("de", "en", "nb", "sv", "nl")
 CURRENCIES = {"EUR": ("€", "ct"), "NOK": ("kr", "øre"), "SEK": ("kr", "öre")}
 CATALOGS = Path(__file__).parent / "static" / "i18n"
 # Gleiche Mehrzahlregeln wie Intl.PluralRules für die unterstützten Sprachen: one bei genau 1.
-DE_PLURALS = {"{count} Lücke(n)": {"one": "{count} Lücke", "other": "{count} Lücken"}}
+DE_PLURALS = {"{count} Lücke(n)": {"one": "{count} Lücke", "other": "{count} Lücken"},
+              "Letzte {count} Std.": {"one": "Letzte Stunde", "other": "Letzte {count} Std."}}
 
 
 def _(text):

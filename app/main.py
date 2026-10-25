@@ -504,18 +504,22 @@ def create_app(config=None):
             raise ValueError("Gateway liefert keinen Kopplungs-QR-Code als PNG. Erreichbarkeit und Gateway-Modus prüfen.")
         return Response(body, media_type="image/png", headers={"Cache-Control": "no-store"})
 
-    def range_for(start, end):
-        return period(start, end, store.settings()["timezone"], time.time())
+    def range_for(start, end, hours=None):
+        return period(start, end, store.settings()["timezone"], time.time(), hours)
 
     @app.get("/api/overview")
-    def overview(start: str | None = None, end: str | None = None):
-        s, e = range_for(start, end)
+    def overview(start: str | None = None, end: str | None = None, hours: int | None = None):
+        s, e = range_for(start, end, hours)
         a = Analytics(store)
-        selected_start = local_day(s, a.zone)
-        selected_end = date.fromisoformat(end) if end else local_day(time.time(), a.zone)
-        days = (selected_end - selected_start).days + 1
-        previous_start = midnight(selected_start - timedelta(days=days), a.zone)
-        previous_end = min(s, previous_start + (e - s))
+        if hours is not None:
+            # Vergleich mit dem gleich langen Abschnitt direkt davor.
+            previous_start, previous_end = s - (e - s), s
+        else:
+            selected_start = local_day(s, a.zone)
+            selected_end = date.fromisoformat(end) if end else local_day(time.time(), a.zone)
+            days = (selected_end - selected_start).days + 1
+            previous_start = midnight(selected_start - timedelta(days=days), a.zone)
+            previous_end = min(s, previous_start + (e - s))
         # Historische Teilviertelstunden nicht als zeitgenau rekonstruieren.
         previous_end = int(previous_end // 900) * 900
         previous = a.summary(previous_start, previous_end) if previous_end > previous_start else None
@@ -523,8 +527,8 @@ def create_app(config=None):
                 "gaps": store.gap_rows(s, e), "timezone": a.zone}
 
     @app.get("/api/analysis")
-    def analysis(start: str | None = None, end: str | None = None):
-        s, e = range_for(start, end)
+    def analysis(start: str | None = None, end: str | None = None, hours: int | None = None):
+        s, e = range_for(start, end, hours)
         a = Analytics(store)
         return dict(a.patterns(s, e), forecast=a.forecast(time.time()))
 

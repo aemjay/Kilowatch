@@ -34,7 +34,7 @@ Ein HttpOnly-Cookie gilt zwölf Stunden. Beim App-Neustart werden alle Sitzungen
 | POST `/api/notifications/test/signal` | bewusster einzelner Signal-Test ohne Messwerte |
 | POST `/api/notifications/signal/qr` | authentifizierter PNG-Proxy für Kopplungs-QR, kein Cache |
 | GET `/api/live` | letzter Messpunkt, Alter, Collectorstatus und verfügbare Register |
-| GET `/api/overview` | Summen, Vorperiode, Serien und Lücken |
+| GET `/api/overview` | Summen, Vorperiode, Serien und Lücken; `start`/`end` (Datum) oder `hours=1…48` für die letzten Stunden |
 | GET `/api/analysis` | Muster, Lastdauerlinie, Regelhinweis und Monatsprognose |
 | GET/PUT `/api/tariffs` | Tarifhistorie / Tarif ab Anfangsdatum speichern |
 | DELETE `/api/tariffs/YYYY-MM-DD` | Tarif entfernen |

@@ -21,7 +21,12 @@ def local_day(ts, zone):
     return datetime.fromtimestamp(ts, ZoneInfo(zone)).date()
 
 
-def period(start, end, zone, now):
+def period(start, end, zone, now, hours=None):
+    if hours is not None:
+        # Letzte Stunden: Beginn auf die Viertelstunde gerundet, weil Energie in Viertelstunden gespeichert ist.
+        if not 1 <= hours <= 48:
+            raise ValueError("Stundenansicht: 1 bis 48 Stunden.")
+        return int((now - hours * 3600) // 900) * 900, now
     today = local_day(now, zone)
     a = date.fromisoformat(start) if start else today
     b = date.fromisoformat(end) + timedelta(days=1) if end else today + timedelta(days=1)
@@ -183,14 +188,23 @@ class Analytics:
             if not item["export_s"]:
                 item["export_kwh"] = None
         power = []
-        resolution = 60 if end - start <= 3 * 86400 else 900
-        power_rows = self.store.bucket_rows(start, end, resolution)
-        if not power_rows and resolution == 60:
-            resolution = 900
+        # Bis zwei Stunden einzelne Messwerte (Abstand = Abrufintervall), bis drei Tage Minuten, sonst Viertelstunden.
+        resolution = 0 if end - start <= 2 * 3600 else 60 if end - start <= 3 * 86400 else 900
+        if resolution == 0:
+            samples = self.store.sample_rows(start, end)
+            for row, following in zip(samples, samples[1:] + [None]):
+                seconds = min(60, (following["ts"] if following else end) - row["ts"])
+                power.append({"ts": row["ts"], "power_w": row["power_w"], "seconds": max(seconds, 1)})
+            if not power:
+                resolution = 60
+        if resolution:
             power_rows = self.store.bucket_rows(start, end, resolution)
-        for row in power_rows:
-            if row["power_s"]:
-                power.append({"ts": row["ts"], "power_w": row["power_ws"] / row["power_s"], "seconds": row["power_s"]})
+            if not power_rows and resolution == 60:
+                resolution = 900
+                power_rows = self.store.bucket_rows(start, end, resolution)
+            for row in power_rows:
+                if row["power_s"]:
+                    power.append({"ts": row["ts"], "power_w": row["power_ws"] / row["power_s"], "seconds": row["power_s"]})
         # Begrenzte Antwortgröße: zeitgewichtete Mittel gleich großer Gruppen.
         # Kurze Spitzen werden dabei geglättet; peak_w der Energiegruppen bleibt exakt.
         if len(power) > 1800:

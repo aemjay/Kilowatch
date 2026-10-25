@@ -39,8 +39,11 @@ function panel(title, subtitle, content, extra = '') { return `<div class="panel
 function stat(label, value) { return `<div class="stat-line"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`; }
 function metric(label, value, suffix, note, icon, highlight = false) { return `<div class="card metric-card${highlight ? ' highlight' : ''}"><div class="metric-label">${esc(label)}<span class="metric-icon">${icon}</span></div><div class="metric-value">${value}<small>${esc(suffix)}</small></div><div class="metric-note">${esc(note)}</div></div>`; }
 function coverage(summary) { const percent = Math.min(100,Math.max(0,(summary?.coverage || 0)*100)); return `<div class="quality-row"><span>${t('Datenabdeckung')}</span><div class="quality-track"><span style="width:${percent}%"></span></div><strong>${number(percent,1)} %</strong></div>`; }
-function periodText() { return `${dateLabel($('#range-start').value)} – ${dateLabel($('#range-end').value)}`; }
-function query() { return new URLSearchParams({start:$('#range-start').value,end:$('#range-end').value}).toString(); }
+// Stundenansicht (letzte 1 oder 6 Stunden) oder Kalendertage aus den Datumsfeldern.
+let rangeHours=null, lastPageRefresh=0;
+function datesText() { return `${dateLabel($('#range-start').value)} – ${dateLabel($('#range-end').value)}`; }
+function periodText() { return rangeHours ? t('Letzte {count} Std.',{count:rangeHours}) : datesText(); }
+function query() { return new URLSearchParams(rangeHours?{hours:rangeHours}:{start:$('#range-start').value,end:$('#range-end').value}).toString(); }
 function totalNote(summary) { return summary.gap_count ? `${t('{count} Lücke(n)',{count:summary.gap_count})} · ${t('{value} nur als Gesamtmenge bekannt',{value:unit(summary.recovered_import_kwh,'kWh')})}` : t('{percent} % zeitlich erfasst',{percent:number(summary.coverage*100,1)}); }
 
 function lineChart(data, field = 'power_w', label = 'W', xField = 'ts', options = {}) {
@@ -78,9 +81,9 @@ function barChart(data, field = 'import_kwh', label = 'kWh') {
 }
 
 function powerPanel(data) {
-  const isShort = data.series.group === 'quarter';
+  const isShort = data.series.group === 'quarter', raw = data.series.power_resolution_seconds === 0;
   const chart = isShort ? lineChart(data.series.power,'power_w','W','ts',{start:data.summary.start,end:data.summary.end}) : barChart(data.series.energy);
-  return panel(isShort?t('So fließt dein Strom.'):t('Dein Verbrauch im Verlauf.'),isShort?t('Mittlere Netzleistung je Zeitabschnitt · positive Werte = Bezug'):t('Verbrauch aus den Zählerständen · zeitlich zugeordnete Energie'),chart+`<div class="chart-note"><span>${isShort?t('Leere Stellen zeigen fehlende Messdaten.'):t('Nicht zeitlich zuordenbare Lückenenergie ist separat ausgewiesen.')}</span><span>${isShort?t('ZEIT'):t('DATUM')}</span></div>`,`<div class="legend"><span><i></i>${isShort?t('Netzleistung'):t('Netzbezug')}</span></div>`);
+  return panel(isShort?t('So fließt dein Strom.'):t('Dein Verbrauch im Verlauf.'),raw?t('Einzelne Messwerte im Abfrageintervall · positive Werte = Bezug'):isShort?t('Mittlere Netzleistung je Zeitabschnitt · positive Werte = Bezug'):t('Verbrauch aus den Zählerständen · zeitlich zugeordnete Energie'),chart+`<div class="chart-note"><span>${isShort?t('Leere Stellen zeigen fehlende Messdaten.'):t('Nicht zeitlich zuordenbare Lückenenergie ist separat ausgewiesen.')}</span><span>${isShort?t('ZEIT'):t('DATUM')}</span></div>`,`<div class="legend"><span><i></i>${isShort?t('Netzleistung'):t('Netzbezug')}</span></div>`);
 }
 
 function updateLiveParts() {
@@ -203,6 +206,7 @@ const pageText={
 };
 
 async function loadPage() {
+  lastPageRefresh=Date.now();
   const version=++requestVersion, selected=page;
   const target=$('#page-'+selected);target.classList.add('loading');
   try {
@@ -239,6 +243,7 @@ async function navigate(value, updateHash=true) {
 
 async function applyRange(value) {
   const now=today();let start=now,end=now;
+  rangeHours=value.startsWith('hours')?Number(value.slice(5)):null;
   if(value==='yesterday')start=end=shiftDay(now,-1);
   if(value==='week')start=shiftDay(now,-6);
   if(value==='month')start=now.slice(0,7)+'-01';
@@ -270,13 +275,21 @@ $('#login-language').addEventListener('change',safely(async event=>{await setLan
 $('#logout').addEventListener('click',safely(async()=>{await api('/api/logout','POST');showLogin();}));
 $$('[data-page]').forEach(button=>button.addEventListener('click',()=>navigate(button.dataset.page)));
 $$('[data-range]').forEach(button=>button.addEventListener('click',()=>applyRange(button.dataset.range)));
-$('#range-form').addEventListener('submit',event=>{event.preventDefault();if($('#range-end').value<$('#range-start').value){toast(t('Das Ende liegt vor dem Beginn.'),true);return;}$$('[data-range]').forEach(button=>button.classList.remove('selected'));loadPage();});
+$('#range-form').addEventListener('submit',event=>{event.preventDefault();if($('#range-end').value<$('#range-start').value){toast(t('Das Ende liegt vor dem Beginn.'),true);return;}$$('[data-range]').forEach(button=>button.classList.remove('selected'));rangeHours=null;loadPage();});
 $('#mobile-menu').addEventListener('click',()=>$('.sidebar').classList.toggle('open'));
 // Farbschema: Auto → Hell → Dunkel; Diagramme neu zeichnen, weil Heatmap-Farben vom Schema abhängen.
 window.kilowatchTheme?.refresh();
 $('#theme-toggle').addEventListener('click',()=>{window.kilowatchTheme.cycle();if(!$('#application').hidden)loadPage();});
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(window.kilowatchTheme?.current()==='auto'&&!$('#application').hidden)loadPage();});
 window.addEventListener('hashchange',()=>navigate(location.hash.slice(1),false));
-setInterval(async()=>{if($('#application').hidden||document.hidden)return;try{live=await api('/api/live');updateLiveParts();}catch(error){if(!$('#application').hidden)toast(error.message,true);}},5000);
-setInterval(()=>{if(!$('#application').hidden&&!document.hidden&&['dashboard','history'].includes(page))loadPage();},60000);
+// Live-Werte im eingestellten Abfrageintervall; Diagramme minütlich, in der Stundenansicht alle 15 Sekunden.
+let lastLiveRefresh=Date.now();
+setInterval(async()=>{
+  if($('#application').hidden||document.hidden)return;
+  if(Date.now()-lastLiveRefresh>=Math.min(60,Math.max(2,Number(settings?.poll_seconds)||5))*1000){
+    lastLiveRefresh=Date.now();
+    try{live=await api('/api/live');updateLiveParts();}catch(error){if(!$('#application').hidden)toast(error.message,true);}
+  }
+  if(['dashboard','history'].includes(page)&&Date.now()-lastPageRefresh>=(rangeHours?15000:60000))loadPage();
+},1000);
 setLanguage(pickLanguage(),false).then(start).catch(error=>{showLogin();if(error.status!==401)$('#login-error').textContent=error.message;});

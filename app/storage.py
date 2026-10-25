@@ -246,6 +246,9 @@ class Store:
             self.conn.execute("INSERT OR REPLACE INTO state VALUES('last_sample',?)", (json.dumps(current),))
         return True
 
+    def sample_rows(self, start, end):
+        return self.rows("SELECT ts,power_w FROM samples WHERE ts>=? AND ts<? AND power_w IS NOT NULL ORDER BY ts", (start, end))
+
     def bucket_rows(self, start, end, resolution=900):
         return self.rows("SELECT * FROM buckets WHERE resolution=? AND ts<? AND ts+?>? ORDER BY ts",
                          (resolution, end, resolution, start))

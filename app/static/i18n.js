@@ -94,6 +94,7 @@ function t(text, params = {}) {
 // Deutsche Mehrzahlformen für Quelltexte, deren Zahl variiert.
 const DE_PLURALS = {
   '{count} Lücke(n)': {one: '{count} Lücke', other: '{count} Lücken'},
+  'Letzte {count} Std.': {one: 'Letzte Stunde', other: 'Letzte {count} Std.'},
 };
 
 // Statische Texte in index.html: data-i18n (Text), data-i18n-placeholder, data-i18n-aria-label, data-i18n-title.
