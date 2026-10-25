@@ -16,13 +16,19 @@ Releases folgen [Semantic Versioning](https://semver.org/lang/de/) und erscheine
 
 Eine feste Version lässt sich mit `KILOWATCH_VERSION=1.2.3` in der `.env` wählen. Ein Wechsel auf eine neue Hauptversion (z. B. 2.x) geschieht nie automatisch; vorher die Release-Notizen lesen.
 
-Die Signatur lässt sich mit [cosign](https://docs.sigstore.dev/) prüfen:
+### Signaturprüfung
+
+Jedes Image wird im GitHub-Workflow keyless mit [cosign](https://docs.sigstore.dev/) signiert. `tools/update.sh` und der Installer prüfen diese Signatur **vor** jedem Start: Sie lösen den Tag über die Signatur in einen Digest auf, laden genau diesen Digest und legen ihn lokal unter dem gewohnten Tag ab. Fehlt die Signatur oder stammt sie aus einem anderen Workflow, bricht das Update ab und der laufende Container bleibt unverändert. Ist `cosign` nicht installiert (Standard auf DSM), verwenden die Skripte ein per Digest fixiertes cosign-Image. Die Prüfung braucht Internetzugang zu Sigstore.
+
+Erwartete Identität (Groß-/Kleinschreibung des Repositorys beachten):
 
 ```sh
 cosign verify ghcr.io/aemjay/kilowatch:1 \
-  --certificate-identity-regexp '^https://github.com/aemjay/kilowatch/' \
+  --certificate-identity-regexp '^https://github\.com/aemjay/Kilowatch/\.github/workflows/nas-image\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
+
+Nur für selbst gebaute oder umbenannte Images: `KILOWATCH_VERIFY=0` in der `.env` schaltet die Prüfung ab, `KILOWATCH_SIGNER` setzt eine andere erwartete Identität.
 
 ## Hinweis in der App
 

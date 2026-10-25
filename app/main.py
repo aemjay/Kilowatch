@@ -6,6 +6,7 @@ import io
 import logging
 from pathlib import Path
 import secrets
+import threading
 import time
 from urllib.parse import urlparse
 
@@ -30,6 +31,41 @@ from .updates import Updates
 from .grid import COUNTRIES, Grid
 from . import insights
 from .i18n import CURRENCIES, LANGUAGES, UserError, translate_error
+
+
+# Höchstgröße des Request-Bodys in Bytes, geprüft vor dem JSON-Parsing (auch ohne Content-Length).
+BODY_LIMITS = {"/api/login": 4096, "/api/setup": 4096, "/api/account/password": 4096,
+               "/api/prices/import": 4 * 1024 * 1024}
+DEFAULT_BODY_LIMIT = 256 * 1024
+# Fehlversuche je Adresse und insgesamt innerhalb von 15 Minuten.
+ATTEMPT_WINDOW, ATTEMPTS_PER_ADDRESS, ATTEMPTS_TOTAL = 900, 10, 50
+
+
+class BodyLimit:
+    """ASGI-Middleware: zählt tatsächlich empfangene Bytes und lehnt zu große Anfragen mit 413 ab."""
+
+    def __init__(self, app, reject):
+        self.app, self.reject = app, reject
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        limit = BODY_LIMITS.get(scope["path"], DEFAULT_BODY_LIMIT)
+        length = dict(scope["headers"]).get(b"content-length")
+        if length is not None and (not length.isdigit() or int(length) > limit):
+            return await self.reject(scope, receive, send)
+        received = 0
+
+        async def limited():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    raise HTTPException(413, "Anfrage ist zu groß.")
+            return message
+
+        await self.app(scope, limited, send)
 
 
 class StrictModel(BaseModel):
@@ -263,6 +299,7 @@ def create_app(config=None):
     updates = Updates(store, config.update_repository, config.demo)
     grid = Grid(store, config.demo)
     sessions, attempts = {}, {}
+    attempt_lock = threading.Lock()
     # Setup-Code zusätzlich als Datei im Datenordner, damit er ohne Container-Protokoll in der
     # File Station lesbar ist. Wer den Ordner lesen kann, hätte auch Zugriff auf das Protokoll.
     setup_file = Path(config.data_dir) / "SETUP-CODE.txt"
@@ -281,11 +318,28 @@ def create_app(config=None):
         except OSError:
             pass
 
-    def recent_attempts(key, now):
-        # Abgelaufene Einträge aller Adressen entfernen, damit das Dict nicht wächst.
-        for other in [k for k, times in attempts.items() if all(now - t >= 900 for t in times)]:
-            attempts.pop(other, None)
-        return attempts.get(key, [])
+    def reserve_attempt(kind, request, message):
+        """Versuch vor der teuren Prüfung atomar zählen; zu viele (je Adresse oder insgesamt) -> 429.
+
+        Parallele Anfragen zählen sofort mit. Bei Erfolg gibt forget_attempts() die Adresse frei.
+        """
+        now = time.time()
+        key = (kind, request.client.host if request.client else "unknown")
+        with attempt_lock:
+            # Abgelaufene Einträge entfernen, damit das Dict nicht wächst.
+            for other in list(attempts):
+                attempts[other] = [t for t in attempts[other] if now - t < ATTEMPT_WINDOW]
+                if not attempts[other]:
+                    attempts.pop(other)
+            total = sum(len(times) for (other, _), times in attempts.items() if other == kind)
+            if len(attempts.get(key, [])) >= ATTEMPTS_PER_ADDRESS or total >= ATTEMPTS_TOTAL:
+                raise HTTPException(429, message)
+            attempts.setdefault(key, []).append(now)
+        return key
+
+    def forget_attempts(key):
+        with attempt_lock:
+            attempts.pop(key, None)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -324,6 +378,12 @@ def create_app(config=None):
     def failure(request, status, error):
         currency = store.settings().get("currency", "EUR")
         return JSONResponse({"detail": translate_error(error, language(request), currency)}, status_code=status)
+
+    async def too_large(scope, receive, send):
+        await failure(Request(scope), 413, "Anfrage ist zu groß.")(scope, receive, send)
+
+    # Innerhalb von guard registriert, damit die 413-Ausnahme nicht in dessen Task-Gruppe landet.
+    app.add_middleware(BodyLimit, reject=too_large)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -367,36 +427,27 @@ def create_app(config=None):
 
     @app.post("/api/setup")
     def setup(data: Setup, request: Request):
-        now = time.time()
-        ip = "setup:" + (request.client.host if request.client else "unknown")
-        history = [t for t in recent_attempts(ip, now) if now - t < 900]
-        if len(history) >= 10:
-            raise HTTPException(429, "Zu viele ungültige Setup-Codes. In 15 Minuten erneut versuchen.")
-        try:
-            auth.initialize(data.password, data.setup_code)
-            remove_setup_code()
-        except ValueError:
-            attempts[ip] = history + [now]
-            raise
-        attempts.pop(ip, None)
+        key = reserve_attempt("setup", request, "Zu viele ungültige Setup-Codes. In 15 Minuten erneut versuchen.")
+        auth.initialize(data.password, data.setup_code)
+        remove_setup_code()
+        forget_attempts(key)
         return {"ok": True}
 
     @app.post("/api/login")
     def login(data: Login, request: Request):
-        now = time.time()
-        ip = request.client.host if request.client else "unknown"
-        history = [t for t in recent_attempts(ip, now) if now - t < 900]
-        if len(history) >= 10:
-            raise HTTPException(429, "Zu viele Anmeldeversuche. In 15 Minuten erneut versuchen.")
-        if not auth.verify(data.password):
-            attempts[ip] = history + [now]
-            raise HTTPException(401, "Passwort stimmt nicht.")
-        attempts.pop(ip, None)
-        for token, expires in list(sessions.items()):
-            if expires <= now:
-                sessions.pop(token, None)
-        token = secrets.token_urlsafe(32)
-        sessions[token] = now + 12 * 3600
+        key = reserve_attempt("login", request, "Zu viele Anmeldeversuche. In 15 Minuten erneut versuchen.")
+        # Prüfung und Sitzungsausgabe unter demselben Lock wie der Passwortwechsel: ein
+        # paralleler Wechsel kann so keine Sitzung übrig lassen, die mit dem alten Passwort entstand.
+        with auth.lock:
+            if not auth.verify(data.password):
+                raise HTTPException(401, "Passwort stimmt nicht.")
+            now = time.time()
+            for token, expires in list(sessions.items()):
+                if expires <= now:
+                    sessions.pop(token, None)
+            token = secrets.token_urlsafe(32)
+            sessions[token] = now + 12 * 3600
+        forget_attempts(key)
         response = JSONResponse({"ok": True})
         response.set_cookie("kilowatch_session", token, max_age=12 * 3600, httponly=True,
                             secure=config.secure_cookie, samesite="strict", path="/")
@@ -410,11 +461,14 @@ def create_app(config=None):
         return response
 
     @app.put("/api/account/password")
-    def change_password(data: PasswordChange):
-        if not auth.verify(data.current_password):
-            raise ValueError("Bisheriges App-Passwort stimmt nicht.")
-        auth.set_password(data.new_password)
-        sessions.clear()
+    def change_password(data: PasswordChange, request: Request):
+        key = reserve_attempt("password", request, "Zu viele Versuche. In 15 Minuten erneut versuchen.")
+        with auth.lock:
+            if not auth.verify(data.current_password):
+                raise ValueError("Bisheriges App-Passwort stimmt nicht.")
+            auth.set_password(data.new_password)
+            sessions.clear()
+        forget_attempts(key)
         response = JSONResponse({"ok": True, "login_required": True})
         response.delete_cookie("kilowatch_session")
         return response
@@ -431,6 +485,12 @@ def create_app(config=None):
     async def save_settings(data: SettingsUpdate):
         values = data.model_dump(exclude_none=True)
         password = values.pop("bridge_password", None)
+        saved = store.settings()
+        # Erstmals eingetragene Adresse ist kein Zielwechsel.
+        moved = saved["bridge_host"] and any(field in values and values[field] != saved[field] for field in ("bridge_host", "bridge_user"))
+        if moved and not password and get_password() and not config.demo:
+            # Das gespeicherte Passwort gehört zur bisherigen Bridge und geht nie an ein neues Ziel.
+            raise ValueError("Für eine geänderte Bridge-Adresse oder einen anderen Benutzer das Bridge-Passwort erneut eingeben.")
         if password:
             vault.update({"bridge_password": password})
         store.update_settings(values)
@@ -499,6 +559,14 @@ def create_app(config=None):
         updated = NotificationSettings(**data.model_dump(exclude=private))
         # Vor dem Speichern von Geheimnissen prüfen; save() prüft erneut mit derselben Logik.
         notifier.validate(updated)
+        # Gespeicherte Geheimnisse gehören zu ihrem Ziel und gehen nie an ein geändertes.
+        saved = notifier.config()
+        targets = {"smtp_password": ("smtp_security", "smtp_host", "smtp_port", "smtp_user"), "signal_token": ("signal_url",)}
+        for field, keys in targets.items():
+            moved = any(str(getattr(saved, key)).lower() != str(getattr(updated, key)).lower() for key in keys)
+            if moved and vault.get(field) and not getattr(data, field) and not getattr(data, "clear_" + field):
+                raise ValueError("Für einen geänderten SMTP-Server das SMTP-Passwort erneut eingeben oder entfernen." if field == "smtp_password"
+                                 else "Für eine geänderte Gateway-URL den Gateway-Token erneut eingeben oder entfernen.")
         values = {}
         for field in ("smtp_password", "signal_token"):
             value = getattr(data, field)

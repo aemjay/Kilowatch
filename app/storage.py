@@ -3,6 +3,7 @@ from dataclasses import asdict
 from pathlib import Path
 import json
 import math
+import secrets
 import sqlite3
 import threading
 import time
@@ -267,7 +268,8 @@ class Store:
         folder = self.directory / "backups"
         folder.mkdir(exist_ok=True)
         target = Path(target) if target else folder / (time.strftime("kilowatch-%Y%m%d-%H%M%S", time.gmtime()) + ".sqlite3")
-        temporary = target.with_suffix(".tmp")
+        # Eindeutige Zwischendatei: gleichzeitige Sicherungen in derselben Sekunde stören sich nicht.
+        temporary = target.with_name(f"{target.stem}.{secrets.token_hex(4)}.tmp")
         # Eigene Leseverbindung: WAL liefert einen konsistenten Stand, ohne die
         # gemeinsame Sperre zu halten. Erfassung und API laufen währenddessen weiter.
         with closing(sqlite3.connect(self.path, timeout=15)) as source, closing(sqlite3.connect(temporary)) as destination:

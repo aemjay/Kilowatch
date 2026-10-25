@@ -86,13 +86,31 @@ Beide Varianten verwenden den Ordner `data/` im Projektordner und das Volume `ki
 
 - Oberfläche: TCP 8088 im eigenen Heimnetz; DSM-Firewall passend zur LAN-Quelle konfigurieren.
 - Erfassung: NAS → aktuelle Bridge-Adresse, TCP 80. Keine Portweiterleitung aus dem Internet erforderlich.
-- Die Bridge verwendet lokales HTTP mit Basic Auth. Für den Browserzugriff kann ein DSM-Reverse-Proxy mit gültigem HTTPS-Zertifikat eingerichtet werden. Dann `COOKIE_SECURE=true` setzen und den ursprünglichen Host-Header weiterreichen; bei direktem HTTP bleibt der Wert `false`.
+- Empfohlen: Zugriff nur per HTTPS über den DSM-Reverse-Proxy (Abschnitt 7). Über direktes HTTP gehen App-Passwort und Sitzungscookie unverschlüsselt durchs Netz.
+- Die Bridge spricht nur HTTP mit Basic Auth; das kann Kilowatch nicht ändern. Diesen Netzabschnitt klein halten: Bridge und NAS im selben vertrauenswürdigen LAN oder in einem IoT-Segment, das nur das NAS erreicht.
+- Optionaler MQTT-Broker: anonyme Verbindungen sind für die Bridge-Firmware nötig. In der DSM-Firewall Port 1883 **nur für die Bridge-Adresse** freigeben (Pflichtschritt, nicht optional).
+- Kilowatch nie per Portweiterleitung aus dem Internet erreichbar machen. Für den Zugriff von unterwegs VPN verwenden (z. B. VPN Server in DSM oder WireGuard am Router).
 - App-Limit: 512 MiB RAM; optional Mosquitto 64 MiB, optional Signal 1024 MiB. Kein CPU-Limit: Der DSM-Kernel unterstützt keine CFS-Quota (`cpus` bricht den Containerstart ab). Kein eigener Logtreiber, damit das Protokoll im Container Manager sichtbar bleibt.
 - Mehrere GB freie Reserve vorsehen. Sieben vollständige Datenbanksicherungen können deutlich mehr Platz als die Datenbank allein benötigen. Freien Speicher und tatsächliches Wachstum überwachen.
 - Der Projektordner muss auf einem lokalen NAS-Volume liegen (z. B. `/volume1/docker`). Keine aktive Datenbank auf SMB/NFS verlagern; Sicherungen dürfen dort liegen.
 - `data/` vor dem ersten Start selbst anlegen (Abschnitt 1). [Speicherorte und Sicherung](BETRIEB.md#speicherorte).
 
 Die Anwendung nutzt vorhandene Geräte und verändert keine Bridge-Parameter. Aktuelle Firmware liefert Daten unter `/node_data.json`, ältere unter `/data.json`; Kilowatch probiert beide Pfade automatisch.
+
+## 7. HTTPS über den DSM-Reverse-Proxy
+
+1. **Zertifikat:** Unter *Systemsteuerung → Sicherheit → Zertifikat* ein gültiges Zertifikat für einen eigenen Namen hinterlegen, z. B. `kilowatch.example.de`. Let's Encrypt in DSM verlangt dafür Port 80 aus dem Internet; ohne Portfreigabe ein per DNS-01 ausgestelltes Zertifikat (z. B. mit [acme.sh](https://github.com/acmesh-official/acme.sh) und der DNS-API des Domain-Anbieters) importieren.
+2. **Name im LAN auflösen:** Der Name muss im Heimnetz auf die LAN-Adresse des NAS zeigen (lokaler DNS-Eintrag im Router; bei der FRITZ!Box den Namen zusätzlich als Ausnahme vom DNS-Rebind-Schutz eintragen).
+3. **Reverse Proxy:** *Systemsteuerung → Anmeldeportal → Erweitert → Reverse Proxy → Erstellen*. Quelle: HTTPS, Hostname `kilowatch.example.de`, Port 443. Ziel: HTTP, `localhost`, Port `8088`. Unter *Zertifikat* (Systemsteuerung → Sicherheit → Zertifikat → Einstellungen) dem Dienst das Zertifikat zuordnen.
+4. **Kilowatch absichern:** In der `.env` setzen und den Container neu starten (`docker compose up -d`):
+
+   ```sh
+   HTTP_BIND=127.0.0.1   # direkter HTTP-Port nur noch für den Proxy auf dem NAS
+   COOKIE_SECURE=true    # Sitzungscookie nur über HTTPS
+   ```
+5. **Prüfen:** `https://kilowatch.example.de` öffnet die Anmeldung, `http://<NAS>:8088` ist aus dem LAN nicht mehr erreichbar. Erst danach im Reverse Proxy HSTS aktivieren.
+
+Hinter dem Proxy sieht Kilowatch alle Anfragen von derselben internen Adresse; die Anmeldebegrenzung gilt dann für alle Clients gemeinsam. Weitergeleitete Adress-Header werden bewusst nicht ausgewertet.
 
 ## Fehler eingrenzen
 

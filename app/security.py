@@ -5,20 +5,26 @@ import json
 import os
 from pathlib import Path
 import secrets
+import tempfile
 import threading
 
 from cryptography.fernet import Fernet, InvalidToken
 
 
 def private_write(path: Path, data: bytes):
-    temporary = path.with_name(path.name + ".tmp")
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as target:
-        target.write(data)
-        target.flush()
-        os.fsync(target.fileno())
-    temporary.chmod(0o600)
-    temporary.replace(path)
+    # Eindeutige Zwischendatei (Modus 0600), damit gleichzeitige Schreibvorgänge sich nicht überschreiben.
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as target:
+            target.write(data)
+            target.flush()
+            os.fsync(target.fileno())
+        temporary.chmod(0o600)
+        temporary.replace(path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 class Vault:
