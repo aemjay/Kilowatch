@@ -264,7 +264,7 @@
  "Festpreis": "Fixed price",
  "Firmware": "Firmware",
  "Format": "Format",
- "Fragt bei GitHub ({repository}) nach dem neuesten Release. Es werden keine Messdaten übertragen. Installiert wird nie automatisch aus der App, sondern über DSM; siehe docs/UPDATES.md.": "Asks GitHub ({repository}) for the latest release. No readings are transmitted. Nothing is ever installed automatically from the app; updates go through DSM, see docs/UPDATES.md.",
+ "Fragt bei GitHub ({repository}) nach dem neuesten Release. Es werden keine Messdaten übertragen. Installiert wird nie automatisch aus der App, sondern mit dem Update-Skript; siehe docs/UPDATES.md.": "Asks GitHub ({repository}) for the latest release. No readings are transmitted. Nothing is ever installed automatically from the app; updates use the update script, see docs/UPDATES.md.",
  "Funkpegel Zähler → Bridge": "Signal strength meter → Bridge",
  "Für den Zeitraum berechnen": "Calculate for the period",
  "Für die letzten 30 Tage fehlen Preise.": "Prices are missing for the last 30 days.",
