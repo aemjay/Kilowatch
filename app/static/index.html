@@ -7,6 +7,7 @@
   <title>Kilowatch · Energie zu Hause</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
+  <script src="/theme.js"></script>
   <script src="/configure.js" defer></script>
   <script src="/extras.js" defer></script>
   <script src="/insights.js" defer></script>
@@ -35,7 +36,7 @@
       <div class="sidebar-bottom"><button data-page="settings" class="nav-bottom"><span>⚙</span> Einstellungen</button><button data-page="system" class="nav-bottom"><span>◉</span> System & Datenqualität</button><button id="logout" class="nav-bottom"><span>↪</span> Abmelden</button><small class="version">KILOWATCH <span id="version">1.0</span></small></div>
     </aside>
     <main>
-      <header class="topbar"><button id="mobile-menu" class="icon-button" aria-label="Menü öffnen">☰</button><span class="breadcrumb">MEIN ZUHAUSE <span>/</span> <b id="breadcrumb">ÜBERSICHT</b></span><div class="connection"><span id="status-dot" class="status-dot"></span><span id="status-label">Verbinde …</span><span id="demo-badge" class="demo-badge" hidden>BEISPIELDATEN</span></div></header>
+      <header class="topbar"><button id="mobile-menu" class="icon-button" aria-label="Menü öffnen">☰</button><span class="breadcrumb">MEIN ZUHAUSE <span>/</span> <b id="breadcrumb">ÜBERSICHT</b></span><div class="connection"><span id="status-dot" class="status-dot"></span><span id="status-label">Verbinde …</span><span id="demo-badge" class="demo-badge" hidden>BEISPIELDATEN</span><button id="theme-toggle" class="icon-button theme-toggle" type="button">Auto</button></div></header>
       <div class="content">
         <div class="page-heading"><div><h1 id="page-title">Übersicht</h1></div><div class="date-display"><span>◷</span><div><b id="today-label"></b></div></div></div>
         <div id="connection-alert" class="notice" hidden></div>
