@@ -135,3 +135,17 @@ def test_stylesheet_has_light_dark_and_print_themes_and_no_stray_colors():
         for prop,value in re.findall(r"([\w-]+):([^;]+)",declarations):
             if prop in ("color","background","background-color","border","border-color","fill","stroke"):
                 assert not re.search(r"#[0-9a-fA-F]{3,8}\b",value),(selector,prop,value)
+
+
+def test_signal_colours_exist_in_every_theme_and_stay_visible_in_dark_mode():
+    css=(ROOT/"app/static/style.css").read_text()
+    blocks=[css.split(":root{color-scheme:light",1)[1].split("}",1)[0],
+            css.split(":root:not([data-theme=light]){",1)[1].split("}",1)[0],
+            css.split(":root[data-theme=dark]{",1)[1].split("}",1)[0],
+            css.split("@media print{:root,:root[data-theme=dark]{",1)[1].split("}",1)[0]]
+    for block in blocks:
+        for name in ("signal-ok","signal-warn","signal-error","signal-blue","signal-quality"):
+            assert f"--{name}:#" in block, name
+    # Statuspunkt und Hinweise nutzen Signalfarben, keine in Dunkel abgedunkelten Flächenfarben.
+    assert ".status-dot,.main-footer i{display:inline-block;width:6px;height:6px;background:var(--signal-ok)" in css
+    assert "--signal-ok:#414843" not in css
