@@ -644,7 +644,7 @@
  "Viel · Farbe: Verbrauch je erfasster Stunde · letzte 62 Tage": "Mycket · Färg: förbrukning per insamlad timme · senaste 62 dagarna",
  "Viertelstunden": "Kvartar",
  "Viertelstunden · dauerhaft": "Kvartar · permanent",
- "Vollständigen Gerätenamen angeben, z. B. tibber-bridge.fritz.box.": "Ange fullständigt enhetsnamn, t.ex. tibber-bridge.fritz.box.",
+ "Vollständigen Gerätenamen angeben, z. B. tibber-bridge.lan.": "Ange fullständigt enhetsnamn, t.ex. tibber-bridge.lan.",
  "Von": "Från",
  "Vorperiode": "Föregående period",
  "Warmwasser": "Varmvatten",
@@ -706,7 +706,7 @@
  "voraussichtlich Nachzahlung ca. {amount}": "troligen efterbetalning ca {amount}",
  "z. B. 192.168.1.0/24": "t.ex. 192.168.1.0/24",
  "z. B. Kuckuck-17": "t.ex. Gök-17",
- "z. B. tibber-bridge.fritz.box": "t.ex. tibber-bridge.fritz.box",
+ "z. B. tibber-bridge.lan": "t.ex. tibber-bridge.lan",
  "{count} Börsenpreis-Intervalle geladen.": {
   "one": "{count} spotprisintervall hämtat.",
   "other": "{count} spotprisintervall hämtade."

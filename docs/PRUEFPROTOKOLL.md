@@ -4,7 +4,7 @@ Diese Seite beschreibt, was die automatisierten Tests abdecken, und welche Punkt
 
 ## Automatisierte Tests
 
-- **Python-Tests** (`python -m pytest`, Python 3.13): Decoder, Berechnung, API, Sicherung/Restore, Schema-Migrationen, lokale Geheimnisspeicherung, Einrichtung, DNS, Gerätesuche, Tarife, Analysen, Börsenpreise, Update-Hinweis, Benachrichtigungen, Übersetzungen und Installer.
+- **Python-Tests** (`python -m pytest`, Python 3.13): Decoder, Berechnung, API, Sicherung/Restore, Schema-Migrationen, lokale Geheimnisspeicherung, Einrichtung, DNS, Gerätesuche, Tarife, Analysen, Börsenpreise, Update-Hinweis, Benachrichtigungen, Übersetzungen und Installations-/Update-Skript.
 - **DOM-Tests** (`npm test`, Node 24/jsdom): Ersteinrichtung, Passwortbestätigung, FQDN-Verbindungstest, Speicherung/Testversand in der Oberfläche, Entfernen des Bridge-Passworts, Absendername und Erkennungswort im Betreff, Gerätesuche, HT/NT-Tarif, Börsenpreise, Tarifsimulation, Budget, Farbschema sowie Sprache und Währung. API-Antworten sind ausschließlich simuliert, es gibt kein Netzwerk und kein echtes Konto.
 - JavaScript-Syntaxprüfung aller Oberflächenskripte.
 - Alle Testdaten sind synthetisch. Echte Telegramme, Kennungen und Zugangsdaten gehören nicht ins Repository.
@@ -43,10 +43,10 @@ Eine externe E-Mail-Zustellung wird dadurch nicht bestätigt. Den konkreten Buil
 
 - [ ] Projekt starten, Setup abschließen, frische echte Werte sehen.
 - [ ] Bridge-FQDN vom Container auflösen; nach einem DHCP-Adresswechsel Empfang erneut prüfen.
-- [ ] RAM/CPU und Datenwachstum auf dem NAS beobachten. Die Compose-Limits sind keine Messwerte.
+- [ ] RAM/CPU und Datenwachstum auf dem Host beobachten. Die Compose-Limits sind keine Messwerte.
 - [ ] Tagesverbrauch nach mindestens 24 Stunden mit den Zählerständen vergleichen.
-- [ ] Bridge- und NAS-Neustart prüfen: Webserver, DNS, Wiederanlauf und gespeicherte Zugangsdaten.
+- [ ] Bridge- und Host-Neustart prüfen: Webserver, DNS, Wiederanlauf und gespeicherte Zugangsdaten.
 - [ ] Datenbank sowie Hash/Geheimnisse/Schlüssel getrennt sichern; Wiederherstellung in einer Testinstanz prüfen.
 - [ ] Eigene E-Mail-Konfiguration: Test tatsächlich empfangen, dann Alarm und Entwarnung prüfen.
 - [ ] HT/NT-Uhrzeiten mit dem eigenen Vertrag abgleichen.
-- [ ] Falls vollständiger Cloud-Ausstieg gewünscht: lokalen MQTT-Betrieb mit NAS-FQDN erst ohne Internetsperre, danach mit Sperre und Neustart jeweils mindestens 24 Stunden prüfen.
+- [ ] Falls vollständiger Cloud-Ausstieg gewünscht: lokalen MQTT-Betrieb mit Hostnamen erst ohne Internetsperre, danach mit Sperre und Neustart jeweils mindestens 24 Stunden prüfen.

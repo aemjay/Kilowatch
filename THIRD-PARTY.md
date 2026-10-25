@@ -8,7 +8,7 @@ Eclipse Mosquitto wird ausschließlich als optionales unverändertes offizielles
 
 Die lokale Geheimnisspeicherung verwendet [cryptography/Fernet](https://cryptography.io/en/latest/fernet/); die mitgelieferten Apache-/BSD-Lizenzhinweise sowie die Lizenzen der CFFI-/OpenSSL-Komponenten gelten weiter. Passende Paketversionen stehen in `requirements.txt`.
 
-Die DOM-Tests nutzen [jsdom](https://github.com/jsdom/jsdom) und seine Abhängigkeiten ausschließlich auf Entwicklungsrechnern und in CI. `package-lock.json` legt die Versionen fest; diese Pakete werden nicht ins NAS-App-Image kopiert.
+Die DOM-Tests nutzen [jsdom](https://github.com/jsdom/jsdom) und seine Abhängigkeiten ausschließlich auf Entwicklungsrechnern und in CI. `package-lock.json` legt die Versionen fest; diese Pakete werden nicht ins App-Image kopiert.
 
 Die Bridge-Vorbereitung und das Nichtkunden-Konzept wurden anhand der Dokumentation von [marq24/ha-tibber-pulse-local](https://github.com/marq24/ha-tibber-pulse-local) geprüft. Es wurde kein Home-Assistant-Integrationscode in dieses Projekt übernommen. Die konkrete SML-Verarbeitung verwendet die reguläre Python-Bibliothek, die separaten Unit-Test-Telegramme sind künstlich erzeugt.
 

@@ -28,9 +28,9 @@ def test_secret_not_returned_and_host_restricted(authenticated):
     response=authenticated.get("/api/settings")
     assert response.json()["password_configured"]
     assert "SAMPLE-SECRET" not in response.text
-    for host in ["8.8.8.8","http://192.168.1.2/","192.168.1.2:80","0.0.0.0","invalid_name.fritz.box"]:
+    for host in ["8.8.8.8","http://192.168.1.2/","192.168.1.2:80","0.0.0.0","invalid_name.example.lan"]:
         assert authenticated.put("/api/settings",json={"bridge_host":host}).status_code==422
-    assert authenticated.put("/api/settings",json={"bridge_host":"bridge.fritz.box"}).status_code==200
+    assert authenticated.put("/api/settings",json={"bridge_host":"bridge.example.lan"}).status_code==200
 
 
 def test_login_throttle(client):

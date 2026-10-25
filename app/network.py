@@ -25,7 +25,7 @@ def validate_host(value, single_label=False):
         except UnicodeError:
             raise ValueError("Hostname ist ungültig.") from None
         if (not single_label and "." not in name) or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in name.split(".")):
-            raise ValueError("Vollständigen Gerätenamen angeben, z. B. tibber-bridge.fritz.box.")
+            raise ValueError("Vollständigen Gerätenamen angeben, z. B. tibber-bridge.lan.")
         if re.fullmatch(r"[0-9.]+", name):
             raise ValueError("IP-Adresse ist ungültig.")
         return name

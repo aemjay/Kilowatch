@@ -1,14 +1,14 @@
 # Lokale HTTP-API
 
-Basis: `http://<NAS-FQDN>:8088` oder aktuelle NAS-IP. Antworten verwenden UTC-Unixzeit in Sekunden; ISO-Zeitangaben im Export enthalten UTC beziehungsweise lokalen Offset. Keine externe Anwendung wird automatisch angebunden.
+Basis: `http://<Host>:8088` (Hostname oder IP). Antworten verwenden UTC-Unixzeit in Sekunden; ISO-Zeitangaben im Export enthalten UTC beziehungsweise lokalen Offset. Keine externe Anwendung wird automatisch angebunden.
 
 ## Anmeldung und Sitzung
 
 Beim ersten Start liefert `GET /api/setup/status` ausschließlich `{ "needs_setup": true }`. Mit `POST /api/setup` und `{ "setup_code": "CODE_AUS_CONTAINER_LOG", "password": "EIGENES_APP_PASSWORT" }` einmalig ein eigenes Passwort festlegen. Auch hierfür den unten gezeigten Request-Header verwenden. Der Code ist nicht über die API abrufbar und wird nach erfolgreicher Einrichtung ungültig. Kein Standardpasswort.
 
 ```sh
-curl -c cookies.txt -H 'Content-Type: application/json' -H 'X-Kilowatch-Request: 1' -d '{"password":"DEIN_APP_PASSWORT"}' http://<NAS-FQDN>:8088/api/login
-curl -b cookies.txt http://<NAS-FQDN>:8088/api/live
+curl -c cookies.txt -H 'Content-Type: application/json' -H 'X-Kilowatch-Request: 1' -d '{"password":"DEIN_APP_PASSWORT"}' http://<Host>:8088/api/login
+curl -b cookies.txt http://<Host>:8088/api/live
 ```
 
 Ein HttpOnly-Cookie gilt zwölf Stunden. Beim App-Neustart werden alle Sitzungen ungültig. Cookie-Dateien vertraulich behandeln. Bei `POST`, `PUT`, `PATCH` und `DELETE` ist `X-Kilowatch-Request: 1` erforderlich; ein vorhandener Origin-Header muss zum Host passen. Kein Cross-Origin-Zugriff ist aktiviert. Nach zehn fehlgeschlagenen Anmeldungen einer Quell-IP gilt eine Sperre von bis zu 15 Minuten.
@@ -88,7 +88,7 @@ Feldnamen und Grenzen stehen im Modell `NotificationSettings` in `app/notificati
 
 Für `dual` zusätzlich `low_eur_kwh`, `low_start`, `low_end` und optional `weekend_low` übergeben. `eur_kwh` ist HT, `low_eur_kwh` NT. Die Uhrzeiten als HH:MM auf Viertelstundengrenzen in Europe/Berlin angeben, Anfang und Ende verschieden. `weekend_low=true` bedeutet ganztägig NT am Samstag/Sonntag. [Tarifregeln](TARIFE.md).
 
-`GET /api/tariffs` liefert ergänzend `market` mit zwischengespeicherten Börsenwerten. Diese besitzen `kind=spot_net`, `eur_mwh` und `ct_kwh`, niemals stillschweigend `eur_kwh` als vollständigen Vertragspreis. Der optionale Abruf benötigt kein Konto, ist auf eine feste HTTPS-Quelle begrenzt und läuft nur auf ausdrücklichen API-Aufruf. [Gerätesuche](GERAETESUCHE.md) beschreibt Netzgrenzen und Ergebnisfelder.
+`GET /api/tariffs` liefert ergänzend `market` mit zwischengespeicherten Börsenwerten. Diese besitzen `kind=spot_net`, `eur_mwh` und `ct_kwh`, niemals stillschweigend `eur_kwh` als vollständigen Vertragspreis. Der optionale Abruf benötigt kein Konto, ist auf eine feste HTTPS-Quelle begrenzt und läuft nur auf ausdrücklichen API-Aufruf. [Gerätesuche](BRIDGE.md#bridge-im-heimnetz-suchen) beschreibt Netzgrenzen und Ergebnisfelder.
 
 ## Dynamische Preis-CSV
 

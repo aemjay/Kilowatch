@@ -8,12 +8,12 @@ from app.bridge import Bridge
 from app.network import resolve_local, validate_host
 
 
-@pytest.mark.parametrize("host,result",[("bridge.fritz.box","bridge.fritz.box"),("BRIDGE.FRITZ.BOX.","bridge.fritz.box"),("192.168.1.10","192.168.1.10"),("meter.home.arpa","meter.home.arpa")])
+@pytest.mark.parametrize("host,result",[("bridge.example.lan","bridge.example.lan"),("BRIDGE.EXAMPLE.LAN.","bridge.example.lan"),("192.168.1.10","192.168.1.10"),("meter.home.arpa","meter.home.arpa")])
 def test_ip_and_fqdn_validation(host,result):
     assert validate_host(host)==result
 
 
-@pytest.mark.parametrize("host",["","bridge","invalid_name.fritz.box","http://bridge.fritz.box","a@bridge.fritz.box","bridge.fritz.box:80","8.8.8.8","0.0.0.0","255.255.255.255","999.888.1.1","127.0.0.1","127.1.2.3"])
+@pytest.mark.parametrize("host",["","bridge","invalid_name.example.lan","http://bridge.example.lan","a@bridge.example.lan","bridge.example.lan:80","8.8.8.8","0.0.0.0","255.255.255.255","999.888.1.1","127.0.0.1","127.1.2.3"])
 def test_ambiguous_or_nonlocal_addresses_rejected(host):
     with pytest.raises(ValueError):
         validate_host(host)
@@ -32,10 +32,10 @@ def test_dhcp_address_change_is_resolved_for_next_request(monkeypatch):
     addresses=[]
     def handler(request):
         addresses.append(request.url.host)
-        assert request.headers["host"]=="bridge.fritz.box"
+        assert request.headers["host"]=="bridge.example.lan"
         return httpx.Response(200,content=b"1-0:16.7.0(500*W)")
     async def run():
-        bridge=Bridge({"bridge_host":"bridge.fritz.box","bridge_user":"synthetic-user","node_id":1},"synthetic-password",httpx.MockTransport(handler))
+        bridge=Bridge({"bridge_host":"bridge.example.lan","bridge_user":"synthetic-user","node_id":1},"synthetic-password",httpx.MockTransport(handler))
         try:
             await bridge.read()
             await bridge.read()
@@ -62,4 +62,4 @@ def test_dns_failure_is_actionable(monkeypatch):
         raise socket.gaierror()
     monkeypatch.setattr(socket,"getaddrinfo",fail)
     with pytest.raises(ValueError,match="DNS"):
-        asyncio.run(resolve_local("bridge.fritz.box"))
+        asyncio.run(resolve_local("bridge.example.lan"))

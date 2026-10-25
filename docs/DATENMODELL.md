@@ -7,7 +7,7 @@ flowchart LR
     Z[Zähler mit optischer Schnittstelle] --> P[Pulse IR]
     P --> B[Bridge per IP oder FQDN]
     B -->|HTTP im LAN| C[Collector + SML-Decoder]
-    C --> D[(SQLite auf NAS)]
+    C --> D[(SQLite auf dem Host)]
     D --> A[Analyse-API]
     A --> W[Lokale Weboberfläche]
     B -. optional MQTT .-> M[Lokaler Mosquitto]
@@ -68,7 +68,7 @@ Vor dem ersten Messpunkt fehlt eine Ausgangsbasis. Diese Zeit hat keine Lückenz
 - Standard-Leistungsgrenze: 100 kW; in den Einstellungen anpassbar. Für Zählerauflösung wird bei der Sprungprüfung ein kleiner Energiepuffer berücksichtigt.
 - Ein fehlgeschlagener Abruf erzeugt keine Nullmessung. Die Wiederholpause steigt begrenzt auf maximal 120 Sekunden.
 - Die letzte Ausgangsbasis bleibt auch nach Löschung alter Rohwerte erhalten. Nach einem Neustart kann eine positive Zählerdifferenz die gesamte Unterbrechungsenergie liefern.
-- Die Abfragezeit des NAS ist der Zeitstempel. Die Genauigkeit der NAS-Uhr und ihre Synchronisierung bleiben wichtig. Die Bridge-Zeit wird nicht ungeprüft als Messzeit übernommen.
+- Die Abfragezeit des Hosts ist der Zeitstempel. Die Genauigkeit der Host-Uhr und ihre Synchronisierung bleiben wichtig. Die Bridge-Zeit wird nicht ungeprüft als Messzeit übernommen.
 
 ## Sommer- und Winterzeit
 

@@ -42,7 +42,7 @@ Passwörter/Token werden verschlüsselt lokal gespeichert und nicht zurück an d
 
 ## Grenzen und Abnahme
 
-Ein komplett ausgefallenes NAS oder ein ausgefallener Internetzugang kann aus diesem System heraus keine Nachricht zustellen. Für die Überwachung des NAS selbst wäre ein zusätzlicher unabhängiger Monitor sinnvoll. Alarmmeldungen sind Hinweise zur privaten Verbrauchsauswertung.
+Ein komplett ausgefallener Host oder ein ausgefallener Internetzugang kann aus diesem System heraus keine Nachricht zustellen. Für die Überwachung des Hosts selbst wäre ein zusätzlicher unabhängiger Monitor sinnvoll. Alarmmeldungen sind Hinweise zur privaten Verbrauchsauswertung.
 
 Der Versand ist mit einer simulierten SMTP-Gegenstelle getestet. Die automatisierten Tests verwenden kein echtes Konto und versenden keine reale Nachricht. Nach der Einrichtung einen Test empfangen, anschließend eine passend gewählte Regel auslösen und Entwarnung sowie Ruhezeit prüfen. Messung und Zustellung getrennt beurteilen.
 
