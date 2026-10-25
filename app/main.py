@@ -20,7 +20,7 @@ from .bridge import Bridge, validate_host
 from .collector import Collector
 from .config import Config
 from .storage import Store
-from .security import Auth, Vault
+from .security import Auth, Vault, private_write
 from .notifications import NotificationSettings, Notifications
 from .network import local_request
 from .discovery import Discovery, suggestions
@@ -225,6 +225,23 @@ def create_app(config=None):
     market = Market(store, config.demo)
     updates = Updates(store, config.update_repository, config.demo)
     sessions, attempts = {}, {}
+    # Setup-Code zusätzlich als Datei im Datenordner, damit er ohne Container-Protokoll in der
+    # File Station lesbar ist. Wer den Ordner lesen kann, hätte auch Zugriff auf das Protokoll.
+    setup_file = Path(config.data_dir) / "SETUP-CODE.txt"
+
+    def write_setup_code():
+        try:
+            private_write(setup_file, ("Kilowatch-Setup-Code: " + auth.setup_code + "\n\n"
+                                       "Im Browser die Kilowatch-Adresse öffnen, diesen Code eingeben und ein eigenes App-Passwort festlegen.\n"
+                                       "Die Datei wird nach der Einrichtung automatisch gelöscht.\n").encode())
+        except OSError:
+            logging.getLogger("kilowatch").warning("Setup-Code-Datei konnte nicht geschrieben werden; Code steht im Protokoll.")
+
+    def remove_setup_code():
+        try:
+            setup_file.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def recent_attempts(key, now):
         # Abgelaufene Einträge aller Adressen entfernen, damit das Dict nicht wächst.
@@ -236,6 +253,9 @@ def create_app(config=None):
     async def lifespan(app):
         if not auth.configured:
             logging.getLogger("kilowatch").warning("Ersteinrichtung: Setup-Code %s – im Browser ein eigenes App-Passwort festlegen.", auth.setup_code)
+            write_setup_code()
+        else:
+            remove_setup_code()
         if config.demo and not config.testing:
             from .demo import seed
             await asyncio.to_thread(seed, store)
@@ -298,6 +318,7 @@ def create_app(config=None):
             raise HTTPException(429, "Zu viele ungültige Setup-Codes. In 15 Minuten erneut versuchen.")
         try:
             auth.initialize(data.password, data.setup_code)
+            remove_setup_code()
         except ValueError:
             attempts[ip] = history + [now]
             raise

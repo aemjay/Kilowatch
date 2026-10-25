@@ -41,13 +41,12 @@ def default_owner():
 
 
 def ask_owner():
-    uid, gid = default_owner()
-    print("Welchem DSM-Benutzer sollen die Dateien in data/ gehören?")
-    print("  Auf Synology einen echten Benutzer mit Lese-/Schreibrecht auf den Ordner verwenden (IDs per SSH: id <benutzer>).")
-    print("  Leer lassen = interne ID 10001; dann muss diese ID selbst Schreibrecht erhalten (siehe Installationsanleitung).")
+    print("Unter welchem Benutzer soll Kilowatch laufen?")
+    print("  Leer lassen = automatisch der Eigentümer des Ordners data (empfohlen).")
+    print("  Nur bei Bedarf eine DSM-Benutzer- und Gruppen-ID eintragen (IDs per SSH: id <benutzer>).")
     while True:
-        puid = input(f"Benutzer-ID [{uid or 'leer'}]: ").strip() or uid
-        pgid = input(f"Gruppen-ID [{gid or 'leer'}]: ").strip() or gid
+        puid = input("Benutzer-ID [automatisch]: ").strip()
+        pgid = input("Gruppen-ID [automatisch]: ").strip()
         if all(value == "" or (value.isdigit() and value != "0") for value in (puid, pgid)):
             return puid, pgid
         print("Bitte Zahlen größer 0 eingeben (root ist nicht erlaubt) oder leer lassen.")
@@ -60,11 +59,14 @@ def render(example, port, choice, puid="", pgid=""):
 
 
 def prepare_data(root, puid, pgid):
-    """data/ vorab anlegen: Container Manager legt fehlende Bind-Mount-Ordner nicht immer selbst an."""
+    """data/ vorab anlegen und dem aufrufenden Benutzer geben; sein Eigentum bestimmt den App-Benutzer."""
     data = root / "data"
     data.mkdir(exist_ok=True)
-    if puid and pgid and hasattr(os, "geteuid") and os.geteuid() == 0:
-        os.chown(data, int(puid), int(pgid))
+    uid, gid = puid, pgid
+    if not uid:
+        uid, gid = default_owner()
+    if uid and hasattr(os, "geteuid") and os.geteuid() == 0:
+        os.chown(data, int(uid), int(gid or uid))
     return data
 
 
@@ -92,7 +94,6 @@ def main():
     target.write_text(render((root / ".env.example").read_text(encoding="utf-8"), args.port, choice, puid, pgid), encoding="utf-8")
     data = prepare_data(root, puid, pgid)
     print(f".env ohne Zugangsdaten erstellt und {data} angelegt.")
-    print("Auf Synology prüfen: File Station → data → Eigenschaften → Berechtigung: der gewählte Benutzer braucht Lesen/Schreiben.")
     print("Danach das Projekt starten und im Browser einrichten.")
 
 

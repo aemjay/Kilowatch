@@ -49,6 +49,8 @@ Das Skript lädt das Image, startet den Container nur bei einer neuen Version ne
 
 Mit dem Standard-Tag `1` kommen so Fehlerbehebungen und neue 1.x-Funktionen automatisch, aber nie eine neue Hauptversion.
 
+**Compose-Datei aktualisieren:** Neue Releases können die `compose.yaml` erweitern. Ein erneuter Lauf des [Installers](SCHNELLSTART.md#b--installer) holt die aktuelle Datei, sichert die bisherige als `compose.yaml.bak-…` und lässt die `.env` unverändert.
+
 **Ohne Internet:** neue Importdatei vom Release laden, im Container Manager importieren und `docker compose -f compose.yaml up -d --pull never` ausführen.
 
 Bewusst nicht vorgesehen sind Werkzeuge wie Watchtower: Sie brauchen Zugriff auf den Docker-Socket, also Root-Rechte auf dem NAS, und ziehen Images ohne Prüfung.

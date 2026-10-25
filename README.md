@@ -31,15 +31,15 @@ Die Oberfläche liefert JavaScript, SVG und Schriften lokal aus. Server: Python/
 
 ## Auf dem NAS starten
 
-Ausführlich: **[Installation auf der Synology](docs/INSTALLATION-SYNOLOGY.md)**.
+**[Schnellstart in fünf Schritten](docs/SCHNELLSTART.md)** – ohne Kommandozeile:
 
-1. Vollständiges Projekt nach beispielsweise `/volume1/docker/kilowatch` kopieren.
-2. **Vor dem ersten Start** den Ordner `data` anlegen, einem DSM-Benutzer Lese-/Schreibrecht darauf geben und dessen IDs als `PUID`/`PGID` in die `.env` schreiben. Per SSH erledigt `python3 tools/setup.py` das weitgehend (fragt auch Port und Plattform ab). Ohne diesen Schritt scheitert der Start auf Synology an den ACLs. Details: [Installation, Abschnitt 1](docs/INSTALLATION-SYNOLOGY.md#1-projektordner-datenordner-und-berechtigung).
-3. Container Manager → **Projekt → Erstellen**, Projektpfad auswählen, **`compose.yaml`** verwenden und starten (oder `compose.build.yaml`, um selbst zu bauen).
-4. Container-Protokoll öffnen und den einmaligen **Setup-Code** ablesen.
-5. `http://<NAS-FQDN>:8088` öffnen, Setup-Code eingeben und eigenes App-Passwort festlegen.
-6. Bridge-FQDN oder aktuelle IP sowie das Bridge-Passwort (Kennung vom Aufkleber, Format `ABCD-EFGH`) eingeben, **Verbindung prüfen**, dann **Bridge speichern und starten**. Node 1 ist der übliche Ausgangspunkt.
-7. Unter **Kosten & Tarife** einen Preis oder zwei HT/NT-Preise mit Zeiten hinterlegen. Unter **Benachrichtigungen** gewünschte Kanäle einrichten und gezielt eine Testnachricht senden.
+1. `compose.yaml` vom neuesten Release herunterladen und in der File Station nach `docker/kilowatch` hochladen.
+2. Dort **selbst** einen Ordner `data` anlegen. Kilowatch läuft dann automatisch unter deinem Benutzer; weitere Rechte oder Einstellungen sind nicht nötig.
+3. Container Manager → **Projekt → Erstellen** mit Pfad `/docker/kilowatch` und der vorhandenen `compose.yaml`, starten.
+4. `data/SETUP-CODE.txt` öffnen, `http://<NAS-Adresse>:8088` aufrufen, Code eingeben und eigenes App-Passwort festlegen.
+5. Bridge-Adresse und das Passwort vom Bridge-Aufkleber eingeben, **Verbindung prüfen**, **Bridge speichern und starten**. Danach unter **Kosten & Tarife** den Strompreis hinterlegen.
+
+Alternativ erledigt ein **Installer** alle Schritte bis zum Setup-Code, per DSM-Aufgabenplaner oder SSH. Alle Optionen: **[Installation](docs/INSTALLATION-SYNOLOGY.md)**.
 
 Mit SSH im Projektordner:
 
