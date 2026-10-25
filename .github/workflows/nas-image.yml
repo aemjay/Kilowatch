@@ -34,10 +34,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm test
-      - run: node --check app/static/app.js
-      - run: node --check app/static/configure.js
-      - run: node --check app/static/extras.js
-      - run: node --check app/static/insights.js
+      - name: JavaScript-Syntax pruefen
+        run: for file in app/static/*.js; do node --check "$file"; done
       - name: Compose-Dateien validieren
         env:
           MQTT_BIND: 127.0.0.1

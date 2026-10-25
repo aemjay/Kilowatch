@@ -4,8 +4,8 @@ Diese Seite beschreibt, was die automatisierten Tests abdecken, und welche Punkt
 
 ## Automatisierte Tests
 
-- **Python-Tests** (`python -m pytest`, Python 3.13): Decoder, Berechnung, API, Sicherung/Restore, lokale Geheimnisspeicherung, Einrichtung, DNS, Gerätesuche, Tarife, Börsenpreise und Benachrichtigungen.
-- **DOM-Tests** (`npm test`, Node 24/jsdom): Ersteinrichtung, Passwortbestätigung, FQDN-Verbindungstest, Speicherung/Testversand in der Oberfläche, Entfernen des Bridge-Passworts und Signal-QR-Aufruf. API-Antworten sind ausschließlich simuliert, es gibt kein Netzwerk und kein echtes Konto.
+- **Python-Tests** (`python -m pytest`, Python 3.13): Decoder, Berechnung, API, Sicherung/Restore, Schema-Migrationen, lokale Geheimnisspeicherung, Einrichtung, DNS, Gerätesuche, Tarife, Analysen, Börsenpreise, Update-Hinweis, Benachrichtigungen, Übersetzungen und Installer.
+- **DOM-Tests** (`npm test`, Node 24/jsdom): Ersteinrichtung, Passwortbestätigung, FQDN-Verbindungstest, Speicherung/Testversand in der Oberfläche, Entfernen des Bridge-Passworts, Signal-QR-Aufruf, Gerätesuche, HT/NT-Tarif, Börsenpreise, Tarifsimulation, Budget, Farbschema sowie Sprache und Währung. API-Antworten sind ausschließlich simuliert, es gibt kein Netzwerk und kein echtes Konto.
 - JavaScript-Syntaxprüfung aller Oberflächenskripte.
 - Alle Testdaten sind synthetisch. Echte Telegramme, Kennungen und Zugangsdaten gehören nicht ins Repository.
 
@@ -19,7 +19,7 @@ Diese Seite beschreibt, was die automatisierten Tests abdecken, und welche Punkt
 | Zeit/Tarife | 23-/25-Stunden-Tage, kalendertäglicher Grundpreis, Tarifwechsel, negative Preise und fehlende Preisintervalle |
 | Einrichtung | keine persönliche Adresse/Benutzer/Passwort vorbelegt; einmaliger Setup-Code nicht per API lesbar |
 | Anmeldung | Hash nach Neustart, Sitzungen, Drosselung, Ursprungsprüfung, Passwortänderung beendet alle Sitzungen |
-| Geheimnisse | verschlüsselte lokale Speicherung, keine Rückgabe, Migration alter Geheimnisse, verlorener Schlüssel wird nicht ersetzt |
+| Geheimnisse | verschlüsselte lokale Speicherung getrennt vom Datenordner, keine Rückgabe, verlorener Schlüssel wird nicht ersetzt |
 | Passwort-Wiederherstellung | Bestätigung gestoppter App erforderlich; nur App-Anmeldung zurücksetzen, Daten/Geheimnisse behalten |
 | FQDN | simulierter Wechsel der DNS-Antwort beim nächsten Abruf, ursprünglicher Host-Header, DNS-Fehler, öffentliche/gemischte Ziele abweisen |
 | Gateway | geprüfte lokale IP pinnen, HTTPS-SNI erhalten, Token nur an geprüfte Gegenstelle, QR nur als begrenztes PNG |
@@ -29,13 +29,15 @@ Diese Seite beschreibt, was die automatisierten Tests abdecken, und welche Punkt
 | Zustellung | Ruhezeit auch in doppelter Winterzeitstunde, begrenzte Wiederholungen, Regelabschaltung verwirft ausstehende Alarme |
 | Testversand | bewusste Aktion, 30 Sekunden Begrenzung, keine automatische Wiederholung |
 | Backup/Restore | konsistenter Roundtrip, Schema/Integrität, ungültige Quelle ersetzt keine vorhandene Datenbank |
+| Migrationen | geprüfte Sicherung vor jeder Schemaänderung, jede Stufe in eigener Transaktion, neuere Datenbank wird abgewiesen |
+| Übersetzungen | alle Kataloge vollständig, Platzhalter und Mehrzahlformen erhalten, keine unmarkierten deutschen Texte, Fehlermeldungen und Benachrichtigungen in der gewählten Sprache |
 | Paket | Quell-/Prebuilt-Konfiguration gleich, keine Zugangsdaten in Beispiel-Umgebung, Signal ohne veröffentlichten Gateway-Port |
 
 Ein Deprecation-Hinweis zum HTTPX-basierten Starlette-Testclient betrifft die Testumgebung und ist kein fehlgeschlagener Test.
 
 ## Linux-Container und Download
 
-Der [GitHub-Workflow](../.github/workflows/nas-image.yml) führt Python- und DOM-Tests unter Linux aus, validiert alle Compose-Varianten und baut danach Images für amd64 und arm64 (arm64 per QEMU-Emulation); beide durchlaufen den Integrationstest. Der Integrationstest startet den Container ohne Zugangsdaten, liest den synthetischen Setup-Code aus dessen Log, richtet ein Testpasswort ein und prüft API, Backup, Dateirechte sowie Persistenz nach Neustart. Mosquitto wird separat mit künstlichen Daten geprüft.
+Der [GitHub-Workflow](../.github/workflows/nas-image.yml) führt Python- und DOM-Tests unter Linux aus, validiert alle Compose-Varianten und baut danach Images für amd64 und arm64 (arm64 per QEMU-Emulation); beide durchlaufen den Integrationstest. Der Integrationstest startet den Container ohne Zugangsdaten, liest den synthetischen Setup-Code aus dessen Protokoll, richtet ein Testpasswort ein und prüft API, Backup, Dateirechte sowie Persistenz nach Neustart. Mosquitto wird separat mit künstlichen Daten geprüft.
 
 Der Signal-Zusatzcontainer wird als Compose-Konfiguration geprüft; eine echte Kopplung und externe Zustellung werden dadurch nicht bestätigt. Den konkreten Build-Status und das importierbare Artefakt immer im zugehörigen Actions-Lauf prüfen.
 
