@@ -178,7 +178,6 @@ function renderReports(data) {
   $('#export-data').addEventListener('click',()=>{window.location.href=`/api/export?${query()}&kind=${$('#export-kind').value}&format=${$('#export-format').value}`;});
 }
 
-function renderSettings() { renderSettingsV11(); }
 
 function renderSystem(data) {
   const d=data.bridge;
