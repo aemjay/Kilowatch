@@ -8,7 +8,7 @@ Kilowatch liest die vorhandene Bridge im Heimnetz aus und speichert Messwerte un
 
 **Keine persönliche Adresse und keine Zugangsdaten sind vorbelegt.** Beim ersten Öffnen führt ein Assistent durch die Einrichtung. Bridge-Adresse, Benutzer, Passwort und Benachrichtigungen bleiben später in der Oberfläche änderbar. Passwörter und Gateway-Token werden lokal verschlüsselt gespeichert; das App-Passwort als gesalzener Hash. Nach einem Neustart ist keine erneute Eingabe der Bridge-Zugangsdaten nötig.
 
-Für die laufende Messung braucht die Anwendung keine Tibber-API, kein Tibber-Konto und keine Internetverbindung. Installation, Updates und optionaler E-Mail-/Signal-Versand benötigen Internet. Lokales Auslesen beendet einen eventuell bestehenden Cloud-Upload der Bridge nicht automatisch.
+Für die laufende Messung braucht die Anwendung keine Tibber-API, kein Tibber-Konto und keine Internetverbindung. Installation, Updates, optionaler E-Mail-/Signal-Versand und die optionale CO₂-Bilanz benötigen Internet. Für die CO₂-Bilanz sendet Kilowatch nur Land und Zeitraum an Energy-Charts.info, keine Messwerte. Lokales Auslesen beendet einen eventuell bestehenden Cloud-Upload der Bridge nicht automatisch.
 
 Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer) oder ein anderer Docker-Host mit Docker Compose, eine Tibber Pulse IR mit Bridge im selben Heimnetz und ein Zähler, der SML oder lesbare OBIS-Werte über die optische Schnittstelle ausgibt. Unterstützt werden **linux/amd64** (Intel/AMD) und **linux/arm64**; die Plattform wird bei der Einrichtung gewählt oder automatisch vom Host übernommen. Für die App sind 512 MiB RAM als Obergrenze konfiguriert; der tatsächliche Bedarf hängt von Datenmenge und Ansichten ab. Das Zählermodell muss nicht ausgewählt werden; maßgeblich ist das tatsächlich gelieferte Telegramm.
 
@@ -21,6 +21,7 @@ Voraussetzungen: ein Synology-NAS mit **Container Manager** (DSM 7.2 oder neuer)
 | Verlauf | Letzte Stunde (Einzelwerte im Abfrageintervall), letzte 6 Stunden (Minutenwerte), Tag, Woche, Monat, Jahr, eigener Zeitraum, Vorperioden und Messlücken |
 | Analyse | Stunden-Heatmap, Tagesprofile, Nachtgrundlast und deren Entwicklung samt Kosten pro Jahr, Lastdauerlinie, Spitzen, Einspeiseprofil und Monatsprognose |
 | Kosten | Einzeltarif oder HT/NT nach Uhrzeit, Tarifwechsel, Grundpreis, Einspeisevergütung, dynamische Bruttopreise per CSV, Tarifsimulation (Fest, HT/NT, Börsenpreis + Aufschlag), Monatsbudget und Abschlags-Hochrechnung, optionale Börsenpreise |
+| Strommix und CO₂ | Optional für Deutschland, Niederlande, Norwegen und Schweden: CO₂-Bilanz des Netzbezugs aus gemessener Netzintensität je Viertelstunde, Ökostromanteil im Netz und aktueller Wert (Quelle: Energy-Charts.info, Fraunhofer ISE, CC BY 4.0) |
 | Benachrichtigungen | E-Mail über eigenen SMTP-Server; optional Signal über lokal gekoppelten Zusatzcontainer |
 | Alarmregeln | Fehlende Daten, anhaltend hohe Last, Tagesbudget, Monatsbudget, niedrige Batteriespannung und knapper Datenspeicher |
 | Versand | Ruhezeiten, Entwarnungen, Mindestabstand, persistente Warteschlange, begrenzte Wiederholungen und Zustellverlauf |

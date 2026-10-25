@@ -34,7 +34,7 @@ Ein HttpOnly-Cookie gilt zwölf Stunden. Beim App-Neustart werden alle Sitzungen
 | POST `/api/notifications/test/signal` | bewusster einzelner Signal-Test ohne Messwerte |
 | POST `/api/notifications/signal/qr` | authentifizierter PNG-Proxy für Kopplungs-QR, kein Cache |
 | GET `/api/live` | letzter Messpunkt, Alter, Collectorstatus und verfügbare Register |
-| GET `/api/overview` | Summen, Vorperiode, Serien und Lücken; `start`/`end` (Datum) oder `hours=1…48` für die letzten Stunden |
+| GET `/api/overview` | Summen, Vorperiode, Serien und Lücken; `start`/`end` (Datum) oder `hours=1…48` für die letzten Stunden; `co2` mit CO₂-Bilanz, sobald `grid_country` gesetzt ist |
 | GET `/api/analysis` | Muster, Lastdauerlinie, Regelhinweis und Monatsprognose |
 | GET/PUT `/api/tariffs` | Tarifhistorie / Tarif ab Anfangsdatum speichern |
 | DELETE `/api/tariffs/YYYY-MM-DD` | Tarif entfernen |
@@ -63,7 +63,7 @@ Das Enddatum ist **einschließlich** und wird bei laufenden Zeiträumen auf jetz
 
 ## Bridge- und Benachrichtigungskonfiguration
 
-`PUT /api/settings` akzeptiert unter anderem `bridge_host`, `bridge_user`, `bridge_password`, `node_id`, `enabled` und Aufbewahrungsfelder. `bridge_host` ist eine lokale IPv4-Adresse oder ein FQDN ohne Schema, Port und Pfad. FQDNs werden bei neuen Verbindungen erneut aufgelöst und die IPv4-Ziele geprüft. Leeres/fehlendes `bridge_password` behält den gespeicherten Wert. `GET` enthält stattdessen `password_configured`, `setup_required` und `credential_storage`. `/api/bridge/test` speichert keine Eingaben und liefert bei Erfolg `host` und `resolved_addresses`. `language` (`de`, `en`, `nb`, `sv`, `nl`; leer = noch nicht gewählt) bestimmt die Sprache von Benachrichtigungen; `currency` (`EUR`, `NOK`, `SEK`) nur das angezeigte Währungszeichen.
+`PUT /api/settings` akzeptiert unter anderem `bridge_host`, `bridge_user`, `bridge_password`, `node_id`, `enabled` und Aufbewahrungsfelder. `bridge_host` ist eine lokale IPv4-Adresse oder ein FQDN ohne Schema, Port und Pfad. FQDNs werden bei neuen Verbindungen erneut aufgelöst und die IPv4-Ziele geprüft. Leeres/fehlendes `bridge_password` behält den gespeicherten Wert. `GET` enthält stattdessen `password_configured`, `setup_required` und `credential_storage`. `/api/bridge/test` speichert keine Eingaben und liefert bei Erfolg `host` und `resolved_addresses`. `language` (`de`, `en`, `nb`, `sv`, `nl`; leer = noch nicht gewählt) bestimmt die Sprache von Benachrichtigungen; `currency` (`EUR`, `NOK`, `SEK`) nur das angezeigte Währungszeichen. `grid_country` (`de`, `nl`, `no`, `se`; leer = aus) schaltet den stündlichen Abruf von CO₂-Intensität und Ökostromanteil ein.
 
 Fehlermeldungen (`detail`) kommen in der Sprache der optionalen Kopfzeile `X-Kilowatch-Language`, sonst in der gespeicherten Sprache, sonst auf Deutsch.
 

@@ -63,7 +63,7 @@ async function harness(options={}) {
     }else if(path==='/api/notifications')data=notes;
     else if(path==='/api/discovery/network')data={suggestions:[{network:'192.168.1.0/24',reason:'Synthetic network'}]};
     else if(path==='/api/discovery/scan')data={network:body.network,checked:254,devices:[{ip:'192.168.1.10',host:'bridge.fritz.box',fqdn:'bridge.fritz.box'}]};
-    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null},
+    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:0,end:3600},previous:null,gaps:[],targets:{daily_kwh:null},co2:options.co2??null,
       series:{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:i*60,power_w:i===30?4000:300+i,seconds:60}))}};
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
     else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market};
@@ -78,7 +78,7 @@ async function harness(options={}) {
   };
   for(const name of ['theme.js','i18n.js','overlays.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
-    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart'}[options.page])||'#settings-form'));
+    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
 }
 
@@ -328,5 +328,20 @@ test('chart overlays can be switched on, are drawn and remembered',async t=>{
   assert.ok(w.document.querySelector('#page-history .overlay-band'));
   assert.ok(w.document.querySelector('#page-history .overlay-hline.overlay-reference'));
   assert.deepEqual(JSON.parse(w.localStorage.getItem('kilowatch-overlays-power')),['moving','range','highload']);
+  assert.deepEqual(h.errors,[]);
+});
+
+test('dashboard shows the CO2 balance with source and the settings choose the grid country',async t=>{
+  const co2={country:'de',kg:1.234,covered_kwh:3,uncovered_kwh:.5,g_kwh:411,renewable_share:48,current:{start:1800000000,g_kwh:300,renewable_share:120},source:'Energy-Charts.info (Fraunhofer ISE), CC BY 4.0',demo:false,error:'',deprecated:false};
+  const h=await harness({page:'dashboard',co2,settings:{setup_required:false,grid_country:'de'}});t.after(()=>h.dom.window.close());const {w}=h;
+  const text=w.document.querySelector('#page-dashboard').textContent;
+  assert.match(text,/Strommix und CO₂/);assert.match(text,/1,23 kg/);assert.match(text,/411 g\/kWh/);
+  assert.match(text,/Zuletzt veröffentlicht \([^)]+\)300 g\/kWh · 100 %/);
+  assert.match(text,/0,50 kWh ohne veröffentlichten CO₂-Wert/);assert.match(text,/Quelle: Energy-Charts\.info \(Fraunhofer ISE\), CC BY 4\.0/);
+  w.document.querySelector('[data-page="settings"]').click();
+  await until(()=>!!w.document.querySelector('#grid-form'));
+  assert.equal(w.document.querySelector('#grid-form [name="grid_country"]').value,'de');
+  input(w,'grid-form','grid_country','');submit(w,'grid-form');
+  await until(()=>h.calls.some(c=>c.method==='PUT'&&c.body?.grid_country===''));
   assert.deepEqual(h.errors,[]);
 });

@@ -123,6 +123,22 @@ function updateLiveParts() {
   const ageNode=$('#live-age'); if(ageNode)ageNode.textContent=live.reading?t('Letzte Messung vor {seconds} s',{seconds:number(live.age_seconds,0)}):t('Noch keine Messung');
 }
 
+const GRID_COUNTRIES={de:tk('Deutschland'),nl:tk('Niederlande'),no:tk('Norwegen'),se:tk('Schweden')};
+
+// CO₂-Bilanz des Netzbezugs mit gemessener Netzintensität; Prognosen nur für den aktuellen Wert.
+function co2Panel(co2) {
+  if(!co2)return '';
+  const kg=co2.kg==null?'—':unit(co2.kg,'kg',co2.kg<10?2:1), now=co2.current;
+  const lines=[stat(t('CO₂ deines Netzbezugs'),kg),stat(t('Ø Intensität deines Bezugs'),unit(co2.g_kwh,'g/kWh',0)),stat(t('Ø Ökostromanteil im Netz'),unit(co2.renewable_share,'%',0)),
+    stat(now?t('Zuletzt veröffentlicht ({time})',{time:localTime(now.start,{weekday:'short',hour:'2-digit',minute:'2-digit'})}):t('Zuletzt veröffentlicht'),now?`${unit(now.g_kwh,'g/kWh',0)}${now.renewable_share!=null?' · '+unit(Math.min(100,now.renewable_share),'%',0):''}`:'—')];
+  const notes=[];
+  if(co2.uncovered_kwh>.005)notes.push(t('{energy} ohne veröffentlichten CO₂-Wert, nicht in der Bilanz. Die Quelle veröffentlicht Werte mit einigen Stunden Verzögerung.',{energy:unit(co2.uncovered_kwh,'kWh',2)}));
+  notes.push(co2.demo?t('Beispielwerte im Demo-Modus.'):t('CO₂-Äquivalente je kWh im Strommix ({country}) laut Quelle, inklusive Vorketten; Schätzwerte. Einspeisung wird nicht gegengerechnet.',{country:t(GRID_COUNTRIES[co2.country]||co2.country)}));
+  if(!co2.demo)notes.push(t('Quelle: {source}',{source:co2.source}));
+  const alerts=(co2.error?`<div class="notice">${esc(t(co2.error))}</div>`:'')+(co2.deprecated?`<div class="notice">${esc(t('Die Datenquelle kündigt eine Änderung ihrer Schnittstelle an. Ein Kilowatch-Update kann nötig werden.'))}</div>`:'');
+  return panel(t('Strommix und CO₂'),periodText(),`${alerts}<div class="stats-list">${lines.join('')}</div>${notes.map(n=>`<p class="copy-footnote">${esc(n)}</p>`).join('')}`);
+}
+
 function renderDashboard(data) {
   const s=data.summary,p=data.previous;
   let comparison=t('Noch keine Vergleichsdaten');
@@ -134,7 +150,7 @@ function renderDashboard(data) {
   const flow=`<div class="flow"><div class="flow-end"><div class="flow-icon">♧</div><small>${t('STROMNETZ')}</small></div><div class="flow-line"></div><div class="flow-end"><div class="flow-icon">⌂</div><small>${t('ZU HAUSE')}</small></div></div><div class="stats-list">${stat(t('Bezug im Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Einspeisung'),unit(s.export_kwh,'kWh',2))}${stat(t('Bezugszähler'),unit(reading?.import_kwh,'kWh',3))}${stat(t('Einspeisezähler'),unit(reading?.export_kwh,'kWh',3))}</div><div class="divider"></div>${coverage(s)}<p id="live-age" class="copy-footnote">${reading?t('Letzte Messung vor {seconds} s',{seconds:number(live.age_seconds,0)}):t('Noch keine Messung')}</p>`;
   const quality=panel(t('Datenqualität'),'',`<div class="insight"><span class="insight-icon">◉</span><div><h3>${s.coverage>.98?t('Dein Zeitraum ist gut erfasst.'):t('Deine Historie entsteht ab jetzt.')}</h3><p>${esc(totalNote(s))}. ${s.crossing_gaps?t('Eine Lücke reicht über die Zeitraumgrenze. Ihre Energiemenge bleibt außerhalb dieser Summe.'):''}</p></div></div>`);
   const compare=panel(t('Vorperiode'),'',p?`<div class="stats-list">${stat(t('Ausgewählter Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Vorperiode'),unit(p.import_kwh,'kWh',2))}${stat(t('Abdeckung der Vorperiode'),unit(p.coverage*100,'%',1))}${stat(t('Vergleich bis'),localTime(p.end,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}</div>`:empty(t('Vergleich noch nicht verfügbar.')));
-  $('#page-dashboard').innerHTML=cards+`<div class="grid-main"><div>${powerPanel(data)}${quality}</div><div>${panel(t('Bezug und Einspeisung'),'',flow)}${compare}</div></div>`;
+  $('#page-dashboard').innerHTML=cards+`<div class="grid-main"><div>${powerPanel(data)}${quality}</div><div>${panel(t('Bezug und Einspeisung'),'',flow)}${co2Panel(data.co2)}${compare}</div></div>`;
   mountOverlayToggles($('#page-dashboard'),()=>renderDashboard(overview));
 }
 
