@@ -55,6 +55,7 @@ curl -b cookies.txt http://<Host>:8088/api/live
 | GET/POST `/api/events`, DELETE `/api/events/ID`, GET `/api/events/ID/comparison` | Ereignisse und Vorperiodenvergleich |
 | GET/PUT `/api/notifications`, POST `/api/notifications/test/email` | Mail-Regeln und Verlauf, Test |
 | GET/PUT `/api/updates`, POST `/api/updates/check` | Update-Hinweis |
+| GET/PUT `/api/checklist` | offene Einrichtungsschritte (`items` mit `key`, `title`, `text`, `page`) und stummgeschaltete Punkte; `PUT {"muted": ["backup"]}` ersetzt die Liste (`tariff`, `price_source`, `notifications`, `backup`, `update`) |
 | GET `/api/export`, `/api/backup`, `/api/diagnostics` | Export, konsistente Sicherung, Diagnose |
 
 **Einstellungen:** `PUT /api/settings` darf einzelne Felder ändern (`bridge_host`, `bridge_user`, `bridge_password`, `node_id`, `enabled`, Aufbewahrung …). `bridge_host` ist eine lokale IPv4-Adresse oder ein Name ohne Schema, Port und Pfad. Ein leeres `bridge_password` behält das gespeicherte; `GET` meldet stattdessen `password_configured`. `language` (`de`, `en`, `nb`, `sv`, `nl`), `currency` (`EUR`, `NOK`, `SEK`) und `grid_country` (`de`, `nl`, `no`, `se`; leer = aus) gehören ebenfalls dazu.

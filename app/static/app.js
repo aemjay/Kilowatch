@@ -209,9 +209,10 @@ function renderDashboard(data) {
   const household=data.targets?.household;
   const typical=household?`<div class="divider"></div><div class="stats-list">${stat(t('Typischer Haushalt im Zeitraum'),unit(householdShare(household,s.end-s.start),'kWh',2))}</div><p class="copy-footnote">${esc(t('{household} laut {source}; Gesamtverbrauch, mit eigener PV liegt der Netzbezug darunter.',{household:householdText(household),source:household.source}))}</p>`:'';
   const compare=panel(t('Vorperiode'),'',(p?`<div class="stats-list">${stat(t('Ausgewählter Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Vorperiode'),unit(p.import_kwh,'kWh',2))}${stat(t('Abdeckung der Vorperiode'),unit(p.coverage*100,'%',1))}${stat(t('Vergleich bis'),localTime(p.end,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}</div>`:empty(t('Vergleich noch nicht verfügbar.')))+typical);
-  $('#page-dashboard').innerHTML=cards+`<div id="price-outlook-slot"></div><div class="grid-main"><div>${powerPanel(data)}${quality}</div><div>${panel(t('Bezug und Einspeisung'),'',flow)}${co2Panel(data.co2)}${compare}</div></div>`;
+  $('#page-dashboard').innerHTML=`<div id="checklist-slot"></div>`+cards+`<div id="price-outlook-slot"></div><div class="grid-main"><div>${powerPanel(data)}${quality}</div><div>${panel(t('Bezug und Einspeisung'),'',flow)}${co2Panel(data.co2)}${compare}</div></div>`;
   mountOverlayToggles($('#page-dashboard'),()=>renderDashboard(overview));
   mountPriceOutlook().catch(error=>toast(error.message,true));
+  mountChecklist().catch(error=>toast(error.message,true));
 }
 
 function renderHistory(data) {

@@ -61,3 +61,12 @@
 .copy-button{background:none;padding:2px 6px;border-radius:5px;color:var(--k-text-607751);font-size:13px;line-height:1}
 .copy-button:hover{background:var(--k-bg-f0f3e8)}
 .approx{font-weight:650;color:var(--k-text-8c7038)}
+/* Einrichtungsliste der Übersicht. */
+.checklist{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.checklist li{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--border)}
+.checklist li:last-child{border-bottom:0;padding-bottom:0}
+.checklist strong{font-size:13px}
+.checklist p{font-size:11px;color:var(--muted);margin-top:3px}
+.checklist .button-row{flex-shrink:0;align-items:center}
+.checklist .secondary{padding:7px 12px}
+@media(max-width:680px){.checklist li{flex-direction:column;align-items:flex-start}}

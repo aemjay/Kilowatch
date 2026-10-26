@@ -61,6 +61,17 @@ function renderSettings() {
   $('#password-form').addEventListener('submit',safely(async event=>{event.preventDefault();const values=Object.fromEntries(new FormData(event.target));if(values.new_password!==values.confirmation)throw new Error(t('Die neuen Passwörter stimmen nicht überein.'));delete values.confirmation;await api('/api/account/password','PUT',values);event.target.reset();showLogin();toast(t('App-Passwort geändert. Bitte neu anmelden.'));}));
   $('#forget-bridge').addEventListener('click',safely(async()=>{await api('/api/credentials/bridge','DELETE');settings=await api('/api/settings');toast(t('Bridge-Passwort entfernt. Erfassung pausiert.'));renderSettings();}));
   mountDiscovery();
+  mountChecklistSettings().catch(error=>toast(error.message,true));
+}
+
+// Auf der Übersicht ausgeblendete Einrichtungshinweise wieder zeigen.
+async function mountChecklistSettings() {
+  const data=await api('/api/checklist');
+  if(page!=='settings'||!$('#page-settings .grid-main'))return;
+  $('#checklist-settings')?.remove();
+  const count=data.muted.length;
+  $('#page-settings').insertAdjacentHTML('beforeend',`<div id="checklist-settings">${panel(t('Hinweise auf der Übersicht'),t('Punkte der Liste „Noch einzurichten“'),`<p class="muted">${count?esc(t('{count} Hinweis(e) ausgeblendet.',{count})):esc(t('Keine Hinweise ausgeblendet.'))}</p><div class="form-actions"><button class="secondary" type="button" id="checklist-restore"${count?'':' disabled'}>${t('Alle wieder einblenden')}</button></div>`)}</div>`);
+  $('#checklist-restore').addEventListener('click',safely(async()=>{checklistCache=await api('/api/checklist','PUT',{muted:[]});toast(t('Alle Hinweise werden wieder angezeigt.'));await mountChecklistSettings();}));
 }
 
 function choice(name,label,value,on=t('Aktiv'),off=t('Aus')) {return `<label>${esc(label)}<select name="${name}"><option value="false"${value?'':' selected'}>${esc(off)}</option><option value="true"${value?' selected':''}>${esc(on)}</option></select></label>`;}

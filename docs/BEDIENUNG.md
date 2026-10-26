@@ -26,6 +26,20 @@ Der **Zeitbalken** unter der Zeitraumleiste zeigt den gesamten erfassten Zeitrau
 
 Das Fenster misst 5 Minuten bis zum gesamten Zeitraum, höchstens zehn Jahre. Die Auflösung passt sich an: bis 30 Minuten einzelne Werte bzw. Minuten, bis drei Tage Viertelstunden, darüber Tage und Monate. Reicht das Fenster bis zur Gegenwart, aktualisiert es sich selbst. Eine Voreinstellung (Heute, 7 Tage …) hebt die freie Auswahl auf. Alle Seiten rechnen mit dem gewählten Zeitraum; der Export nutzt die Datumsfelder, die mitwandern.
 
+## Noch einzurichten
+
+Oben auf der Übersicht listet Kilowatch offene Einrichtungsschritte, jeweils mit Link zur passenden Seite. Erledigte Punkte verschwinden, ist nichts offen, fehlt die Karte.
+
+| Punkt | Erscheint, wenn |
+|---|---|
+| Kein Tarif hinterlegt | es keinen Tarif gibt |
+| Dynamischer Tarif ohne Preisquelle / Preisabruf gestört | ein dynamischer Tarif existiert und keine Preisquelle gewählt ist, oder seit mehr als 26 Stunden kein Abruf gelungen ist |
+| E-Mail-Benachrichtigungen aus | Hauptschalter, E-Mail-Kanal, SMTP-Server oder Empfänger fehlen |
+| Keine aktuelle Sicherung | im Sicherungsordner keine tägliche Sicherung jünger als acht Tage liegt |
+| Update verfügbar | die eingeschaltete Update-Prüfung eine neue Version gefunden hat |
+
+**Ausblenden** schaltet einen Punkt dauerhaft stumm, auch wenn er später wieder zutrifft; **Einstellungen → Hinweise auf der Übersicht → Alle wieder einblenden** hebt das auf. Wer Preise nur per CSV importiert, blendet den Preisquellen-Hinweis so aus. Ob die Bridge noch in die Tibber-Cloud sendet, prüft die Liste nicht: Kilowatch liest aus `/status.json` nur Firmware, MQTT-Status und Laufzeit, nicht das MQTT-Ziel. Im Demo-Modus zeigt der Update-Punkt ein Beispiel.
+
 ## Sprache und Währung
 
 Die Oberfläche gibt es auf Deutsch, Englisch, Norwegisch (Bokmål), Schwedisch und Niederländisch. Wähle sie auf der Anmeldeseite oder unter **Einstellungen → Sprache und Währung**; ohne Auswahl gilt die Browsersprache, sonst Deutsch. Benachrichtigungen nutzen die gespeicherte Sprache.

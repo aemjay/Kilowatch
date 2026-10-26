@@ -113,3 +113,32 @@ async function mountPriceOutlook() {
   priceOutlookCache = data;
   showPriceOutlook(slot, data);
 }
+
+// Einrichtungsliste „Noch einzurichten“: offene Punkte mit Link zur passenden Seite, einzeln ausblendbar.
+let checklistCache = null;
+
+function checklistPanel(data) {
+  if (!data?.items?.length) return '';
+  const items = data.items.map(item => `<li><div><strong>${esc(t(item.title))}</strong><p>${esc(t(item.text, item.params || {}))}</p></div><div class="button-row"><a class="secondary" href="#${esc(item.page)}">${esc(t(pageText[item.page] || item.page))}</a><button type="button" class="subtle" data-checklist-mute="${esc(item.key)}" aria-label="${esc(t('„{title}“ ausblenden', {title: t(item.title)}))}">${esc(t('Ausblenden'))}</button></div></li>`).join('');
+  return panel(t('Noch einzurichten'), t('Erledigte Punkte verschwinden von selbst.'), `<ul class="checklist">${items}</ul>`);
+}
+
+function showChecklist(slot, data) {
+  slot.innerHTML = checklistPanel(data);
+  for (const button of $$('[data-checklist-mute]', slot)) button.addEventListener('click', safely(async () => {
+    const muted = [...new Set([...(data.muted || []), button.dataset.checklistMute])];
+    checklistCache = await api('/api/checklist', 'PUT', {muted});
+    if (slot.isConnected) showChecklist(slot, checklistCache);
+    toast(t('Ausgeblendet. Unter Einstellungen wieder einblenden.'));
+  }));
+}
+
+async function mountChecklist() {
+  const slot = $('#checklist-slot');
+  if (!slot) return;
+  if (checklistCache) showChecklist(slot, checklistCache);
+  const data = await api('/api/checklist').catch(() => null);
+  if (!data || !slot.isConnected || page !== 'dashboard') return;
+  checklistCache = data;
+  showChecklist(slot, data);
+}

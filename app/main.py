@@ -31,6 +31,7 @@ from .updates import Updates
 from .grid import COUNTRIES, Grid
 from . import prices as price_feed
 from . import insights
+from . import checklist as setup_checklist
 from .i18n import CURRENCIES, LANGUAGES, UserError, translate_error
 
 
@@ -282,6 +283,17 @@ class Budget(StrictModel):
             except ValueError:
                 raise ValueError("Beginn des Abrechnungsjahrs: gültiger Tag und Monat (nicht 29.02.).") from None
         return value
+
+
+class ChecklistMute(StrictModel):
+    muted: list[str] = Field(max_length=len(setup_checklist.KEYS))
+
+    @field_validator("muted")
+    @classmethod
+    def known_keys(cls, value):
+        if any(key not in setup_checklist.KEYS for key in value):
+            raise ValueError("Unbekannter Punkt der Einrichtungsliste.")
+        return sorted(set(value))
 
 
 class HistoryRequest(StrictModel):
@@ -770,6 +782,15 @@ def create_app(config=None):
                 raise ValueError("Datum liegt in der Zukunft.")
             result.append(dict(insights.meter_reading(store, at, max_gap), date=day.isoformat()))
         return {"timezone": zone, "readings": result, "raw_retention_days": store.settings()["raw_retention_days"]}
+
+    @app.get("/api/checklist")
+    def checklist():
+        return setup_checklist.checklist(store, notifier, feed, updates, config.demo)
+
+    @app.put("/api/checklist")
+    def mute_checklist(data: ChecklistMute):
+        store.set_state("checklist_muted", data.muted)
+        return setup_checklist.checklist(store, notifier, feed, updates, config.demo)
 
     @app.post("/api/market/history")
     async def market_history(data: HistoryRequest):

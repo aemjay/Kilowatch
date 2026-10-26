@@ -29,6 +29,7 @@ async function harness(options={}) {
   let priceFeed={source:'',zone:'DE-LU',markup_ct:0,vat_percent:0,tibber_home:'',tibber_token_configured:false,zones:['DE-LU','AT','NL','BE','FR'],spot_source:'Energy-Charts',status:{fetched_at:null,error:'',homes:[]}};
   let tariffs=structuredClone(options.tariffs||[]),market={rows:[],fetched_at:null,error:''};
   let budget={settings:{monthly_eur:null,monthly_kwh:null,abschlag_eur:null},month:{observed_eur:3,observed_kwh:10,forecast_eur:null,forecast_kwh:null,forecast_reason:'Zu wenig Daten'},annual:{available:false,reason:'Mindestens 60 vollständig erfasste Tage erforderlich.'}};
+  const checklistState={muted:structuredClone(options.muted||[])};
   const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error));
   const dom=new JSDOM(readFileSync(join(root,'index.html'),'utf8'),{
     url:'http://kilowatch.test/#'+(options.page||'settings'),runScripts:'outside-only',virtualConsole:vc});
@@ -54,6 +55,11 @@ async function harness(options={}) {
       saved={...saved,...plain,password_configured:!!bridge_password||saved.password_configured};
       saved.setup_required=!(saved.bridge_host&&saved.bridge_user&&saved.password_configured);
     }else if(path==='/api/settings')data=saved;
+    else if(path==='/api/checklist'){
+      if(config.method==='PUT')checklistState.muted=body.muted;
+      const all=options.checklist||[];
+      data={items:all.filter(i=>!checklistState.muted.includes(i.key)),muted:checklistState.muted,muted_open:all.filter(i=>checklistState.muted.includes(i.key)).length};
+    }
     else if(path==='/api/live')data=options.live||{collector:{state:'setup'},reading:null,stale:true};
     else if(path.startsWith('/api/prices/outlook'))data=typeof options.outlook==='function'?options.outlook(path):options.outlook||{dynamic:false,intervals:[]};
     else if(path==='/api/notifications'&&config.method==='PUT'){
@@ -481,6 +487,27 @@ test('budget shows the billing year with recommendation and saves its start',asy
   form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   await until(()=>h.calls.some(c=>c.path==='/api/budget'&&c.method==='PUT'));
   assert.equal(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body.billing_start,'04-15');
+  assert.deepEqual(h.errors,[]);
+});
+test('setup checklist links to pages, mutes items and settings restore them',async t=>{
+  const checklist=[{key:'tariff',page:'costs',title:'Kein Tarif hinterlegt',text:'Ohne Arbeits- und Grundpreis zeigt Kilowatch keine Kosten.'},
+    {key:'update',page:'system',title:'Update verfügbar',text:'Version {version} ist erschienen. Hinweise unter System & Datenqualität.',params:{version:'9.9.9'}}];
+  const h=await harness({page:'dashboard',settings:{setup_required:false},checklist});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>w.document.querySelectorAll('.checklist li').length===2);
+  const slot=w.document.querySelector('#checklist-slot');
+  assert.match(slot.textContent,/Version 9\.9\.9 ist erschienen/);
+  assert.equal(slot.querySelector('a[href="#costs"]').textContent,'Kosten & Tarife');
+  slot.querySelector('[data-checklist-mute="tariff"]').click();
+  await until(()=>w.document.querySelectorAll('.checklist li').length===1);
+  assert.deepEqual(h.calls.find(c=>c.path==='/api/checklist'&&c.method==='PUT').body,{muted:['tariff']});
+  slot.querySelector('[data-checklist-mute="update"]').click();
+  await until(()=>slot.textContent==='');
+  await w.navigate('settings');
+  await until(()=>!!w.document.querySelector('#checklist-restore'));
+  assert.match(w.document.querySelector('#checklist-settings').textContent,/2 Hinweise ausgeblendet/);
+  w.document.querySelector('#checklist-restore').click();
+  await until(()=>h.calls.some(c=>c.path==='/api/checklist'&&c.method==='PUT'&&c.body.muted.length===0));
+  await until(()=>/Keine Hinweise ausgeblendet/.test(w.document.querySelector('#checklist-settings')?.textContent||''));
   assert.deepEqual(h.errors,[]);
 });
 
