@@ -50,7 +50,8 @@ curl -b cookies.txt http://<Host>:8088/api/live
 | GET `/api/prices/outlook?window_hours=2` | Preise je Viertelstunde für heute und morgen und günstigstes Fenster (1–6 h) ab jetzt; nur bei dynamischem Tarif |
 | POST `/api/market/refresh`, `/api/market/history` | Börsenpreise ansehen / nachladen (höchstens 62 Tage) |
 | POST `/api/simulate` | Tarifsimulation: `{"start", "end", "tariff": {"mode": "fixed\|dual\|spot", …}}` |
-| GET/PUT `/api/budget` | Monatsbudget, Monatsziel, Abschlag |
+| GET/PUT `/api/budget` | Monatsbudget, Monatsziel, Abschlag, `billing_start` (`MM-TT`, Beginn des Abrechnungsjahrs; `GET` liefert dazu `billing`) |
+| GET `/api/meter-readings?dates=2026-10-01,2026-09-01` | Zählerstände 1.8.0/2.8.0 um 00:00 Uhr der Tage (1–31): `import_kwh`, `export_kwh`, `measured_at`, `source` (`sample`/`reconstructed`), `approximate`, `reason` |
 | GET/POST `/api/events`, DELETE `/api/events/ID`, GET `/api/events/ID/comparison` | Ereignisse und Vorperiodenvergleich |
 | GET/PUT `/api/notifications`, POST `/api/notifications/test/email` | Mail-Regeln und Verlauf, Test |
 | GET/PUT `/api/updates`, POST `/api/updates/check` | Update-Hinweis |

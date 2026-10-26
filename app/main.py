@@ -268,6 +268,20 @@ class Budget(StrictModel):
     monthly_eur: float | None = Field(default=None, gt=0, le=100000)
     monthly_kwh: float | None = Field(default=None, gt=0, le=1000000)
     abschlag_eur: float | None = Field(default=None, gt=0, le=100000)
+    billing_start: str | None = None
+
+    @field_validator("billing_start")
+    @classmethod
+    def billing_day(cls, value):
+        # MM-DD; der 29. Februar fehlt in den meisten Jahren und ist daher nicht erlaubt.
+        if value is not None:
+            try:
+                if len(value) != 5 or value[2] != "-":
+                    raise ValueError()
+                date(2001, int(value[:2]), int(value[3:]))
+            except ValueError:
+                raise ValueError("Beginn des Abrechnungsjahrs: gültiger Tag und Monat (nicht 29.02.).") from None
+        return value
 
 
 class HistoryRequest(StrictModel):
@@ -728,6 +742,7 @@ def create_app(config=None):
         a, now = Analytics(store), time.time()
         return {"settings": Budget(**saved).model_dump(), "month": insights.month_budget(a, now, saved),
                 "annual": insights.annual_projection(a, now, saved.get("abschlag_eur")),
+                "billing": insights.billing_year(a, now, saved),
                 "reference": insights.household_reference(store.settings())}
 
     @app.put("/api/budget")
@@ -735,6 +750,26 @@ def create_app(config=None):
         store.set_state("budget", data.model_dump())
         notifier.wakeup.set()
         return {"ok": True}
+
+    @app.get("/api/meter-readings")
+    def meter_readings(dates: str):
+        zone, now = store.settings()["timezone"], time.time()
+        days = []
+        for text in dates.split(","):
+            try:
+                days.append(date.fromisoformat(text.strip()))
+            except ValueError:
+                raise ValueError("Datum im Format JJJJ-MM-TT erwarten.") from None
+        if not 1 <= len(days) <= 31:
+            raise ValueError("1 bis 31 Daten je Abfrage.")
+        max_gap = store.settings()["max_gap_seconds"]
+        result = []
+        for day in days:
+            at = midnight(day, zone)
+            if at > now:
+                raise ValueError("Datum liegt in der Zukunft.")
+            result.append(dict(insights.meter_reading(store, at, max_gap), date=day.isoformat()))
+        return {"timezone": zone, "readings": result, "raw_retention_days": store.settings()["raw_retention_days"]}
 
     @app.post("/api/market/history")
     async def market_history(data: HistoryRequest):

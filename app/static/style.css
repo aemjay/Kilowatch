@@ -49,3 +49,15 @@
 .price-window strong{color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
 .price-window .segments{width:auto}
 .price-window .segments button{padding:5px 11px}
+/* Zählerstände und Abrechnungsjahr. */
+.form-grid fieldset.field-group{border:0;padding:0;margin:0;min-width:0;font-size:11px;color:var(--k-text-6a7b6b);display:flex;flex-direction:column;gap:7px}
+.field-group legend{padding:0;margin-bottom:7px}
+.field-group small{font-size:10px;color:var(--k-text-8b9787)}
+.field-pair{display:flex;gap:8px}
+.reading-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.reading-form label{font-size:11px;color:var(--k-text-6a7b6b);display:flex;flex-direction:column;gap:7px;margin:0}
+.reading-form input{padding:9px 12px;background:var(--k-bg-fbfcf9);border:1px solid var(--k-line-dce3d6);border-radius:8px;color:var(--k-text-3b503f)}
+#reading-custom .table-wrap{margin-bottom:18px}
+.copy-button{background:none;padding:2px 6px;border-radius:5px;color:var(--k-text-607751);font-size:13px;line-height:1}
+.copy-button:hover{background:var(--k-bg-f0f3e8)}
+.approx{font-weight:650;color:var(--k-text-8c7038)}

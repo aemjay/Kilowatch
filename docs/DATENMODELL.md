@@ -45,6 +45,16 @@ Zwischen zwei normalen Messpunkten gilt: **Energie = neuer Zählerstand − alte
 - Doppelte oder ältere Zeitstempel und unveränderte Telegramme werden nicht erneut gebucht (nach 30 s zeigt die Oberfläche „veraltet“). Zählerwechsel, fallende Stände und Sprünge über der Leistungsgrenze (Standard 100 kW) setzen eine neue Basis und erzeugen einen Hinweis.
 - Ein fehlgeschlagener Abruf erzeugt keine Nullmessung; die Wiederholpause wächst bis 120 Sekunden. Die letzte Basis überlebt Neustarts und das Löschen alter Rohwerte. Zeitstempel ist die Uhr des Hosts, halte sie synchron.
 
+## Zählerstände zu Stichtagen
+
+Unter **Berichte & Export → Zählerstände** stehen Bezug (1.8.0) und Einspeisung (2.8.0) zum Monatsersten 00:00 Uhr der letzten 13 Monate und zu einem frei gewählten Tag. Angegeben ist der letzte gespeicherte Stand vor dem Zeitpunkt.
+
+- Liegt davor eine Messlücke (länger als das normale Messintervall), steht „≈“ mit dem Zeitpunkt des verwendeten Messwerts.
+- Einzelmessungen gibt es nur innerhalb ihrer Aufbewahrung. Für ältere Stichtage rechnet Kilowatch vom dauerhaft gespeicherten letzten Stand zurück: letzter Stand − Viertelstundenenergie − Lückenenergie seit dem Stichtag. Auch das ist mit „≈“ markiert. Fließt dabei Energie aus mehreren Messintervallen anteilig in eine Viertelstunde, kann der Wert um Bruchteile einer Wattstunde abweichen.
+- Liegt nach dem Stichtag ein Zählerwechsel, Rücksprung oder unplausibler Sprung (Lücke ohne bekannte Menge), ist der Stand nicht rekonstruierbar und bleibt leer. Vor der ersten Messung gibt es keinen Stand.
+
+Für eine Abrechnung gilt der Stand am Zähler bzw. die Ablesung des Messstellenbetreibers.
+
 ## Zeit
 
 UTC-Zeitstempel sind eindeutig. Lokale Tage rechnet Kilowatch in `Europe/Berlin`; sie dauern bei der Zeitumstellung 23 oder 25 Stunden (25.10.2026: 100 Viertelstunden, 29.03.2026: 92). Der Monatsgrundpreis verteilt sich nach dem tatsächlichen Tagesanteil.

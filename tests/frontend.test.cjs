@@ -70,7 +70,12 @@ async function harness(options={}) {
     else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market,price_feed:priceFeed};
     else if(path==='/api/market/refresh'){market={rows:[{start:1800,end:5400,ct_kwh:-5}],fetched_at:2000000000,error:''};data=market;}
     else if(path==='/api/budget'&&config.method==='PUT'){budget.settings=body;}
-    else if(path==='/api/budget')data={...budget,reference:options.household??null};
+    else if(path==='/api/budget')data={...budget,reference:options.household??null,billing:options.billing??null};
+    else if(path.startsWith('/api/meter-readings?')){
+      const dates=decodeURIComponent(path.split('dates=')[1]).split(',');
+      data={timezone:'Europe/Berlin',raw_retention_days:90,readings:dates.map((date,i)=>i===1?{date,import_kwh:1200.5,export_kwh:null,approximate:true,source:'reconstructed',measured_at:null,reason:'Aus dem letzten Zählerstand und der seither erfassten Energie zurückgerechnet (Rohwerte gelöscht).'}
+        :{date,import_kwh:1234.5678,export_kwh:12,approximate:false,source:'sample',measured_at:0,reason:''})};
+    }
     else if(path==='/api/simulate')data={energy_cost_eur:10,base_cost_eur:2,feedin_eur:0,total_eur:12,actual_total_eur:13,priced_share:.5,average_eur_kwh:.3,comparable:false,paired_share:.5,difference_eur:-1.25,spot_weighted_ct:9,spot_time_average_ct:8};
     else if(path==='/api/updates')data={enabled:false,current:'1.0.0',repository:'example/kilowatch',checked_at:null,error:'',available:false};
     else if(path==='/api/credentials/bridge'){saved.password_configured=false;saved.enabled=false;saved.setup_required=true;}
@@ -79,7 +84,7 @@ async function harness(options={}) {
   };
   for(const name of ['theme.js','i18n.js','overlays.js','charts.js','timeline.js','configure.js','extras.js','insights.js','dashboard.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
-    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards'}[options.page])||'#settings-form'));
+    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards',reports:'#page-reports .panel'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
 }
 
@@ -257,7 +262,7 @@ test('budget form saves empty fields as null',async t=>{
   input(w,'budget-form','monthly_eur','90');input(w,'budget-form','abschlag_eur','85.5');
   submit(w,'budget-form');
   await until(()=>h.calls.some(c=>c.path==='/api/budget'&&c.method==='PUT'));
-  assert.deepEqual(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body,{monthly_eur:90,monthly_kwh:null,abschlag_eur:85.5});
+  assert.deepEqual(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body,{monthly_eur:90,monthly_kwh:null,abschlag_eur:85.5,billing_start:null});
   assert.deepEqual(h.errors,[]);
 });
 
@@ -439,6 +444,43 @@ test('price traffic light colours quarters, marks now and switches the window le
   await until(()=>/Ø 15,0/.test(w.document.querySelector('#price-window-text')?.textContent||''));
   assert.ok(h.calls.some(c=>c.path==='/api/prices/outlook?window_hours=3'));
   assert.equal(w.document.querySelector('[data-price-window="3"]').getAttribute('aria-pressed'),'true');
+  assert.deepEqual(h.errors,[]);
+});
+test('reports list meter readings per month start, mark approximations and copy values',async t=>{
+  const h=await harness({page:'reports',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#meter-slot table'));
+  const request=h.calls.find(c=>c.path.startsWith('/api/meter-readings?'));
+  const dates=decodeURIComponent(request.path.split('dates=')[1]).split(',');
+  assert.equal(dates.length,13);assert.ok(dates.every(d=>d.endsWith('-01')));
+  const rows=w.document.querySelectorAll('#meter-slot tbody tr');
+  assert.equal(rows.length,13);
+  assert.match(rows[0].textContent,/1\.234,568/);
+  assert.match(rows[1].textContent,/≈/);assert.match(rows[1].textContent,/zurückgerechnet/);
+  let copied=null;w.navigator.clipboard={writeText:async value=>{copied=value;}};
+  rows[0].querySelector('[data-copy]').click();
+  await until(()=>copied!==null);
+  assert.equal(copied,'1234,568');
+  const form=w.document.querySelector('#reading-form');form.elements.date.value='2026-02-14';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await until(()=>!!w.document.querySelector('#reading-custom table'));
+  assert.ok(h.calls.some(c=>c.path==='/api/meter-readings?dates=2026-02-14'));
+  assert.deepEqual(h.errors,[]);
+});
+
+test('budget shows the billing year with recommendation and saves its start',async t=>{
+  const billing={start:'2026-03-01',end:'2027-03-01',available:true,months_elapsed:7,abschlag_eur:80,paid_eur:560,observed_eur:500,coverage:1,
+    projected_eur:1100,filled_eur:0,remaining_eur:600,recommended_abschlag_eur:92,difference_eur:140,method:'Synthetic method.'};
+  const h=await harness({page:'costs',settings:{setup_required:false},billing});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#budget-form'));
+  const text=w.document.querySelector('#budget-slot').textContent;
+  assert.match(text,/seit 01\.03\.2026/);assert.match(text,/Hochrechnung bis 28\.02\.2027/);
+  assert.match(text,/Gezahlte Abschläge \(7 volle Monate\)560 €/);
+  assert.match(text,/Nachzahlung ca\. 140 €/);assert.match(text,/92 € pro Monat/);
+  const form=w.document.querySelector('#budget-form');
+  form.elements.billing_day.value='15';form.elements.billing_month.value='4';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await until(()=>h.calls.some(c=>c.path==='/api/budget'&&c.method==='PUT'));
+  assert.equal(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body.billing_start,'04-15');
   assert.deepEqual(h.errors,[]);
 });
 
