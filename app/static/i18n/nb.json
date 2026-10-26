@@ -264,7 +264,7 @@
  "Festpreis": "Fastpris",
  "Firmware": "Fastvare",
  "Format": "Format",
- "Fragt bei GitHub ({repository}) nach dem neuesten Release. Es werden keine Messdaten übertragen. Installiert wird nie automatisch aus der App, sondern über DSM; siehe docs/UPDATES.md.": "Spør GitHub ({repository}) etter nyeste release. Ingen måledata overføres. Installasjon skjer aldri automatisk fra appen, men via DSM; se docs/UPDATES.md.",
+ "Fragt bei GitHub ({repository}) nach dem neuesten Release. Es werden keine Messdaten übertragen. Installiert wird nie automatisch aus der App, sondern mit dem Update-Skript; siehe docs/UPDATES.md.": "Spør GitHub ({repository}) etter nyeste release. Ingen måledata overføres. Installasjon skjer aldri automatisk fra appen, men med oppdateringsskriptet; se docs/UPDATES.md.",
  "Funkpegel Zähler → Bridge": "Signalstyrke måler → Bridge",
  "Für den Zeitraum berechnen": "Beregn for perioden",
  "Für die letzten 30 Tage fehlen Preise.": "Det mangler priser for de siste 30 dagene.",

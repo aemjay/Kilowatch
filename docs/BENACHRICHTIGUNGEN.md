@@ -1,49 +1,37 @@
-# E-Mail-Benachrichtigungen einrichten
+# E-Mail-Benachrichtigungen
 
-E-Mail ist der einzige Benachrichtigungskanal. Kanal und Hauptschalter sind zunächst ausgeschaltet. Alles wird nach der lokalen Anmeldung unter **Benachrichtigungen** eingerichtet und bleibt änderbar. Die Erfassung funktioniert auch ohne Benachrichtigungen.
+Kilowatch warnt dich per E-Mail über deinen eigenen SMTP-Server. Alles ist zunächst ausgeschaltet; die Messung läuft auch ohne.
 
-## E-Mail
+## Einrichten
 
-1. Eigenen SMTP-Server, Port und Verschlüsselung eintragen: meist **587/STARTTLS** oder **465/direktes TLS**. Die tatsächlichen Vorgaben des Mailanbieters verwenden.
-2. Benutzer und SMTP-/App-Passwort eintragen. Manche Anbieter verlangen ein gesondertes App-Passwort. Absender muss zum Konto passen.
-   Der **Absendername** (Standard „Kilowatch“) erscheint im Postfach vor der Adresse.
-3. Bis zu fünf Empfänger ohne Anzeigenamen eingeben, je Zeile oder mit Komma getrennt.
-4. **Speichern & E-Mail-Test senden** wählen. Der Test versendet eine erkennbare Testnachricht ohne Messwerte. Fehler erscheinen in der Oberfläche und im Zustellverlauf.
-   Optional ein **Erkennungswort im Betreff** wählen, das nur du kennst, z. B. `Kuckuck-17`. Es steht in eckigen Klammern vor jedem Betreff (höchstens 40 Zeichen). Nachrichten, die angeblich von Kilowatch kommen, aber dieses Wort nicht tragen, sind gefälscht. Das Wort eignet sich auch für Mailfilter. Es ist kein Passwort und wird wie die übrigen Einstellungen lokal gespeichert.
-5. Nach erfolgreichem Test **E-Mail als Kanal** sowie **Automatische Benachrichtigungen** aktivieren und speichern.
+Unter **Benachrichtigungen**:
 
-TLS-Zertifikate werden geprüft. Es gibt keinen Rückfall auf unverschlüsselten Versand. STARTTLS wird vor einer SMTP-Anmeldung ausgeführt. Ein erfolgreicher Versand bestätigt die Annahme durch den SMTP-Server, nicht den Eingang im Postfach; gegebenenfalls Spamordner prüfen. E-Mail ist nicht durch diese Anwendung Ende-zu-Ende-verschlüsselt.
+1. SMTP-Server, Port und Verschlüsselung eintragen: meist **587/STARTTLS** oder **465/TLS**, laut deinem Mailanbieter.
+2. Benutzer und Passwort eintragen (manche Anbieter verlangen ein App-Passwort). Der Absender muss zum Konto passen. Der **Absendername** (Standard „Kilowatch“) steht im Postfach vor der Adresse.
+3. Bis zu fünf Empfänger eintragen.
+4. Optional ein **Erkennungswort** wählen (z. B. `Kuckuck-17`, höchstens 40 Zeichen). Es steht als `[Wort]` vor jedem Betreff. Fehlt es, ist die Nachricht nicht von Kilowatch. Es ist kein Passwort, eignet sich aber für Mailfilter.
+5. **Speichern & E-Mail-Test senden.** Der Test enthält keine Messwerte; Fehler erscheinen in der Oberfläche und im Zustellverlauf.
+6. Nach einem erfolgreichen Test **E-Mail als Kanal** und **Automatische Benachrichtigungen** einschalten.
 
-Einstellungen früherer Versionen für den entfernten Messenger-Kanal werden ignoriert; wartende Nachrichten dieses Kanals werden verworfen und ein gespeicherter Gateway-Token beim Start gelöscht. Den Zusatzcontainer und sein Volume bei Bedarf selbst entfernen.
+Zertifikate werden geprüft, einen unverschlüsselten Rückfall gibt es nicht. „Gesendet“ heißt: Dein SMTP-Server hat die Nachricht angenommen, nicht dass sie im Postfach liegt. Die Mail ist nicht Ende-zu-Ende-verschlüsselt.
 
-## Regeln und empfohlener Einstieg
+## Regeln
 
-| Regel | Vorgabe bei Aktivierung | Verhalten |
+| Regel | Vorgabe | Verhalten |
 |---|---|---|
-| Keine frischen Zählerdaten | 120 Sekunden | Meldet ausbleibende gültige Messungen; nach App-Start gilt die Wartezeit erneut |
-| Hohe Dauerlast | zunächst aus; 3000 W für 10 Minuten | Nur frische, kontinuierliche Daten; Entwarnung unter 90 % der Schwelle |
-| Tagesbudget Netzbezug | 0 = aus | Einmal pro lokalem Tag nach Erreichen der erfassten kWh; fehlende Daten können zusätzlichen Verbrauch enthalten |
-| Batteriespannung | 2,7 V | Nur bei aktueller verfügbarer Diagnose; Entwarnung ab Schwelle + 0,15 V |
-| Datenspeicher knapp | weniger als 512 MiB frei | Freier Speicher am Datenpfad; Entwarnung erst mit 10 % Reserve über der Schwelle |
-
-Zunächst Messausfälle aktivieren und Dauerlast/Tagesbudget nach eigenen Erfahrungswerten ergänzen. Die Batterieschwelle ist ein veränderbarer Hinweis und keine garantierte Restlaufzeit. Die separate Analyse des Nachtmedians bleibt ein Hinweis in der Oberfläche.
+| Keine frischen Zählerdaten | 120 s (an) | meldet ausbleibende Messungen |
+| Hohe Dauerlast | 3000 W für 10 min (aus) | nur bei frischen, durchgehenden Daten; Entwarnung unter 90 % der Schwelle |
+| Tagesbudget Netzbezug | 0 kWh = aus | einmal pro Tag bei Erreichen; bei Lücken kann mehr verbraucht worden sein |
+| Monatsbudget | aus | meldet, wenn die erfassten Kosten das [Budget](TARIFE.md#budget-und-abschlag) erreichen |
+| Batteriespannung | 2,7 V (an) | nur bei aktueller Diagnose; ein Hinweis, keine Restlaufzeit |
+| Datenspeicher knapp | unter 512 MiB frei (an) | prüft den Speicher am Datenpfad |
 
 ## Ruhezeiten und Zustellung
 
-- Ruhezeiten verwenden **Europe/Berlin**, auch bei Sommer-/Winterzeit. Vorgabefenster 22–07 Uhr, zunächst ausgeschaltet.
-- Automatische Nachrichten warten während der Ruhezeit. Löst sich ein Problem vor dem Versand, werden zugehörige ausstehende Alarme verworfen.
-- Standardmäßig ein Alarm je Zustandswechsel, mindestens 60 Minuten zwischen erneuten Alarmen derselben Regel. Kein Alarm pro Messpunkt.
-- Entwarnungen gehen nur an Kanäle, die den zugehörigen Alarm bereits erfolgreich angenommen haben. Wiederholungen des Normalzustands werden vermieden.
-- Die Warteschlange bleibt bei App-Neustarts bestehen. Bei Versandfehlern maximal fünf Versuche mit wachsenden Pausen; nach 24 Stunden veraltete automatische Nachrichten verwerfen. Der Zustellverlauf zeigt Fehler und Annahme durch den Versanddienst.
-- Tests sind bewusste Einzelaktionen: Sie umgehen Hauptschalter/Ruhezeit, werden nicht automatisch wiederholt und sind auf einen Test in 30 Sekunden begrenzt.
-- Bei pausierter oder noch nicht eingerichteter Erfassung entstehen keine neuen Messalarme; pausierte Erfassung pausiert auch automatischen Versand. Im Demo-Modus ist der Versand abgeschaltet.
+- **Ruhezeit** (Standard 22–07 Uhr, aus) gilt in `Europe/Berlin`. Nachrichten warten; löst sich das Problem vorher, entfallen sie.
+- Es gibt einen Alarm je Zustandswechsel und mindestens 60 Minuten bis zum nächsten Alarm derselben Regel. Eine Entwarnung kommt nur nach einem zugestellten Alarm.
+- Die Warteschlange übersteht Neustarts. Bei Fehlern gibt es höchstens fünf Versuche mit wachsenden Pausen; automatische Nachrichten, die älter als 24 Stunden sind, entfallen.
+- Ein Test umgeht Hauptschalter und Ruhezeit, ist aber auf einen Test je 30 Sekunden begrenzt. Bei pausierter Erfassung und im Demo-Modus wird nicht gesendet.
 
-Passwörter/Token werden verschlüsselt lokal gespeichert und nicht zurück an den Browser geliefert. Empfänger und Servernamen sind lokale Einstellungen. Sicherung und Schlüsselverwaltung: [BETRIEB.md](BETRIEB.md).
-
-## Grenzen und Abnahme
-
-Ein komplett ausgefallener Host oder ein ausgefallener Internetzugang kann aus diesem System heraus keine Nachricht zustellen. Für die Überwachung des Hosts selbst wäre ein zusätzlicher unabhängiger Monitor sinnvoll. Alarmmeldungen sind Hinweise zur privaten Verbrauchsauswertung.
-
-Der Versand ist mit einer simulierten SMTP-Gegenstelle getestet. Die automatisierten Tests verwenden kein echtes Konto und versenden keine reale Nachricht. Nach der Einrichtung einen Test empfangen, anschließend eine passend gewählte Regel auslösen und Entwarnung sowie Ruhezeit prüfen. Messung und Zustellung getrennt beurteilen.
-
-Primärquelle: [Python SMTP](https://docs.python.org/3/library/smtplib.html).
+> [!NOTE]
+> Fällt der Host oder das Internet ganz aus, kann Kilowatch keine Nachricht mehr senden. Dafür brauchst du einen unabhängigen Monitor. Die frühere Signal-Anbindung gibt es nicht mehr; alte Einstellungen werden ignoriert und gespeicherte Gateway-Token beim Start gelöscht.

@@ -1,98 +1,71 @@
 # Betrieb, Sicherung und Wiederherstellung
 
-Alle Befehle im Projektordner ausführen. Wer selbst baut, verwendet `compose.build.yaml` statt `compose.yaml`. Beim optionalen MQTT-Broker `-f compose.mqtt.yaml` auch bei Updates mitführen.
+Alle Befehle laufen im Projektordner. Wer selbst baut, nimmt `compose.build.yaml` statt `compose.yaml`; mit dem MQTT-Broker immer auch `-f compose.mqtt.yaml` mitführen.
 
-## Alltag und Zugangsdaten
+## Alltag
 
 ```sh
-docker compose -f compose.yaml ps
-docker compose -f compose.yaml logs --tail=100 kilowatch
-docker compose -f compose.yaml restart kilowatch
+docker compose -f compose.yaml ps                          # Status
+docker compose -f compose.yaml logs --tail=100 kilowatch   # Protokoll
+docker compose -f compose.yaml restart kilowatch           # Neustart
 ```
 
-`healthy` bestätigt Webserver und SQLite. Die Aktualität der Messung steht gesondert in der Oberfläche. Ein Healthcheck allein startet einen noch laufenden Container nicht neu; `unless-stopped` greift nach einem Prozessende beziehungsweise Docker-Neustart.
+`healthy` bestätigt Webserver und Datenbank. Ob frische Messwerte ankommen, zeigt die Oberfläche. Bridge-Zugang, Mail-Zugang und App-Passwort änderst du unter **Einstellungen** und **Benachrichtigungen**; ein leeres Passwortfeld behält das gespeicherte. Ein neues App-Passwort beendet alle Sitzungen.
 
-Unter **Einstellungen** lassen sich Bridge-Adresse, Benutzer und Passwort sowie das App-Passwort ändern. Unter **Benachrichtigungen** bleiben Versandkanäle, Passwörter, Empfänger, Regeln und Ruhezeiten änderbar. Leere Passwortfelder behalten vorhandene Passwörter bei; eigene Schalter erlauben das Entfernen. Änderungen des App-Passworts beenden alle Sitzungen.
-
-Es sind keine persönlichen Daten oder Passwörter im Image enthalten. Die Standardeinrichtung benötigt keine Zugangsdaten in `.env`.
-
-## Abfrageintervall und Auflösung
-
-Das **Abfrageintervall** (Einstellungen → Erweitert, 2 bis 60 Sekunden) bestimmt, wie oft Kilowatch die Bridge abfragt. Die Live-Anzeige aktualisiert sich im selben Takt. Neue Werte gibt es aber nur so oft, wie der Zähler über den Pulse Telegramme liefert; fragt Kilowatch öfter, kommt mehrfach derselbe Wert und die Anzeige meldet nach 30 Sekunden ein unverändertes Telegramm.
-
-Gespeichert werden alle einzelnen Messwerte (Aufbewahrung „Einzelwerte“, Standard 90 Tage), Minutenwerte (Standard drei Jahre) und dauerhaft Viertelstundenwerte. Die Ansicht **1 Std.** zeigt die einzelnen Messwerte, **6 Std.** und einzelne Tage zeigen Minutenmittel, längere Zeiträume Viertelstunden, Tage oder Monate.
+Das **Abfrageintervall** (Einstellungen → Erweitert, 2 bis 60 Sekunden, Standard 5) bestimmt, wie oft Kilowatch die Bridge fragt. Neue Werte gibt es nur, so oft der Zähler Telegramme liefert; öfter fragen bringt dieselben Werte mehrfach.
 
 ## Speicherorte
 
-Messdaten und Zugangsdaten liegen bewusst an zwei Orten:
+Messdaten und Zugangsdaten liegen bewusst getrennt:
 
 ```text
-<Projektordner>/data/            # Ordner, z. B. /opt/kilowatch/data
-  live/
-    kilowatch.sqlite3            # Datenbank (mit -wal/-shm)
-    backups/                     # tägliche, geprüfte Sicherungen (letzte sieben)
-  demo/                          # getrennte Daten im Demo-Modus
-
-Docker-Volume kilowatch-secrets  # nicht im Projektordner
-  live/
-    app-auth.json                # gesalzener scrypt-Hash des App-Passworts
-    secrets.enc                  # verschlüsselte Bridge-/SMTP-Passwörter und Gateway-Token
-    secrets.key                  # lokaler Fernet-Schlüssel
+<Projektordner>/data/              Messdaten (in jede Dateisicherung aufnehmen)
+  live/kilowatch.sqlite3           Datenbank (mit -wal/-shm)
+  live/backups/                    tägliche, geprüfte Sicherungen (letzte sieben)
+  demo/                            Daten des Demo-Modus
+Docker-Volume kilowatch-secrets    Zugangsdaten (nicht im Projektordner)
+  live/app-auth.json               Hash des App-Passworts
+  live/secrets.enc, secrets.key    verschlüsselte Passwörter und ihr Schlüssel
 ```
 
-**Warum getrennt?** Läge der Schlüssel neben den verschlüsselten Passwörtern im gesicherten Ordner, enthielte jede Sicherung beides zusammen, und die Verschlüsselung wäre wertlos. So landen in einer Dateisicherung des Projektordners nur Messdaten, Einstellungen und Sicherungen, aber keine Geheimnisse. Das Volume liegt im Docker-Datenverzeichnis (auf Synology unter `@docker`) und wird von einer Sicherung des Projektordners nicht erfasst.
-
-Kilowatch läuft unter dem Eigentümer des Ordners `data` (wer ihn angelegt hat) oder, falls gesetzt, unter `PUID`/`PGID` aus der `.env`. Beim Start passt der Container die Eigentümer an, prüft das Schreibrecht und läuft danach ohne Root-Rechte.
-
-Passwörter und Token werden atomar mit Dateirechten 0600 geschrieben. Wer als Administrator des Hosts auf das Volume zugreifen kann, kann die Geheimnisse entschlüsseln; für Schutz bei Datenträgerverlust zusätzlich Festplattenverschlüsselung verwenden. Die API liefert gespeicherte Passwörter und Schlüssel nicht zurück.
-
-Adressen, Benutzernamen, Empfänger und Regeln sind Einstellungen in SQLite; ebenso der Nachrichtenverlauf einschließlich Nachrichtentext. Sicherungen von `data/` deshalb vertraulich behandeln.
+Läge der Schlüssel neben den verschlüsselten Passwörtern, enthielte jede Sicherung beides, und die Verschlüsselung wäre wertlos. Wer Administrator des Hosts ist, kann die Geheimnisse trotzdem entschlüsseln; gegen Datenträgerverlust hilft nur Festplattenverschlüsselung. Adressen, Empfänger, Regeln und der Nachrichtenverlauf liegen in der Datenbank, behandle Sicherungen deshalb vertraulich.
 
 ## Sichern
 
-- **Dateisicherung** (auf Synology Hyper Backup): den Projektordner (oder nur `data/`) aufnehmen. Für eine Wiederherstellung die geprüften Dateien aus `data/live/backups/` verwenden; die laufende `kilowatch.sqlite3` allein ist wegen WAL keine verlässliche Sicherung.
-- **Sofort:** In **System & Datenqualität → Jetzt konsistent sichern** eine `.sqlite3`-Datei herunterladen. Die SQLite-Backup-API liefert auch im laufenden Betrieb einen konsistenten Stand; danach wird `integrity_check` geprüft.
-- **Zugangsdaten:** werden absichtlich nicht mitgesichert. Nach einer Wiederherstellung auf einem neuen Host über den Setup-Code ein neues App-Passwort setzen und Bridge-Passwort (Aufkleber) sowie SMTP-Zugangsdaten und gegebenenfalls den Tibber-Token neu eingeben. Wer das vermeiden möchte, sichert das Volume separat auf verschlüsseltem Speicher – niemals zusammen mit `data/`.
+- **Dateisicherung** (auf Synology Hyper Backup): `data/` aufnehmen und für eine Wiederherstellung die geprüften Dateien aus `data/live/backups/` nehmen, nicht die laufende `kilowatch.sqlite3`.
+- **Sofort:** **System & Datenqualität → Jetzt konsistent sichern** lädt eine `.sqlite3`-Datei herunter.
+- **Zugangsdaten** sind absichtlich nicht dabei. Nach einer Wiederherstellung auf einem neuen Host setzt du über den Setup-Code ein neues App-Passwort und gibst Bridge-, Mail- und Tibber-Zugang neu ein. Willst du das vermeiden, sichere das Volume separat auf verschlüsseltem Speicher, nie zusammen mit `data/`.
 
-Eine Kopie auf einem anderen Datenträger ist nötig, um einen vollständigen Ausfall des Hosts abzudecken.
+Eine Kopie auf einem anderen Datenträger fängt einen Totalausfall des Hosts ab.
 
 ## Datenbank wiederherstellen
 
-1. Gewünschte Sicherung (z. B. aus `data/live/backups/`) nach `restore/kilowatch-sicherung.sqlite3` im Projektordner kopieren.
-2. App stoppen. Keine zweite App-Instanz mit demselben Datenordner laufen lassen.
-3. Geprüften Restore ausführen:
+1. Sicherung nach `restore/kilowatch-sicherung.sqlite3` im Projektordner kopieren.
+2. App stoppen und zurückspielen:
 
-```sh
-docker compose -f compose.yaml stop kilowatch
-docker compose -f compose.yaml run --rm --no-deps -v "$PWD/restore:/restore:ro" kilowatch python -m app.cli restore /restore/kilowatch-sicherung.sqlite3 --confirm-stopped
-docker compose -f compose.yaml up -d --no-build kilowatch
-```
+   ```sh
+   docker compose -f compose.yaml stop kilowatch
+   docker compose -f compose.yaml run --rm --no-deps -v "$PWD/restore:/restore:ro" kilowatch python -m app.cli restore /restore/kilowatch-sicherung.sqlite3 --confirm-stopped
+   docker compose -f compose.yaml up -d --no-build kilowatch
+   ```
 
-Das Werkzeug prüft Integrität und Schema, sichert eine vorhandene Datenbank als `backups/before-restore-…sqlite3` und ersetzt erst danach das Ziel. Solche Vorher-Sicherungen werden nicht von der normalen Sieben-Dateien-Rotation entfernt. `--confirm-stopped` bestätigt deine vorherige Handlung; es stoppt keinen anderen Container automatisch.
+Das Werkzeug prüft Integrität und Schema, sichert die vorhandene Datenbank als `backups/before-restore-…sqlite3` und ersetzt sie erst danach. Zugangsdaten bleiben unberührt. Fehlt zu `secrets.enc` der Schlüssel, bricht der Start ab, statt Geheimnisse zu überschreiben.
 
-Zugangsdaten bleiben bei einem Datenbank-Restore unberührt. Fehlen sie (neuer Host), lässt sich die App über den Setup-Code neu einrichten und die Zugänge werden erneut eingegeben. Existiert `secrets.enc` ohne passenden Schlüssel, bricht der Start mit verständlichem Fehler ab, statt die vorhandenen Geheimnisse zu überschreiben. Nicht `down -v` als Restore-Schritt verwenden: das löscht das Zugangsdaten-Volume.
+> [!WARNING]
+> Nie `docker compose down -v` als Wiederherstellungsschritt: Es löscht das Zugangsdaten-Volume.
 
 ## App-Passwort vergessen
 
-Mit lokalem Docker-Administrationszugriff lässt sich ausschließlich die App-Anmeldung zurücksetzen:
+Mit Docker-Zugriff auf den Host setzt du nur die Anmeldung zurück, Daten und Zugänge bleiben:
 
 ```sh
 docker compose -f compose.yaml stop kilowatch
 docker compose -f compose.yaml run --rm --no-deps kilowatch python -m app.cli reset-login --confirm-stopped
 docker compose -f compose.yaml up -d --no-build kilowatch
-docker compose -f compose.yaml logs --tail=50 kilowatch
 ```
 
-Danach den neuen Setup-Code aus `data/SETUP-CODE.txt` oder dem Protokoll verwenden und ein neues App-Passwort setzen. Messdaten und verschlüsselte Bridge-/SMTP-Zugänge bleiben erhalten. Der alte Passwort-Hash wird lokal als `app-auth.before-reset-…json` gesichert. Eine versehentliche Rücksetzung kann bei gestoppter App durch Zurückkopieren dieser Datei nach `app-auth.json` rückgängig gemacht werden.
-
-## Update
-
-`sudo sh tools/update.sh` aktualisiert Kilowatch geprüft und mit automatischem Rollback; Ablauf, Automatisierung und Rückweg in **[Updates](UPDATES.md)**.
+Danach legst du mit dem neuen Setup-Code aus `data/SETUP-CODE.txt` (oder dem Protokoll) ein neues Passwort fest. Der alte Hash liegt als `app-auth.before-reset-…json` bereit; zurückkopiert nach `app-auth.json` macht er die Rücksetzung rückgängig.
 
 ## Nach Messausfällen
 
-Die letzte Zählerbasis bleibt persistent. Eine spätere positive Differenz kann die Gesamtenergie während einer Unterbrechung liefern; der zeitliche Lastverlauf wird nicht erfunden. **Verlauf → Messlücken** und **System & Datenqualität** kontrollieren. Ruhezeiten und Wiederholungen für Nachrichten sind unter [Benachrichtigungen](BENACHRICHTIGUNGEN.md) beschrieben.
-
-## Datenbankschema
-
-Die Datenbank trägt eine Schemakennung (`PRAGMA user_version`). Ein älteres Schema wird beim Start ohne Verlust der Historie übernommen. Ältere App-Versionen lehnen ein neueres Schema ab; ein Downgrade benötigt daher die passende Sicherung von vor dem Update.
+Die letzte Zählerbasis bleibt gespeichert. Eine spätere positive Differenz liefert die Gesamtenergie der Unterbrechung; einen Lastverlauf erfindet Kilowatch nicht. Lücken zeigen **Verlauf** und **System & Datenqualität**.

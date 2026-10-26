@@ -1,52 +1,37 @@
-# Quellen und technische Grundlagen
+# Quellen
 
-Für die Ausarbeitung herangezogene Primärquellen (Stand Oktober 2026). Firmwareverhalten aus einem Community-Projekt ist von offiziell zugesicherten Geräteeigenschaften zu unterscheiden. Der verwendete Stand von `ha-tibber-pulse-local` wurde unter Commit `f23fdf9c04050ab39af0340aabba54ecc65b44c9` gelesen; spätere Änderungen können abweichen.
+Primärquellen, auf denen Kilowatch beruht (Stand Oktober 2026). Verhalten, das nur aus dem Community-Projekt `ha-tibber-pulse-local` stammt (gelesen unter Commit `f23fdf9c04050ab39af0340aabba54ecc65b44c9`), ist keine zugesicherte Geräteeigenschaft.
 
-| Thema | Quelle | Bedeutung für das Projekt |
-|---|---|---|
-| Projekte in Container Manager | [Synology-Hilfe](https://kb.synology.com/de-de/DSM/help/ContainerManager/docker_project?version=7) | Compose-Projekt, Pfad, Erstellen/Bauen/Starten |
-| Lokalen Bridge-Webserver aktivieren | [Community-Vorbereitung](https://github.com/marq24/ha-tibber-pulse-local/blob/f23fdf9c04050ab39af0340aabba54ecc65b44c9/preparation.md) | Basic Auth, Node-ID, Parameter 39 und Prüfungen |
-| Betrieb ohne Tibber-Kunde | [Community-Dokumentation](https://github.com/marq24/ha-tibber-pulse-local/blob/f23fdf9c04050ab39af0340aabba54ecc65b44c9/TIBBER-PULSE-AS-NON-TIBBER-CUSTOMER.md) | Firmware kann funktionierendes MQTT-Ziel erwarten |
-| Neuer/alter Datenpfad | [Bridge-Client im Community-Projekt](https://github.com/marq24/ha-tibber-pulse-local/blob/f23fdf9c04050ab39af0340aabba54ecc65b44c9/custom_components/tibber_local/tibber_client.py) | `/node_data.json` und Legacy `/data.json` |
-| SML-Dekodierung | [SmlLib](https://github.com/spacemanspiff2007/SmlLib), [PyPI 1.7](https://pypi.org/project/smllib/1.7/) | Streamreader, CRC, OBIS und Skalierung |
-| SQLite-WAL | [SQLite-Dokumentation](https://sqlite.org/wal.html) | Datenbank auf lokalem Dateisystem; WAL beachten |
-| Konsistente Sicherung | [SQLite-Backup-API](https://sqlite.org/backup.html), [Python sqlite3](https://docs.python.org/3/library/sqlite3.html#sqlite3.Connection.backup) | Sicherung während laufender Erfassung |
-| MQTT-Konfiguration | [Mosquitto-Handbuch](https://mosquitto.org/man/mosquitto-conf-5.html) | Listener, anonyme Verbindung, Topic-ACL und Grenzen |
-| Offizielles Brokerimage | [Docker Official Images](https://github.com/docker-library/official-images/blob/master/library/eclipse-mosquitto) | verfügbarer Tag 2.0.22, Multi-Arch (amd64/arm64) |
-| Compose-Umgebung | [Docker Compose .env](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/) | lokale Konfiguration und Variablenersetzung |
+## Bridge und Betrieb
 
-## Sicherheit, Benachrichtigungen und Tests
+| Thema | Quelle |
+|---|---|
+| Lokalen Bridge-Webserver aktivieren | [Community-Vorbereitung](https://github.com/marq24/ha-tibber-pulse-local/blob/f23fdf9c04050ab39af0340aabba54ecc65b44c9/preparation.md) |
+| Betrieb ohne Tibber-Kunde | [Community-Dokumentation](https://github.com/marq24/ha-tibber-pulse-local/blob/f23fdf9c04050ab39af0340aabba54ecc65b44c9/TIBBER-PULSE-AS-NON-TIBBER-CUSTOMER.md) |
+| Datenpfade `/node_data.json` und `/data.json` | [Bridge-Client der Community](https://github.com/marq24/ha-tibber-pulse-local/blob/f23fdf9c04050ab39af0340aabba54ecc65b44c9/custom_components/tibber_local/tibber_client.py) |
+| SML-Dekodierung | [SmlLib](https://github.com/spacemanspiff2007/SmlLib), [PyPI 1.7](https://pypi.org/project/smllib/1.7/) |
+| Compose-Projekte in Synology Container Manager | [Synology-Hilfe](https://kb.synology.com/de-de/DSM/help/ContainerManager/docker_project?version=7) |
+| SQLite WAL und konsistente Sicherung | [WAL](https://sqlite.org/wal.html), [Backup-API](https://sqlite.org/backup.html) |
+| MQTT-Broker | [Mosquitto-Handbuch](https://mosquitto.org/man/mosquitto-conf-5.html), [Docker-Image](https://github.com/docker-library/official-images/blob/master/library/eclipse-mosquitto) (Tag 2.0.22, amd64/arm64) |
+| Umgebungsvariablen in Compose | [Docker Compose](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/) |
 
-| Thema | Primärquelle | Verwendung |
-|---|---|---|
-| Lokale Verschlüsselung | [cryptography/Fernet](https://cryptography.io/en/latest/fernet/) | authentifizierte Verschlüsselung mit separat zu sicherndem lokalem Schlüssel |
-| Passwort-Hash | [Python hashlib.scrypt](https://docs.python.org/3/library/hashlib.html#hashlib.scrypt) | gesalzener Hash für die App-Anmeldung |
-| Mailversand | [Python smtplib](https://docs.python.org/3/library/smtplib.html), [TLS-Kontexte](https://docs.python.org/3/library/ssl.html#ssl.create_default_context) | STARTTLS/direktes TLS mit Zertifikatsprüfung |
-| DOM-Tests | [jsdom](https://github.com/jsdom/jsdom) | isolierte Formularprüfungen ohne echten Browser und ohne Nachrichtenversand |
+## Sicherheit und Tests
 
-Verhalten bei Gerätenamen wird mit wechselnden simulierten DNS-Antworten getestet. Der Router-DNS muss Gerätenamen tatsächlich pflegen. Ob die eigene Bridge-Firmware für ihr optionales MQTT-Ziel DNS-Namen auflöst, ist vor Ort zu prüfen.
+| Thema | Quelle |
+|---|---|
+| Verschlüsselung der Zugangsdaten | [cryptography/Fernet](https://cryptography.io/en/latest/fernet/) |
+| Passwort-Hash | [hashlib.scrypt](https://docs.python.org/3/library/hashlib.html#hashlib.scrypt) |
+| Mailversand mit TLS | [smtplib](https://docs.python.org/3/library/smtplib.html), [ssl](https://docs.python.org/3/library/ssl.html#ssl.create_default_context) |
+| Oberflächentests | [jsdom](https://github.com/jsdom/jsdom) |
 
-## Börsenpreise
+## Preise, Strommix und Vergleichswerte
 
-[aWATTar/tado° DE API](https://energy.tado.com/services/api): veröffentlichte Börsenwerte mit Millisekunden-Zeitstempeln und Einheit EUR/MWh. Daraus werden keine vollständigen Vertragspreise abgeleitet.
+- **Tibber:** [GraphQL-API](https://developer.tibber.com/api/reference.md). Kilowatch nutzt `priceInfo(resolution: QUARTER_HOURLY)` für heute und morgen und `priceInfoRange` (höchstens 672 Viertelstunden je Abfrage) für den Rückblick. `total` enthält laut Referenz Energie und Abgaben samt MwSt (in Schweden auch Energiesteuer); alles darüber, etwa das Netzentgelt in Norwegen, trägst du als Aufschlag ein.
+- **Börsenpreise:** [Energy-Charts](https://api.energy-charts.info/) (`price?bzn=…`, Day-Ahead in EUR/MWh; Fraunhofer ISE, Bundesnetzagentur | SMARD.de, CC BY 4.0). Es werden nur Euro-Gebotszonen angeboten. Für die Vorschau und die Tarifsimulation nutzt Kilowatch die [aWATTar/tado°-API](https://energy.tado.com/services/api) (Netto-Börsenwerte mit Millisekunden-Zeitstempeln). Daraus entstehen nie Vertragspreise.
+- **Strommix und CO₂:** [Energy-Charts](https://api.energy-charts.info/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), Quellenangabe „Energy-Charts.info“ in der Oberfläche. `co2eq` liefert g CO₂-Äquivalent je kWh und Viertelstunde mit etwa 8 bis 12 Stunden Verzögerung. Die mitgelieferte Prognosereihe wird nicht verwendet, weil sie am Übergang teils um ein Vielfaches springt. Die Werte passen zu Lebenszyklus-Faktoren (inklusive Vorketten), nicht zu reinen Verbrennungsemissionen, und gelten deshalb als Schätzung der Quelle. `public_power` liefert den Anteil erneuerbarer Erzeugung an der Last. Einspeisung wird nicht gegengerechnet.
+- **Vergleichshaushalte:** [Stromspiegel für Deutschland (co2online), Stand 13.05.2025](https://www.stromspiegel.de/stromverbrauch-verstehen/stromverbrauch-im-haushalt/). Für NL, NO und SE fand sich keine vergleichbare Quelle nach Haushaltsgröße; die Oberfläche weist darauf hin.
 
-## Preisquellen für dynamische Tarife
-
-- [Tibber GraphQL-API](https://developer.tibber.com/api/reference.md): `priceInfo(resolution: QUARTER_HOURLY)` für heute/morgen und `priceInfoRange` (höchstens 672 Viertelstunden je Abfrage) für den Rückblick. `total` = Energie + Abgaben laut Referenz (in Schweden inklusive Energiesteuer, überall inklusive MwSt); was darüber hinaus auf der Rechnung steht (z. B. Netzentgelt in Norwegen), trägt man als Aufschlag ein. Persönlicher Token unter developer.tibber.com.
-- [Energy-Charts](https://api.energy-charts.info/) `price?bzn=…`: Day-Ahead-Preis der Gebotszone in EUR/MWh, Daten der Bundesnetzagentur | SMARD.de unter CC BY 4.0. Nur Gebotszonen in Euro, weil die Schnittstelle auch für Norwegen oder Schweden EUR/MWh liefert.
-
-## Strommix und CO₂
-
-[Energy-Charts API](https://api.energy-charts.info/) des Fraunhofer ISE, Daten unter [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), Quellenangabe „Energy-Charts.info“ in der Oberfläche:
-
-- `co2eq`: CO₂-Äquivalente in g/kWh je Viertelstunde für das gewählte Land. Veröffentlichte Werte erscheinen mit etwa 8 bis 12 Stunden Verzögerung. Die mitgelieferte Prognosereihe springt an der Übergangsstelle teils um ein Vielfaches (z. B. Niederlande 132 → 16 g/kWh) und wird deshalb nicht verwendet. Die Methodik beschreibt die Schnittstelle nicht. Ein Abgleich mit dem veröffentlichten Erzeugungsmix (`public_power`) passt zu Lebenszyklus-Faktoren (inklusive Vorketten), nicht zu reinen Verbrennungsemissionen; Kilowatch weist die Werte deshalb als Schätzung der Quelle aus.
-- `public_power`: Reihe „Renewable share of load“ (Anteil erneuerbarer Erzeugung an der Last) je Viertelstunde.
-
-Die Bilanz multipliziert den Netzbezug jeder Viertelstunde mit dem gemessenen Wert derselben Viertelstunde. Einspeisung wird nicht gegengerechnet, Bezug ohne veröffentlichten Wert wird getrennt ausgewiesen. Meldet die Schnittstelle `deprecated`, zeigt Kilowatch einen Hinweis.
-
-## Vergleichswerte typischer Haushalte
-
-[Stromspiegel für Deutschland (co2online), Stand 13.05.2025](https://www.stromspiegel.de/stromverbrauch-verstehen/stromverbrauch-im-haushalt/): durchschnittlicher Jahresverbrauch in kWh.
+<details><summary>Jahresverbrauch typischer Haushalte in kWh (Stromspiegel)</summary>
 
 | Personen | Wohnung | Wohnung, Warmwasser elektrisch | Haus | Haus, Warmwasser elektrisch |
 |---|---|---|---|---|
@@ -56,4 +41,5 @@ Die Bilanz multipliziert den Netzbezug jeder Viertelstunde mit dem gemessenen We
 | 4 | 2.600 | 4.000 | 3.800 | 4.700 |
 | 5 | 3.100 | 5.000 | 4.500 | 6.000 |
 
-Elektrische Heizung, Wärmepumpe und E-Auto sind nicht enthalten. Die Werte beschreiben den gesamten Haushaltsstrom; mit eigener PV ist der gemessene Netzbezug niedriger. Für die Niederlande, Norwegen und Schweden fand sich keine vergleichbare, nach Haushaltsgröße aufgeschlüsselte Primärquelle; die Oberfläche weist darauf hin.
+Elektrische Heizung, Wärmepumpe und E-Auto sind nicht enthalten. Mit eigener PV liegt der gemessene Netzbezug niedriger.
+</details>

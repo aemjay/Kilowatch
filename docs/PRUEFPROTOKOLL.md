@@ -1,52 +1,35 @@
-# Testabdeckung und Abnahme
+# Tests und Abnahme
 
-Diese Seite beschreibt, was die automatisierten Tests abdecken, und welche Punkte jede Installation selbst abnehmen sollte. Sie enthält keine Daten einer konkreten Installation.
+Was die automatischen Tests abdecken und was du bei jeder Installation selbst prüfen solltest. Alle Testdaten sind künstlich; echte Telegramme und Zugangsdaten gehören nicht ins Repository.
 
-## Automatisierte Tests
+## Automatische Tests
 
-- **Python-Tests** (`python -m pytest`, Python 3.13): Decoder, Berechnung, API, Sicherung/Restore, Schema-Migrationen, lokale Geheimnisspeicherung, Einrichtung, DNS, Gerätesuche, Tarife, Analysen, Börsenpreise, Update-Hinweis, Benachrichtigungen, Übersetzungen und Installations-/Update-Skript.
-- **DOM-Tests** (`npm test`, Node 24/jsdom): Ersteinrichtung, Passwortbestätigung, FQDN-Verbindungstest, Speicherung/Testversand in der Oberfläche, Entfernen des Bridge-Passworts, Absendername und Erkennungswort im Betreff, Gerätesuche, HT/NT-Tarif, Börsenpreise, Tarifsimulation, Budget, Farbschema sowie Sprache und Währung. API-Antworten sind ausschließlich simuliert, es gibt kein Netzwerk und kein echtes Konto.
-- JavaScript-Syntaxprüfung aller Oberflächenskripte.
-- Alle Testdaten sind synthetisch. Echte Telegramme, Kennungen und Zugangsdaten gehören nicht ins Repository.
+```sh
+python -m pytest                               # Python 3.13
+npm ci --ignore-scripts && npm test            # Oberfläche mit jsdom, Node 24
+```
 
-## Wesentliche Nachweise
+Der [GitHub-Workflow](../.github/workflows/nas-image.yml) führt beides aus, prüft die JavaScript-Syntax und alle Compose-Dateien, baut Images für amd64 und arm64 und testet sie als Container: Start ohne Zugangsdaten, Einrichtung über den Setup-Code, API, Sicherung, Dateirechte, Neustart und das Update von der letzten Version. Mosquitto prüft er getrennt.
 
-| Bereich | Geprüftes Verhalten |
+| Bereich | Geprüft |
 |---|---|
-| SML/Register | CRC, Skalierung, Vorzeichen, T1/T2 ohne Doppelzählung, fehlende Register unbekannt |
-| Energiebilanz | Zählerdifferenzen, Leistungsintegration beim Nulldurchgang, Grenzen von Minuten/Viertelstunden |
-| Lücken/Plausibilität | keine erfundenen Nullwerte/Stundenwerte, persistente Basis, Zählerwechsel und Rücksprünge |
-| Zeit/Tarife | 23-/25-Stunden-Tage, kalendertäglicher Grundpreis, Tarifwechsel, negative Preise und fehlende Preisintervalle |
-| Einrichtung | keine persönliche Adresse/Benutzer/Passwort vorbelegt; einmaliger Setup-Code nicht per API lesbar |
-| Anmeldung | Hash nach Neustart, Sitzungen, Drosselung, Ursprungsprüfung, Passwortänderung beendet alle Sitzungen |
-| Geheimnisse | verschlüsselte lokale Speicherung getrennt vom Datenordner, keine Rückgabe, verlorener Schlüssel wird nicht ersetzt |
-| Passwort-Wiederherstellung | Bestätigung gestoppter App erforderlich; nur App-Anmeldung zurücksetzen, Daten/Geheimnisse behalten |
-| FQDN | simulierter Wechsel der DNS-Antwort beim nächsten Abruf, ursprünglicher Host-Header, DNS-Fehler, öffentliche/gemischte Ziele abweisen |
-| SMTP | Zertifikatsprüfung, STARTTLS vor Anmeldung, kein unverschlüsselter Rückfall, Absendername, Erkennungswort im Betreff |
-| Regeln | Ausfall einmal, Entwarnung nur nach zugestelltem Alarm, Beruhigung, Lastdauer nur mit kontinuierlichen frischen Daten |
-| Zustellung | Ruhezeit auch in doppelter Winterzeitstunde, begrenzte Wiederholungen, Regelabschaltung verwirft ausstehende Alarme |
-| Testversand | bewusste Aktion, 30 Sekunden Begrenzung, keine automatische Wiederholung |
-| Backup/Restore | konsistenter Roundtrip, Schema/Integrität, ungültige Quelle ersetzt keine vorhandene Datenbank |
-| Migrationen | geprüfte Sicherung vor jeder Schemaänderung, jede Stufe in eigener Transaktion, neuere Datenbank wird abgewiesen |
-| Übersetzungen | alle Kataloge vollständig, Platzhalter und Mehrzahlformen erhalten, keine unmarkierten deutschen Texte, Fehlermeldungen und Benachrichtigungen in der gewählten Sprache |
-| Paket | Quell-/Prebuilt-Konfiguration gleich, keine Zugangsdaten in Beispiel-Umgebung |
+| Messung | SML und CRC, Skalierung, Vorzeichen, T1/T2 ohne Doppelzählung, Energiebilanz, Lücken ohne erfundene Werte, Zählerwechsel |
+| Zeit und Kosten | 23-/25-Stunden-Tage, Tarifwechsel, HT/NT, negative und fehlende Preise, dynamische Preisquellen |
+| Sicherheit | Anmeldung, Sitzungen, Sperre, Ursprungsprüfung, verschlüsselte Zugangsdaten, Passwort-Rücksetzung |
+| Netzwerk | Gerätenamen mit wechselnden DNS-Antworten, Gerätesuche, Abweisen öffentlicher Ziele |
+| Betrieb | Sicherung und Wiederherstellung, Migrationen mit Vorab-Sicherung, Installations- und Update-Skript inklusive Rollback |
+| Benachrichtigungen | SMTP-Sicherheit, Regeln, Ruhezeiten, Wiederholungen, Test-Begrenzung (mit simulierter Gegenstelle) |
+| Oberfläche | Einrichtung, Formulare, Tooltips, Zeitbalken und Zoom, Farbschema, Sprachen, App-Installation, Dokumentationslinks |
 
-Ein Deprecation-Hinweis zum HTTPX-basierten Starlette-Testclient betrifft die Testumgebung und ist kein fehlgeschlagener Test.
+> [!NOTE]
+> Echte E-Mail-Zustellung, Gerätesuche im echten Netz und Touch-Gesten auf echten Geräten deckt die Automatik nicht ab.
 
-## Linux-Container und Download
+## Bei jeder Installation prüfen
 
-Der [GitHub-Workflow](../.github/workflows/nas-image.yml) führt Python- und DOM-Tests unter Linux aus, validiert alle Compose-Varianten und baut danach Images für amd64 und arm64 (arm64 per QEMU-Emulation); beide durchlaufen den Integrationstest. Der Integrationstest startet den Container ohne Zugangsdaten, liest den synthetischen Setup-Code aus dessen Protokoll, richtet ein Testpasswort ein und prüft API, Backup, Dateirechte sowie Persistenz nach Neustart. Mosquitto wird separat mit künstlichen Daten geprüft.
-
-Eine externe E-Mail-Zustellung wird dadurch nicht bestätigt. Den konkreten Build-Status und das importierbare Artefakt immer im zugehörigen Actions-Lauf prüfen.
-
-## Bei jeder Installation abzunehmen
-
-- [ ] Projekt starten, Setup abschließen, frische echte Werte sehen.
-- [ ] Bridge-FQDN vom Container auflösen; nach einem DHCP-Adresswechsel Empfang erneut prüfen.
-- [ ] RAM/CPU und Datenwachstum auf dem Host beobachten. Die Compose-Limits sind keine Messwerte.
-- [ ] Tagesverbrauch nach mindestens 24 Stunden mit den Zählerständen vergleichen.
-- [ ] Bridge- und Host-Neustart prüfen: Webserver, DNS, Wiederanlauf und gespeicherte Zugangsdaten.
-- [ ] Datenbank sowie Hash/Geheimnisse/Schlüssel getrennt sichern; Wiederherstellung in einer Testinstanz prüfen.
-- [ ] Eigene E-Mail-Konfiguration: Test tatsächlich empfangen, dann Alarm und Entwarnung prüfen.
-- [ ] HT/NT-Uhrzeiten mit dem eigenen Vertrag abgleichen.
-- [ ] Falls vollständiger Cloud-Ausstieg gewünscht: lokalen MQTT-Betrieb mit Hostnamen erst ohne Internetsperre, danach mit Sperre und Neustart jeweils mindestens 24 Stunden prüfen.
+- [ ] Setup abschließen und frische Messwerte sehen.
+- [ ] Nach 24 Stunden den Tagesverbrauch mit dem Zählerstand vergleichen.
+- [ ] Bridge- und Host-Neustart: Webserver, Namensauflösung, Wiederanlauf, gespeicherte Zugänge.
+- [ ] Datenbank und Zugangsdaten getrennt sichern und die Wiederherstellung in einer Testinstanz ausprobieren.
+- [ ] Mail-Test wirklich empfangen, dann Alarm und Entwarnung prüfen.
+- [ ] HT/NT-Zeiten mit dem Vertrag abgleichen.
+- [ ] Nur bei Cloud-Ausstieg: lokalen MQTT-Betrieb erst ohne, dann mit Internetsperre je mindestens 24 Stunden beobachten.
