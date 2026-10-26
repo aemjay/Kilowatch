@@ -27,7 +27,7 @@ Der MQTT-Broker ist kein Messdaten-Eingang: Die Messwerte kommen immer per HTTP 
 | Nachrichtenverlauf | 90 Tage (die Oberfläche zeigt die letzten 100) |
 | Datenbanksicherungen | die letzten sieben, täglich (UTC) |
 
-Weitere Tabellen: Einstellungen, Tarife, Preisintervalle, Börsenpreise, Ereignisse, die Zustellwarteschlange und API-Tokens (nur Hashes). Die Schemaversion steht in `PRAGMA user_version`; ältere Schemata werden beim Start nach einer automatischen Sicherung (`backups/pre-migration-*`) angehoben, neuere lehnt die App ab ([Updates](UPDATES.md)). Es gibt genau einen App-Prozess; lass nie mehrere Container in dieselbe Datenbank schreiben. Passwort-Hash und verschlüsselte Geheimnisse liegen außerhalb der Datenbank ([Betrieb](BETRIEB.md#speicherorte)).
+Weitere Tabellen: Einstellungen, Tarife, Preisintervalle, Börsenpreise, Ereignisse, die Zustellwarteschlange, API-Tokens (nur Hashes) und Gerätemessungen. Die Schemaversion steht in `PRAGMA user_version`; ältere Schemata werden beim Start nach einer automatischen Sicherung (`backups/pre-migration-*`) angehoben, neuere lehnt die App ab ([Updates](UPDATES.md)). Es gibt genau einen App-Prozess; lass nie mehrere Container in dieselbe Datenbank schreiben. Passwort-Hash und verschlüsselte Geheimnisse liegen außerhalb der Datenbank ([Betrieb](BETRIEB.md#speicherorte)).
 
 ## Messwerte
 
@@ -75,6 +75,7 @@ Betrag = **bekannte Energiekosten + zeitanteiliger Grundpreis − Einspeiseerlö
 | Nachtauffälligkeit | Nachtmedian der letzten sieben gegen die sieben Tage davor (mind. 24 Viertelstunden je Fenster); Hinweis ab mehr als 80 W und 30 % Anstieg, keine Geräteerkennung |
 | Prognose | Mittel gleicher Wochentage aus 28 Tagen; nötig sind mindestens sieben Tage mit ≥ 98 % Abdeckung. Das Band ist heuristisch |
 | Vorperioden | gleich viele Kalendertage; laufende Zeiträume nur bis zur letzten vollen Viertelstunde |
+| Gerätemessung | Bezugszählerstand bei Ende − bei Start − Nachtgrundlast der letzten sieben Tage × Dauer (ohne bekannte Grundlast kein Abzug); Kosten mit dem Arbeitspreis beim Beenden. Misst den Mehrverbrauch des Hauses in diesem Zeitraum, keine Geräteerkennung |
 | CO₂-Bilanz | Bezug je Viertelstunde × gemessene Netzintensität derselben Viertelstunde; Bezug ohne veröffentlichten Wert wird getrennt ausgewiesen |
 
 Aus dem Netzanschluss allein lassen sich weder die PV-Erzeugung noch Hausverbrauch hinter einer PV-Anlage, Batterie-Eigenverbrauch oder einzelne Geräte bestimmen. Diagramme dünnen sehr große Reihen nur für die Darstellung aus; Spitzen und Energiemengen bleiben separat erhalten. Rohdaten gibt es nur innerhalb ihrer Aufbewahrung.

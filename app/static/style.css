@@ -74,3 +74,5 @@
 .token-value{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:10px}
 .token-value code{font-family:Consolas,monospace;font-size:12px;word-break:break-all;background:var(--k-bg-fff);border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--ink)}
 #token-form{margin-top:20px}
+.measure-running strong{font-variant-numeric:tabular-nums}#measure-slot h3{margin-bottom:12px}
+#measure-name{margin-top:18px;margin-bottom:0}

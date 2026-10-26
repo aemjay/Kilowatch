@@ -32,6 +32,7 @@ from .grid import COUNTRIES, Grid
 from . import prices as price_feed
 from . import insights
 from . import checklist as setup_checklist
+from .measure import Measurements
 from .i18n import CURRENCIES, LANGUAGES, UserError, translate_error
 
 
@@ -305,6 +306,18 @@ class TokenCreate(StrictModel):
         return value
 
 
+class MeasurementName(StrictModel):
+    name: str = Field(max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def plain_name(cls, value):
+        value = value.strip()
+        if any(ord(c) < 32 for c in value):
+            raise ValueError("Name ohne Steuerzeichen angeben.")
+        return value
+
+
 class ChecklistMute(StrictModel):
     muted: list[str] = Field(max_length=len(setup_checklist.KEYS))
 
@@ -365,6 +378,7 @@ def create_app(config=None):
     vault = Vault(config.secrets_folder)
     auth = Auth(config.secrets_folder)
     tokens = Tokens(store)
+    measurements = Measurements(store)
 
     def get_password():
         return vault.get("bridge_password")
@@ -933,6 +947,34 @@ def create_app(config=None):
     def delete_event(event_id: int):
         with store.transaction():
             store.conn.execute("DELETE FROM events WHERE id=?", (event_id,))
+        return {"ok": True}
+
+    @app.get("/api/device-measurements")
+    def device_measurements():
+        return measurements.overview()
+
+    @app.post("/api/device-measurements/start")
+    def start_measurement():
+        return measurements.start()
+
+    @app.post("/api/device-measurements/stop")
+    def stop_measurement():
+        return measurements.stop()
+
+    @app.put("/api/device-measurements/{measurement_id}")
+    def name_measurement(measurement_id: int, data: MeasurementName):
+        try:
+            measurements.rename(measurement_id, data.name)
+        except LookupError:
+            raise HTTPException(404, "Messung nicht gefunden.") from None
+        return {"ok": True}
+
+    @app.delete("/api/device-measurements/{measurement_id}")
+    def delete_measurement(measurement_id: int):
+        try:
+            measurements.delete(measurement_id)
+        except LookupError:
+            raise HTTPException(404, "Messung nicht gefunden.") from None
         return {"ok": True}
 
     @app.get("/api/events/{event_id}/comparison")

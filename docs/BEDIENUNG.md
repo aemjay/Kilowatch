@@ -40,6 +40,14 @@ Oben auf der Übersicht listet Kilowatch offene Einrichtungsschritte, jeweils mi
 
 **Ausblenden** schaltet einen Punkt dauerhaft stumm, auch wenn er später wieder zutrifft; **Einstellungen → Hinweise auf der Übersicht → Alle wieder einblenden** hebt das auf. Wer Preise nur per CSV importiert, blendet den Preisquellen-Hinweis so aus. Ob die Bridge noch in die Tibber-Cloud sendet, prüft die Liste nicht: Kilowatch liest aus `/status.json` nur Firmware, MQTT-Status und Laufzeit, nicht das MQTT-Ziel. Im Demo-Modus zeigt der Update-Punkt ein Beispiel.
 
+## Gerät messen
+
+Unter **Ereignisse → Gerät messen** misst eine Stoppuhr den Mehrverbrauch des Hauses: **Messung starten** merkt Zeitpunkt und Bezugszählerstand, danach das Gerät einschalten; nach dem Gerätelauf **Messung beenden**. Das Ergebnis zeigt Mehrverbrauch, Dauer, mittlere Mehrleistung und Kosten; mit einem Namen bleibt es in der Liste.
+
+- Gemessen wird am Netzanschluss: Alles, was im Zeitraum zusätzlich lief (Kühlschrank, Licht, andere Geräte), zählt mit. Abgezogen wird nur die Nachtgrundlast der letzten sieben Tage. Für belastbare Werte in ruhigen Zeiten messen und mehrfach wiederholen. Bei PV-Einspeisung während der Messung ist das Ergebnis zu niedrig.
+- Start und Ende brauchen einen frischen Zählerstand (höchstens 30 Sekunden alt). Die Genauigkeit hängt von der Auflösung des Zählerstands ab; liefert dein Zähler nur gerundete Werte, eignet sich die Messung nur für größere Verbräuche.
+- Es läuft höchstens eine Messung. Sie liegt in der Datenbank und läuft bei Neustart oder in einem anderen Browser weiter. Nach 24 Stunden wird sie abgebrochen und als unvollständig gespeichert.
+
 ## Sprache und Währung
 
 Die Oberfläche gibt es auf Deutsch, Englisch, Norwegisch (Bokmål), Schwedisch und Niederländisch. Wähle sie auf der Anmeldeseite oder unter **Einstellungen → Sprache und Währung**; ohne Auswahl gilt die Browsersprache, sonst Deutsch. Benachrichtigungen nutzen die gespeicherte Sprache.

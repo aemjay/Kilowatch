@@ -36,12 +36,21 @@ def _api_tokens(conn):
                  "role TEXT NOT NULL,created REAL NOT NULL,last_used REAL)")
 
 
+def _device_measurements(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS device_measurements(id INTEGER PRIMARY KEY,name TEXT NOT NULL DEFAULT '',"
+                 "status TEXT NOT NULL,start REAL NOT NULL,start_kwh REAL NOT NULL,end REAL,end_kwh REAL,baseline_w REAL,"
+                 "rate_eur_kwh REAL,note TEXT NOT NULL DEFAULT '')")
+    # Höchstens eine laufende Messung.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS device_measurement_running ON device_measurements(status) WHERE status='running'")
+
+
 # Geordnete Schemaänderungen. Nur hinzufügen (Tabellen, Spalten, Indizes); Entfernen
 # frühestens in der nächsten Hauptversion. Jede Stufe läuft in einer eigenen Transaktion.
 MIGRATIONS = [
     (2, _spot_prices),
     (3, _grid_intensity),
     (4, _api_tokens),
+    (5, _device_measurements),
 ]
 SCHEMA_VERSION = max([1] + [target for target, _ in MIGRATIONS])
 

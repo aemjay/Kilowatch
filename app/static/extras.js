@@ -62,3 +62,44 @@ ${homes.length>1?`<label data-price-source="tibber">${t('Tibber-Zuhause')}<selec
   $('#price-refresh')?.addEventListener('click',safely(async event=>{event.target.disabled=true;try{await api('/api/prices/refresh','POST');toast(t('Preise abgerufen.'));await loadPage();}finally{event.target.disabled=false;}}));
   $('#tibber-forget')?.addEventListener('click',safely(async()=>{await api('/api/prices/source','PUT',values({clear_tibber_token:true,...(feed.source==='tibber'?{source:''}:{})}));toast(t('Tibber-Token entfernt.'));await loadPage();}));
 }
+
+// Gerätemessung per Stoppuhr (Ereignisse): Mehrverbrauch des Hauses zwischen Start und Ende.
+let measureTimer=0;
+function clockDuration(seconds) {
+  const s=Math.max(0,Math.round(seconds)),h=Math.floor(s/3600),m=Math.floor(s%3600/60);
+  return `${h}:${String(m).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+
+function measureResult(item) {
+  if(item.status!=='done')return `<p class="muted">${esc((item.note?t(item.note):t('Unvollständig')))}</p>`;
+  const lines=[stat(t('Mehrverbrauch'),unit(item.extra_kwh,'kWh',3)),stat(t('Dauer'),clockDuration(item.duration_s)),stat(t('Mittlere Mehrleistung'),unit(item.mean_w,'W',0)),
+    stat(t('Kosten'),item.cost_eur==null?t('Kein Arbeitspreis'):`${unit(item.cost_eur,'€',2)} (${ctPrice(item.rate_eur_kwh)})`),
+    stat(t('Bezug gesamt im Zeitraum'),unit(item.total_kwh,'kWh',3)),
+    stat(t('Abgezogene Grundlast'),item.baseline_w==null?t('keine'):`${unit(item.baseline_kwh,'kWh',3)} (${unit(item.baseline_w,'W',0)})`)];
+  const note=item.baseline_w==null?`<p class="copy-footnote">${esc(t('Keine Nachtgrundlast der letzten 7 Tage bekannt; ohne Abzug gerechnet.'))}</p>`:'';
+  return `<div class="stats-list">${lines.join('')}</div>${note}`;
+}
+
+async function mountDeviceMeasurements() {
+  const slot=$('#measure-slot');if(!slot)return;
+  const data=await api('/api/device-measurements');
+  if(!slot.isConnected)return;
+  clearInterval(measureTimer);
+  const running=data.running, latest=data.items[0], open=latest&&latest.status==='done'&&!latest.name?latest:null;
+  const control=running
+    ?`<div class="notice info measure-running" role="status"><strong>${esc(t('Messung läuft'))} · <span id="measure-elapsed">${clockDuration(Date.now()/1000-running.start)}</span></strong><br>${esc(t('Start {time} · Bezugszähler {kwh}',{time:localTime(running.start,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}),kwh:unit(running.start_kwh,'kWh',3)}))}</div><div class="form-actions"><button type="button" class="primary" id="measure-stop">${t('Messung beenden')}</button><button type="button" class="danger-button" data-delete-measure="${running.id}">${t('Verwerfen')}</button></div>`
+    :`<div class="form-actions"><button type="button" class="primary" id="measure-start">${t('Messung starten')}</button></div><p class="copy-footnote">${esc(t('Zuerst starten, dann das Gerät einschalten. Nach dem Ende des Gerätelaufs beenden. Die Messung läuft auf dem Server weiter, auch bei geschlossenem Browser.'))}</p>`;
+  const fresh=open?`<div class="divider"></div><h3>${t('Letztes Ergebnis')}</h3>${measureResult(open)}<form id="measure-name" class="reading-form"><label>${t('Name')}<input id="measure-name-input" name="name" maxlength="80" required placeholder="${esc(t('z. B. Waschmaschine 40 °C'))}"></label><button type="submit" class="secondary">${t('Speichern')}</button></form>`:'';
+  const saved=data.items.filter(item=>item!==open);
+  const rows=saved.map(item=>`<tr><td>${esc(item.name||t('Ohne Namen'))}</td><td>${esc(localTime(item.start,{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</td><td>${item.duration_s==null?'—':clockDuration(item.duration_s)}</td><td>${item.status==='done'?number(item.extra_kwh,3):esc((item.note?t(item.note):t('Unvollständig')))}</td><td>${number(item.mean_w,0)}</td><td>${item.cost_eur==null?'—':unit(item.cost_eur,'€',2)}</td><td><button type="button" class="danger-button" data-delete-measure="${item.id}" aria-label="${esc(t('Messung „{name}“ löschen',{name:item.name||t('Ohne Namen')}))}">${t('Löschen')}</button></td></tr>`).join('');
+  const table=rows?`<div class="divider"></div><h3>${t('Gespeicherte Messungen')}</h3><div class="table-wrap"><table><thead><tr><th>${t('Name')}</th><th>${t('Beginn')}</th><th>${t('Dauer')}</th><th>${t('Mehrverbrauch kWh')}</th><th>${t('Ø W')}</th><th>${t('Kosten')}</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:'';
+  slot.innerHTML=panel(t('Gerät messen'),t('Mehrverbrauch des Hauses zwischen Start und Ende'),control+fresh+table+`<p class="copy-footnote">${esc(t('Misst den Mehrverbrauch des Hauses in diesem Zeitraum, keine Geräteerkennung: Alles, was zusätzlich läuft, zählt mit. Abgezogen wird die Nachtgrundlast der letzten 7 Tage × Dauer; Kosten mit dem Arbeitspreis beim Beenden. Nach 24 Stunden bricht die Messung ab und gilt als unvollständig.'))}</p>`);
+  if(running)measureTimer=setInterval(()=>{const node=$('#measure-elapsed');if(!node){clearInterval(measureTimer);return;}node.textContent=clockDuration(Date.now()/1000-running.start);},1000);
+  $('#measure-start')?.addEventListener('click',safely(async event=>{event.target.disabled=true;try{await api('/api/device-measurements/start','POST');toast(t('Messung gestartet.'));}finally{await mountDeviceMeasurements();}}));
+  $('#measure-stop')?.addEventListener('click',safely(async event=>{event.target.disabled=true;try{await api('/api/device-measurements/stop','POST');}finally{await mountDeviceMeasurements();}$('#measure-name-input')?.focus();}));
+  $('#measure-name')?.addEventListener('submit',safely(async event=>{event.preventDefault();await api('/api/device-measurements/'+open.id,'PUT',{name:new FormData(event.target).get('name')});toast(t('Messung gespeichert.'));await mountDeviceMeasurements();}));
+  for(const button of $$('[data-delete-measure]',slot))button.addEventListener('click',safely(async()=>{
+    if(!window.confirm(t('Messung löschen?')))return;
+    await api('/api/device-measurements/'+button.dataset.deleteMeasure,'DELETE');await mountDeviceMeasurements();
+  }));
+}

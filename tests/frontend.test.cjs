@@ -31,6 +31,7 @@ async function harness(options={}) {
   let budget={settings:{monthly_eur:null,monthly_kwh:null,abschlag_eur:null},month:{observed_eur:3,observed_kwh:10,forecast_eur:null,forecast_kwh:null,forecast_reason:'Zu wenig Daten'},annual:{available:false,reason:'Mindestens 60 vollständig erfasste Tage erforderlich.'}};
   const checklistState={muted:structuredClone(options.muted||[])};
   let tokenList=structuredClone(options.tokens||[]);
+  let measure={running:null,max_seconds:86400,items:[]};
   const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error));
   const dom=new JSDOM(readFileSync(join(root,'index.html'),'utf8'),{
     url:'http://kilowatch.test/#'+(options.page||'settings'),runScripts:'outside-only',virtualConsole:vc});
@@ -59,6 +60,11 @@ async function harness(options={}) {
     else if(path==='/api/tokens'&&config.method==='POST'){const item={id:tokenList.length+1,name:body.name,role:body.role,created:1,last_used:null};tokenList.push(item);data={...item,token:'kw_synthetic-token-value'};}
     else if(path==='/api/tokens')data={tokens:tokenList,limit:10};
     else if(path.startsWith('/api/tokens/')&&config.method==='DELETE'){tokenList=tokenList.filter(item=>String(item.id)!==path.split('/').pop());}
+    else if(path==='/api/events')data=[];
+    else if(path==='/api/device-measurements')data=measure;
+    else if(path==='/api/device-measurements/start'){measure={...measure,running:{id:7,start:1000,start_kwh:500.25,status:'running'}};data=measure;}
+    else if(path==='/api/device-measurements/stop'){const done={id:7,name:'',status:'done',start:1000,end:4600,duration_s:3600,total_kwh:1.2,baseline_kwh:.2,extra_kwh:1,mean_w:1000,baseline_w:200,rate_eur_kwh:.3,cost_eur:.3,note:''};measure={...measure,running:null,items:[done]};data=done;}
+    else if(path.startsWith('/api/device-measurements/')&&config.method==='PUT'){measure.items[0]={...measure.items[0],name:body.name};}
     else if(path==='/api/checklist'){
       if(config.method==='PUT')checklistState.muted=body.muted;
       const all=options.checklist||[];
@@ -94,7 +100,7 @@ async function harness(options={}) {
   };
   for(const name of ['theme.js','i18n.js','overlays.js','charts.js','timeline.js','configure.js','extras.js','insights.js','dashboard.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
-    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards',reports:'#page-reports .panel'}[options.page])||'#settings-form'));
+    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards',reports:'#page-reports .panel',events:'#event-form'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
 }
 
@@ -530,6 +536,22 @@ test('api tokens are created with role, shown once and deleted after confirmatio
   w.confirm=()=>true;w.document.querySelector('[data-delete-token="1"]').click();
   await until(()=>/Noch keine API-Tokens/.test(w.document.querySelector('#token-slot').textContent));
   assert.equal(w.document.querySelector('#token-plain'),null);
+  assert.deepEqual(h.errors,[]);
+});
+test('device measurement starts, stops with result and saves a name',async t=>{
+  const h=await harness({page:'events',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#measure-start'));
+  w.document.querySelector('#measure-start').click();
+  await until(()=>!!w.document.querySelector('#measure-stop'));
+  assert.match(w.document.querySelector('.measure-running').textContent,/500,250 kWh/);
+  w.document.querySelector('#measure-stop').click();
+  await until(()=>!!w.document.querySelector('#measure-name'));
+  const text=w.document.querySelector('#measure-slot').textContent;
+  assert.match(text,/Mehrverbrauch1,000 kWh/);assert.match(text,/Dauer1:00:00/);assert.match(text,/Mittlere Mehrleistung1\.000 W/);
+  assert.match(text,/0,30 € \(30,00 ct\/kWh\)/);assert.match(text,/keine Geräteerkennung/);
+  input(w,'measure-name','name','Waschmaschine');submit(w,'measure-name');
+  await until(()=>/Waschmaschine/.test(w.document.querySelector('#measure-slot tbody')?.textContent||''));
+  assert.deepEqual(h.calls.find(c=>c.method==='PUT'&&c.path==='/api/device-measurements/7').body,{name:'Waschmaschine'});
   assert.deepEqual(h.errors,[]);
 });
 
