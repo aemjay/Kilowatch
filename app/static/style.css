@@ -70,3 +70,7 @@
 .checklist .button-row{flex-shrink:0;align-items:center}
 .checklist .secondary{padding:7px 12px}
 @media(max-width:680px){.checklist li{flex-direction:column;align-items:flex-start}}
+/* Neu erstelltes API-Token. */
+.token-value{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:10px}
+.token-value code{font-family:Consolas,monospace;font-size:12px;word-break:break-all;background:var(--k-bg-fff);border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--ink)}
+#token-form{margin-top:20px}

@@ -27,7 +27,7 @@ Der MQTT-Broker ist kein Messdaten-Eingang: Die Messwerte kommen immer per HTTP 
 | Nachrichtenverlauf | 90 Tage (die Oberfläche zeigt die letzten 100) |
 | Datenbanksicherungen | die letzten sieben, täglich (UTC) |
 
-Weitere Tabellen: Einstellungen, Tarife, Preisintervalle, Börsenpreise, Ereignisse und die Zustellwarteschlange. Die Schemaversion steht in `PRAGMA user_version`; ältere Schemata werden beim Start nach einer automatischen Sicherung (`backups/pre-migration-*`) angehoben, neuere lehnt die App ab ([Updates](UPDATES.md)). Es gibt genau einen App-Prozess; lass nie mehrere Container in dieselbe Datenbank schreiben. Passwort-Hash und verschlüsselte Geheimnisse liegen außerhalb der Datenbank ([Betrieb](BETRIEB.md#speicherorte)).
+Weitere Tabellen: Einstellungen, Tarife, Preisintervalle, Börsenpreise, Ereignisse, die Zustellwarteschlange und API-Tokens (nur Hashes). Die Schemaversion steht in `PRAGMA user_version`; ältere Schemata werden beim Start nach einer automatischen Sicherung (`backups/pre-migration-*`) angehoben, neuere lehnt die App ab ([Updates](UPDATES.md)). Es gibt genau einen App-Prozess; lass nie mehrere Container in dieselbe Datenbank schreiben. Passwort-Hash und verschlüsselte Geheimnisse liegen außerhalb der Datenbank ([Betrieb](BETRIEB.md#speicherorte)).
 
 ## Messwerte
 

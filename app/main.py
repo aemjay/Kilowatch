@@ -23,7 +23,7 @@ from .bridge import Bridge, validate_host
 from .collector import Collector
 from .config import Config
 from .storage import Store
-from .security import Auth, Vault, private_write
+from .security import Auth, Tokens, Vault, private_write
 from .notifications import NotificationSettings, Notifications
 from .discovery import Discovery, suggestions
 from .market import Market
@@ -285,6 +285,26 @@ class Budget(StrictModel):
         return value
 
 
+class TokenCreate(StrictModel):
+    name: str = Field(min_length=1, max_length=60)
+    role: str
+
+    @field_validator("name")
+    @classmethod
+    def plain_name(cls, value):
+        value = value.strip()
+        if not value or any(ord(c) < 32 for c in value):
+            raise ValueError("Name ohne Steuerzeichen angeben.")
+        return value
+
+    @field_validator("role")
+    @classmethod
+    def known_role(cls, value):
+        if value not in Tokens.ROLES:
+            raise ValueError("Rolle muss read oder full sein.")
+        return value
+
+
 class ChecklistMute(StrictModel):
     muted: list[str] = Field(max_length=len(setup_checklist.KEYS))
 
@@ -344,6 +364,7 @@ def create_app(config=None):
     store = Store(folder)
     vault = Vault(config.secrets_folder)
     auth = Auth(config.secrets_folder)
+    tokens = Tokens(store)
 
     def get_password():
         return vault.get("bridge_password")
@@ -384,18 +405,38 @@ def create_app(config=None):
         Parallele Anfragen zählen sofort mit. Bei Erfolg gibt forget_attempts() die Adresse frei.
         """
         now = time.time()
-        key = (kind, request.client.host if request.client else "unknown")
+        key = attempt_key(kind, request)
         with attempt_lock:
-            # Abgelaufene Einträge entfernen, damit das Dict nicht wächst.
-            for other in list(attempts):
-                attempts[other] = [t for t in attempts[other] if now - t < ATTEMPT_WINDOW]
-                if not attempts[other]:
-                    attempts.pop(other)
-            total = sum(len(times) for (other, _), times in attempts.items() if other == kind)
-            if len(attempts.get(key, [])) >= ATTEMPTS_PER_ADDRESS or total >= ATTEMPTS_TOTAL:
+            if attempts_exhausted(key, now):
                 raise HTTPException(429, message)
             attempts.setdefault(key, []).append(now)
         return key
+
+    def attempt_key(kind, request):
+        return kind, request.client.host if request.client else "unknown"
+
+    def attempts_exhausted(key, now):
+        """Unter attempt_lock aufrufen: zu viele Fehlversuche je Adresse oder insgesamt für diese Art?"""
+        # Abgelaufene Einträge entfernen, damit das Dict nicht wächst.
+        for other in list(attempts):
+            attempts[other] = [t for t in attempts[other] if now - t < ATTEMPT_WINDOW]
+            if not attempts[other]:
+                attempts.pop(other)
+        total = sum(len(times) for (other, _), times in attempts.items() if other == key[0])
+        return len(attempts.get(key, [])) >= ATTEMPTS_PER_ADDRESS or total >= ATTEMPTS_TOTAL
+
+    def check_token(request, value):
+        """API-Token prüfen. Nur Fehlversuche zählen; während einer Sperre wird gar nicht geprüft."""
+        key, now = attempt_key("token", request), time.time()
+        with attempt_lock:
+            if attempts_exhausted(key, now):
+                raise HTTPException(429, "Zu viele ungültige API-Tokens. In 15 Minuten erneut versuchen.")
+        entry = tokens.verify(value, now)
+        if entry is None:
+            with attempt_lock:
+                attempts.setdefault(key, []).append(now)
+            raise HTTPException(401, "API-Token ungültig.")
+        return entry
 
     def forget_attempts(key):
         with attempt_lock:
@@ -449,14 +490,28 @@ def create_app(config=None):
     @app.middleware("http")
     async def guard(request: Request, call_next):
         path = request.url.path
-        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
-            origin = request.headers.get("origin")
-            if request.headers.get("x-kilowatch-request") != "1" or (origin and urlparse(origin).netloc != request.headers.get("host")):
-                return failure(request, 403, "Ungültiger Anfrageursprung.")
-        if path.startswith("/api/") and path not in ("/api/login", "/api/setup/status", "/api/setup"):
-            token = request.cookies.get("kilowatch_session")
-            if sessions.get(token, 0) <= time.time():
-                return failure(request, 401, "Bitte anmelden.")
+        protected = path.startswith("/api/") and path not in ("/api/login", "/api/setup/status", "/api/setup")
+        bearer = request.headers.get("authorization", "")
+        if protected and bearer[:7].lower() == "bearer ":
+            # API-Token statt Cookie: Der Browser sendet diesen Kopf nie von selbst, daher keine CSRF-Prüfung.
+            # Ein zusätzlich mitgesendetes Cookie wird ignoriert.
+            try:
+                entry = await asyncio.to_thread(check_token, request, bearer[7:].strip())
+            except HTTPException as exc:
+                return failure(request, exc.status_code, exc.detail)
+            if path in ("/api/tokens", "/api/account/password", "/api/logout") or path.startswith("/api/tokens/"):
+                return failure(request, 403, "Nur mit angemeldeter Sitzung möglich.")
+            if entry["role"] == "read" and request.method not in ("GET", "HEAD"):
+                return failure(request, 403, "Dieses API-Token darf nur lesen.")
+        else:
+            if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+                origin = request.headers.get("origin")
+                if request.headers.get("x-kilowatch-request") != "1" or (origin and urlparse(origin).netloc != request.headers.get("host")):
+                    return failure(request, 403, "Ungültiger Anfrageursprung.")
+            if protected:
+                token = request.cookies.get("kilowatch_session")
+                if sessions.get(token, 0) <= time.time():
+                    return failure(request, 401, "Bitte anmelden.")
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -533,6 +588,20 @@ def create_app(config=None):
         response = JSONResponse({"ok": True, "login_required": True})
         response.delete_cookie("kilowatch_session")
         return response
+
+    @app.get("/api/tokens")
+    def list_tokens():
+        return {"tokens": tokens.list(), "limit": Tokens.LIMIT}
+
+    @app.post("/api/tokens")
+    def create_token(data: TokenCreate):
+        return tokens.create(data.name, data.role, time.time())
+
+    @app.delete("/api/tokens/{token_id}")
+    def delete_token(token_id: int):
+        if not tokens.delete(token_id):
+            raise HTTPException(404, "API-Token nicht gefunden.")
+        return {"ok": True}
 
     @app.get("/api/settings")
     def settings():

@@ -105,3 +105,54 @@ class Auth:
                 return False
             salt = base64.b64decode(self.record["salt"])
             return secrets.compare_digest(self.derive(password, salt), base64.b64decode(self.record["digest"]))
+
+
+class Tokens:
+    """API-Tokens für Skripte: 32 Byte Zufall, gespeichert wird nur der SHA-256-Hash.
+
+    Ein Hash genügt, weil das Token selbst nicht erratbar ist (anders als ein Passwort). Tokens überleben
+    Neustarts; `read` erlaubt nur lesende Anfragen, `full` alles außer Token- und Passwortverwaltung.
+    """
+    ROLES = ("read", "full")
+    LIMIT = 10
+    PREFIX = "kw_"
+    # Zuletzt benutzt höchstens einmal je Minute schreiben.
+    TOUCH_INTERVAL = 60
+
+    def __init__(self, store):
+        self.store = store
+
+    @staticmethod
+    def digest(token):
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    def list(self):
+        return self.store.rows("SELECT id,name,role,created,last_used FROM api_tokens ORDER BY created")
+
+    def create(self, name, role, now):
+        if role not in self.ROLES:
+            raise ValueError("Rolle muss read oder full sein.")
+        token = self.PREFIX + secrets.token_urlsafe(32)
+        with self.store.transaction():
+            if self.store.rows("SELECT COUNT(*) AS n FROM api_tokens")[0]["n"] >= self.LIMIT:
+                raise ValueError("Höchstens 10 API-Tokens. Zuerst ein Token löschen.")
+            cursor = self.store.conn.execute("INSERT INTO api_tokens(name,hash,role,created) VALUES(?,?,?,?)",
+                                             (name, self.digest(token), role, now))
+        return dict(id=cursor.lastrowid, name=name, role=role, created=now, last_used=None, token=token)
+
+    def delete(self, token_id):
+        with self.store.transaction():
+            return self.store.conn.execute("DELETE FROM api_tokens WHERE id=?", (token_id,)).rowcount > 0
+
+    def verify(self, token, now):
+        """Gespeichertes Token zum Klartext oder None; vergleicht alle Hashes in konstanter Zeit."""
+        if not token.startswith(self.PREFIX) or len(token) > 200:
+            return None
+        wanted, found = self.digest(token), None
+        for row in self.store.rows("SELECT id,hash,role,last_used FROM api_tokens"):
+            if secrets.compare_digest(row["hash"], wanted):
+                found = row
+        if found and (found["last_used"] is None or now - found["last_used"] >= self.TOUCH_INTERVAL):
+            with self.store.transaction():
+                self.store.conn.execute("UPDATE api_tokens SET last_used=? WHERE id=?", (now, found["id"]))
+        return found

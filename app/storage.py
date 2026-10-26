@@ -30,11 +30,18 @@ def _grid_intensity(conn):
                  "renewable_share REAL,PRIMARY KEY(country,start))")
 
 
+def _api_tokens(conn):
+    # Nur der SHA-256-Hash des Tokens; der Klartext wird einmalig bei der Erstellung angezeigt.
+    conn.execute("CREATE TABLE IF NOT EXISTS api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,"
+                 "role TEXT NOT NULL,created REAL NOT NULL,last_used REAL)")
+
+
 # Geordnete Schemaänderungen. Nur hinzufügen (Tabellen, Spalten, Indizes); Entfernen
 # frühestens in der nächsten Hauptversion. Jede Stufe läuft in einer eigenen Transaktion.
 MIGRATIONS = [
     (2, _spot_prices),
     (3, _grid_intensity),
+    (4, _api_tokens),
 ]
 SCHEMA_VERSION = max([1] + [target for target, _ in MIGRATIONS])
 

@@ -30,6 +30,7 @@ async function harness(options={}) {
   let tariffs=structuredClone(options.tariffs||[]),market={rows:[],fetched_at:null,error:''};
   let budget={settings:{monthly_eur:null,monthly_kwh:null,abschlag_eur:null},month:{observed_eur:3,observed_kwh:10,forecast_eur:null,forecast_kwh:null,forecast_reason:'Zu wenig Daten'},annual:{available:false,reason:'Mindestens 60 vollständig erfasste Tage erforderlich.'}};
   const checklistState={muted:structuredClone(options.muted||[])};
+  let tokenList=structuredClone(options.tokens||[]);
   const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error));
   const dom=new JSDOM(readFileSync(join(root,'index.html'),'utf8'),{
     url:'http://kilowatch.test/#'+(options.page||'settings'),runScripts:'outside-only',virtualConsole:vc});
@@ -55,6 +56,9 @@ async function harness(options={}) {
       saved={...saved,...plain,password_configured:!!bridge_password||saved.password_configured};
       saved.setup_required=!(saved.bridge_host&&saved.bridge_user&&saved.password_configured);
     }else if(path==='/api/settings')data=saved;
+    else if(path==='/api/tokens'&&config.method==='POST'){const item={id:tokenList.length+1,name:body.name,role:body.role,created:1,last_used:null};tokenList.push(item);data={...item,token:'kw_synthetic-token-value'};}
+    else if(path==='/api/tokens')data={tokens:tokenList,limit:10};
+    else if(path.startsWith('/api/tokens/')&&config.method==='DELETE'){tokenList=tokenList.filter(item=>String(item.id)!==path.split('/').pop());}
     else if(path==='/api/checklist'){
       if(config.method==='PUT')checklistState.muted=body.muted;
       const all=options.checklist||[];
@@ -508,6 +512,24 @@ test('setup checklist links to pages, mutes items and settings restore them',asy
   w.document.querySelector('#checklist-restore').click();
   await until(()=>h.calls.some(c=>c.path==='/api/checklist'&&c.method==='PUT'&&c.body.muted.length===0));
   await until(()=>/Keine Hinweise ausgeblendet/.test(w.document.querySelector('#checklist-settings')?.textContent||''));
+  assert.deepEqual(h.errors,[]);
+});
+test('api tokens are created with role, shown once and deleted after confirmation',async t=>{
+  const h=await harness({settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#token-form'));
+  input(w,'token-form','name','Home Assistant');input(w,'token-form','role','full');
+  submit(w,'token-form');
+  await until(()=>!!w.document.querySelector('#token-plain'));
+  assert.deepEqual(h.calls.find(c=>c.path==='/api/tokens'&&c.method==='POST').body,{name:'Home Assistant',role:'full'});
+  assert.equal(w.document.querySelector('#token-plain').textContent,'kw_synthetic-token-value');
+  assert.match(w.document.querySelector('#token-slot tbody').textContent,/Home AssistantLesen und ändern/);
+  // Nach dem Neuzeichnen ist der Klartext weg.
+  w.confirm=()=>false;w.document.querySelector('[data-delete-token="1"]').click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.some(c=>c.method==='DELETE'),false);
+  w.confirm=()=>true;w.document.querySelector('[data-delete-token="1"]').click();
+  await until(()=>/Noch keine API-Tokens/.test(w.document.querySelector('#token-slot').textContent));
+  assert.equal(w.document.querySelector('#token-plain'),null);
   assert.deepEqual(h.errors,[]);
 });
 

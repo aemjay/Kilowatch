@@ -1,6 +1,6 @@
 # Lokale HTTP-API
 
-Die Oberfläche nutzt dieselbe API wie du: `http://<Host>:8088/api/…`. Zeiten sind UTC-Unixsekunden; Exporte enthalten zusätzlich ISO-Zeiten mit Offset. Es gibt keine automatische Anbindung an andere Dienste.
+Die Oberfläche nutzt dieselbe API wie du: `http://<Host>:8088/api/…`, angemeldet per Sitzungs-Cookie oder [API-Token](#api-tokens). Zeiten sind UTC-Unixsekunden; Exporte enthalten zusätzlich ISO-Zeiten mit Offset. Es gibt keine automatische Anbindung an andere Dienste.
 
 ## Anmeldung
 
@@ -15,6 +15,22 @@ curl -b cookies.txt http://<Host>:8088/api/live
 - `POST`, `PUT`, `PATCH` und `DELETE` brauchen den Header `X-Kilowatch-Request: 1`, ein vorhandener `Origin` muss zum Host passen. Cross-Origin-Zugriff gibt es nicht.
 - Nach zehn fehlgeschlagenen Anmeldungen einer Adresse gilt eine Sperre von bis zu 15 Minuten.
 - Fehlertexte (`detail`) kommen in der Sprache aus dem Header `X-Kilowatch-Language`, sonst der gespeicherten, sonst Deutsch.
+
+## API-Tokens
+
+Für Skripte gibt es Tokens statt Cookie (anlegen unter **Einstellungen → API-Tokens**, höchstens zehn). Sie gelten für alle `/api/`-Endpunkte außer Einrichtung und Anmeldung und überleben Neustarts:
+
+```sh
+curl -H 'Authorization: Bearer kw_…' http://<Host>:8088/api/live
+curl -X PUT -H 'Authorization: Bearer kw_…' -H 'Content-Type: application/json' -d '{"monthly_eur": 90}' http://<Host>:8088/api/budget
+```
+
+- Rolle `read` erlaubt nur `GET`, `full` alles außer Token-Verwaltung (`/api/tokens`), Passwortwechsel und Abmelden.
+- Mit Token entfallen `X-Kilowatch-Request` und die `Origin`-Prüfung, weil kein Cookie beteiligt ist; ein mitgesendetes Cookie wird dann ignoriert. Für Cookie-Aufrufe gilt alles wie oben.
+- Ungültige Tokens: `401`; nach zehn Fehlversuchen einer Adresse `429` für bis zu 15 Minuten. Fehlende Rechte: `403`.
+- Verwaltung nur mit Sitzung: `GET /api/tokens`, `POST /api/tokens` mit `{"name": "…", "role": "read"}` (Antwort enthält einmalig `token`), `DELETE /api/tokens/ID`.
+
+Sicherheitshinweise: [Betrieb](BETRIEB.md#api-tokens).
 
 ## Zeitraum
 
