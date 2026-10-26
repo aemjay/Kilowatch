@@ -164,6 +164,7 @@ function updateLiveParts() {
   if(warning) alert.textContent=live.collector?.message?t(live.collector.message,live.collector.params||{}):t('Noch keine gültigen Messdaten. Bridge unter Einstellungen verbinden.');
   const powerNode=$('#live-power'); if(powerNode)powerNode.textContent=number(valid?live.reading.power_w:null,0);
   const ageNode=$('#live-age'); if(ageNode)ageNode.textContent=live.reading?t('Letzte Messung vor {seconds} s',{seconds:number(live.age_seconds,0)}):t('Noch keine Messung');
+  updateLiveCost();
 }
 
 // Vergleichswert eines typischen Haushalts (Stromspiegel) als Text, z. B. „2 Personen in einer Wohnung“.
@@ -201,15 +202,16 @@ function renderDashboard(data) {
   if(s.import_kwh!=null&&p?.import_kwh>0&&s.coverage>.98&&p.coverage>.98)comparison=t('{percent} % zur Vorperiode',{percent:number((s.import_kwh/p.import_kwh-1)*100,1)});
   else if(p)comparison=t('Vergleich erst bei guter Datenabdeckung');
   const valid=live.reading&&!live.stale;
-  const cards=`<div class="cards">${metric(t('Aktuell zu Hause'),`<span id="live-power">${number(valid?live.reading.power_w:null,0)}</span>`,'W',t('Lokale Netzleistung'),'↯',true)}${metric(t('Netzbezug'),number(s.import_kwh,2),'kWh',comparison,'↗')}${metric(t('Erfasste Kosten'),number(s.known_cost_eur,2),'€',s.cost_complete?t('Inklusive anteiligem Grundpreis'):s.tariff_missing?t('Tarif fehlt oder Preisimport unvollständig'):t('Teilbetrag · Datenabdeckung beachten'),'€')}${metric(t('Leistungsspitze'),number(s.peak_w==null?null:s.peak_w/1000,2),'kW',t('Höchste erfasste Momentanleistung'),'⌁')}</div>`;
+  const cards=`<div class="cards cards-5">${metric(t('Aktuell zu Hause'),`<span id="live-power">${number(valid?live.reading.power_w:null,0)}</span>`,'W',t('Lokale Netzleistung'),'↯',true)}${liveCostCard()}${metric(t('Netzbezug'),number(s.import_kwh,2),'kWh',comparison,'↗')}${metric(t('Erfasste Kosten'),number(s.known_cost_eur,2),'€',s.cost_complete?t('Inklusive anteiligem Grundpreis'):s.tariff_missing?t('Tarif fehlt oder Preisimport unvollständig'):t('Teilbetrag · Datenabdeckung beachten'),'€')}${metric(t('Leistungsspitze'),number(s.peak_w==null?null:s.peak_w/1000,2),'kW',t('Höchste erfasste Momentanleistung'),'⌁')}</div>`;
   const reading=live.reading;
   const flow=`<div class="flow"><div class="flow-end"><div class="flow-icon">♧</div><small>${t('STROMNETZ')}</small></div><div class="flow-line"></div><div class="flow-end"><div class="flow-icon">⌂</div><small>${t('ZU HAUSE')}</small></div></div><div class="stats-list">${stat(t('Bezug im Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Einspeisung'),unit(s.export_kwh,'kWh',2))}${stat(t('Bezugszähler'),unit(reading?.import_kwh,'kWh',3))}${stat(t('Einspeisezähler'),unit(reading?.export_kwh,'kWh',3))}</div><div class="divider"></div>${coverage(s)}<p id="live-age" class="copy-footnote">${reading?t('Letzte Messung vor {seconds} s',{seconds:number(live.age_seconds,0)}):t('Noch keine Messung')}</p>`;
   const quality=panel(t('Datenqualität'),'',`<div class="insight"><span class="insight-icon">◉</span><div><h3>${s.coverage>.98?t('Dein Zeitraum ist gut erfasst.'):t('Deine Historie entsteht ab jetzt.')}</h3><p>${esc(totalNote(s))}. ${s.crossing_gaps?t('Eine Lücke reicht über die Zeitraumgrenze. Ihre Energiemenge bleibt außerhalb dieser Summe.'):''}</p></div></div>`);
   const household=data.targets?.household;
   const typical=household?`<div class="divider"></div><div class="stats-list">${stat(t('Typischer Haushalt im Zeitraum'),unit(householdShare(household,s.end-s.start),'kWh',2))}</div><p class="copy-footnote">${esc(t('{household} laut {source}; Gesamtverbrauch, mit eigener PV liegt der Netzbezug darunter.',{household:householdText(household),source:household.source}))}</p>`:'';
   const compare=panel(t('Vorperiode'),'',(p?`<div class="stats-list">${stat(t('Ausgewählter Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Vorperiode'),unit(p.import_kwh,'kWh',2))}${stat(t('Abdeckung der Vorperiode'),unit(p.coverage*100,'%',1))}${stat(t('Vergleich bis'),localTime(p.end,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}</div>`:empty(t('Vergleich noch nicht verfügbar.')))+typical);
-  $('#page-dashboard').innerHTML=cards+`<div class="grid-main"><div>${powerPanel(data)}${quality}</div><div>${panel(t('Bezug und Einspeisung'),'',flow)}${co2Panel(data.co2)}${compare}</div></div>`;
+  $('#page-dashboard').innerHTML=cards+`<div id="price-outlook-slot"></div><div class="grid-main"><div>${powerPanel(data)}${quality}</div><div>${panel(t('Bezug und Einspeisung'),'',flow)}${co2Panel(data.co2)}${compare}</div></div>`;
   mountOverlayToggles($('#page-dashboard'),()=>renderDashboard(overview));
+  mountPriceOutlook().catch(error=>toast(error.message,true));
 }
 
 function renderHistory(data) {

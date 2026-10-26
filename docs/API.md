@@ -40,13 +40,14 @@ curl -b cookies.txt http://<Host>:8088/api/live
 | DELETE `/api/credentials/bridge` | Bridge-Passwort entfernen, Erfassung pausieren |
 | POST `/api/bridge/test` | Verbindung lesend prüfen, speichert nichts |
 | GET `/api/discovery/network`, POST `/api/discovery/scan` | Netzvorschlag, lokale Suche (`{"network": "192.168.1.0/24"}`) |
-| GET `/api/live` | letzter Messpunkt, Alter, Status |
+| GET `/api/live` | letzter Messpunkt, Alter, Status; `cost` mit Arbeitspreis und Kostenrate der laufenden Viertelstunde |
 | GET `/api/overview` | Summen, Vorperiode, Serien, Lücken, `co2` (bei gesetztem `grid_country`) |
 | GET `/api/analysis`, `/api/insights` | Muster, Lastdauerlinie, Prognose; Grundlast-Entwicklung, Einspeiseprofil |
 | GET `/api/timeline` | gesamter erfasster Zeitraum in groben Abschnitten (für den Zeitbalken) |
 | GET/PUT `/api/tariffs`, DELETE `/api/tariffs/YYYY-MM-DD` | Tarife |
 | POST `/api/prices/import`, DELETE `/api/prices` | Preis-CSV importieren / alle importierten Preise löschen |
 | PUT `/api/prices/source`, POST `/api/prices/refresh` | Preisquelle (`source`: `""`, `tibber`, `spot`; `zone`, `markup_ct`, `vat_percent`, `tibber_home`, `tibber_token`, `clear_tibber_token`), sofort abrufen; Abruf höchstens alle 30 s |
+| GET `/api/prices/outlook?window_hours=2` | Preise je Viertelstunde für heute und morgen und günstigstes Fenster (1–6 h) ab jetzt; nur bei dynamischem Tarif |
 | POST `/api/market/refresh`, `/api/market/history` | Börsenpreise ansehen / nachladen (höchstens 62 Tage) |
 | POST `/api/simulate` | Tarifsimulation: `{"start", "end", "tariff": {"mode": "fixed\|dual\|spot", …}}` |
 | GET/PUT `/api/budget` | Monatsbudget, Monatsziel, Abschlag |
@@ -58,6 +59,10 @@ curl -b cookies.txt http://<Host>:8088/api/live
 **Einstellungen:** `PUT /api/settings` darf einzelne Felder ändern (`bridge_host`, `bridge_user`, `bridge_password`, `node_id`, `enabled`, Aufbewahrung …). `bridge_host` ist eine lokale IPv4-Adresse oder ein Name ohne Schema, Port und Pfad. Ein leeres `bridge_password` behält das gespeicherte; `GET` meldet stattdessen `password_configured`. `language` (`de`, `en`, `nb`, `sv`, `nl`), `currency` (`EUR`, `NOK`, `SEK`) und `grid_country` (`de`, `nl`, `no`, `se`; leer = aus) gehören ebenfalls dazu.
 
 **Benachrichtigungen:** `PUT /api/notifications` **ersetzt die gesamte Konfiguration**: erst `settings` lesen, dann vollständig zurücksenden. Zusätzlich gelten `smtp_password` und `clear_smtp_password`. Felder und Grenzen stehen im Modell `NotificationSettings` in `app/notifications.py`; Einrichtung: [Benachrichtigungen](BENACHRICHTIGUNGEN.md).
+
+**Kostenrate:** `cost` in `/api/live` enthält `tariff` (bool), `mode`, `rate_eur_kwh` (Arbeitspreis jetzt), `feedin_eur_kwh` (`null` bei 0), `direction` (`import`/`export`) und `eur_per_hour` (Kosten bzw. Erlös, `null` ohne frische Messung oder Preis).
+
+**Preisausblick:** `/api/prices/outlook` liefert `dynamic`, `intervals` (`start`, `end`, `eur_kwh`), `tomorrow_available`, `low_eur_kwh`, `high_eur_kwh` und `cheapest` (`start`, `end`, `average_eur_kwh` oder `null`). Ohne dynamischen Tarif ist `dynamic` falsch und `intervals` leer.
 
 ## Tarif
 

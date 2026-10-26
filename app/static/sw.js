@@ -6,7 +6,7 @@
 const VERSION = '__VERSION__';
 const CACHE = 'kilowatch-' + VERSION;
 const SHELL = ['/', '/style.css', '/theme.js', '/i18n.js', '/overlays.js', '/charts.js', '/timeline.js', '/configure.js', '/extras.js', '/insights.js',
-  '/app.js', '/pwa.js', '/icon.svg', '/icon-192.png', '/manifest.webmanifest'];
+  '/dashboard.js', '/app.js', '/pwa.js', '/icon.svg', '/icon-192.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE)

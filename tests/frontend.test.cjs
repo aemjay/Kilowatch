@@ -54,7 +54,8 @@ async function harness(options={}) {
       saved={...saved,...plain,password_configured:!!bridge_password||saved.password_configured};
       saved.setup_required=!(saved.bridge_host&&saved.bridge_user&&saved.password_configured);
     }else if(path==='/api/settings')data=saved;
-    else if(path==='/api/live')data={collector:{state:'setup'},reading:null,stale:true};
+    else if(path==='/api/live')data=options.live||{collector:{state:'setup'},reading:null,stale:true};
+    else if(path.startsWith('/api/prices/outlook'))data=typeof options.outlook==='function'?options.outlook(path):options.outlook||{dynamic:false,intervals:[]};
     else if(path==='/api/notifications'&&config.method==='PUT'){
       const {smtp_password,...plain}=body;notes.settings=plain;
       if(smtp_password)notes.smtp_password_configured=true;
@@ -76,7 +77,7 @@ async function harness(options={}) {
     else if(path==='/api/bridge/test')data={protocol:'SML',endpoint:'/node_data.json',resolved_addresses:['192.168.1.10'],has_import:true};
     return {ok:status===200,status,json:async()=>structuredClone(data),blob:async()=>new w.Blob(['synthetic-image'],{type:'image/png'})};
   };
-  for(const name of ['theme.js','i18n.js','overlays.js','charts.js','timeline.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
+  for(const name of ['theme.js','i18n.js','overlays.js','charts.js','timeline.js','configure.js','extras.js','insights.js','dashboard.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
     !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
@@ -401,6 +402,45 @@ test('background refresh neither dims the page nor redraws unchanged data',async
   assert.deepEqual(h.errors,[]);
 });
 
+test('dashboard shows the live cost rate and a hint without tariff',async t=>{
+  const reading={ts:1,power_w:2000,import_kwh:10,export_kwh:0};
+  const h=await harness({page:'dashboard',settings:{setup_required:false},live:{collector:{state:'online'},reading,stale:false,age_seconds:1,
+    cost:{tariff:true,mode:'fixed',rate_eur_kwh:.3,feedin_eur_kwh:null,direction:'import',eur_per_hour:.6}}});
+  t.after(()=>h.dom.window.close());const {w}=h;
+  assert.equal(w.document.querySelector('#live-cost').textContent,'0,60');
+  assert.match(w.document.querySelector('#live-cost-note').textContent,/Arbeitspreis 30,00 ct\/kWh/);
+  // Einspeisung ohne Vergütung: kein Betrag, Hinweis.
+  w.eval("live={...live,cost:{tariff:true,mode:'fixed',rate_eur_kwh:.3,feedin_eur_kwh:null,direction:'export',eur_per_hour:null}};updateLiveCost()");
+  assert.equal(w.document.querySelector('#live-cost-label').textContent,'Erlös gerade');
+  assert.equal(w.document.querySelector('#live-cost').textContent,'—');
+  w.eval("live={...live,cost:{tariff:false}};updateLiveCost()");
+  assert.equal(w.document.querySelector('#live-cost-note').textContent,'Tarif unter Kosten & Tarife anlegen');
+  assert.equal(w.document.querySelector('#price-outlook-slot').textContent,'');
+  assert.deepEqual(h.errors,[]);
+});
+
+test('price traffic light colours quarters, marks now and switches the window length',async t=>{
+  const start=1792969200,now=start+10*3600;
+  const outlook=path=>{
+    const hours=Number(new URLSearchParams(path.split('?')[1]).get('window_hours'));
+    const intervals=Array.from({length:96},(_,i)=>({start:start+i*900,end:start+i*900+900,eur_kwh:i<40?.3:i<48?.1:.2}));
+    return {dynamic:true,timezone:'Europe/Berlin',now,current_start:now,window_hours:hours,start,end:start+2*86400,tomorrow_start:start+86400,
+      intervals,tomorrow_available:false,low_eur_kwh:.1,high_eur_kwh:.3,cheapest:{start:start+40*900,end:start+40*900+hours*3600,average_eur_kwh:hours===2?.1:.15}};
+  };
+  const h=await harness({page:'dashboard',settings:{setup_required:false},outlook});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#price-window-text'));
+  const slot=w.document.querySelector('#price-outlook-slot');
+  assert.match(w.document.querySelector('#price-window-text').textContent,/Heute 10:00–12:00, Ø 10,0 ct\/kWh/);
+  assert.equal(slot.querySelectorAll('rect.price-low').length,8);
+  assert.equal(slot.querySelectorAll('rect.price-high').length,40);
+  assert.equal(slot.querySelectorAll('rect.price-current').length,1);
+  assert.match(slot.textContent,/Preise für morgen erscheinen am frühen Nachmittag/);
+  slot.querySelector('[data-price-window="3"]').click();
+  await until(()=>/Ø 15,0/.test(w.document.querySelector('#price-window-text')?.textContent||''));
+  assert.ok(h.calls.some(c=>c.path==='/api/prices/outlook?window_hours=3'));
+  assert.equal(w.document.querySelector('[data-price-window="3"]').getAttribute('aria-pressed'),'true');
+  assert.deepEqual(h.errors,[]);
+});
 
 // --- Diagramme: Tooltip, Fadenkreuz, Zoom und Zeitbalken ---
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));

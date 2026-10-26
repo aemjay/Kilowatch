@@ -5,6 +5,7 @@ fehlende Daten nie als null behandeln und keine Geräte- oder PV-Eigenverbrauchs
 """
 import bisect
 from datetime import datetime, timedelta
+import math
 import statistics
 from zoneinfo import ZoneInfo
 
@@ -241,3 +242,75 @@ def household_reference(settings):
     kind, hot_water = settings.get("household_type", "apartment"), bool(settings.get("household_hot_water"))
     return {"annual_kwh": STROMSPIEGEL[(kind, hot_water)][persons - 1], "persons": persons, "type": kind,
             "hot_water": hot_water, "source": REFERENCE_SOURCE}
+
+
+def live_cost(analytics, now, power_w):
+    """Kostenrate aus aktueller Netzleistung und dem Arbeitspreis der laufenden Viertelstunde.
+
+    Bezug kostet Arbeitspreis × Leistung, Einspeisung bringt Einspeisevergütung × Leistung. Eine Vergütung
+    von 0 gilt als nicht hinterlegt. Ohne Leistung (keine frische Messung) nur die Preise.
+    """
+    tariff = analytics.tariff(now)
+    result = {"tariff": tariff is not None, "mode": tariff["mode"] if tariff else None, "rate_eur_kwh": None,
+              "feedin_eur_kwh": None, "direction": None, "eur_per_hour": None}
+    if not tariff:
+        return result
+    if tariff["mode"] == "dynamic":
+        analytics.load_prices(now, now + 1)
+    rate = analytics.rate(now, tariff)
+    feedin = tariff["feedin_eur_kwh"] or None
+    result.update(rate_eur_kwh=rate, feedin_eur_kwh=feedin)
+    if power_w is None:
+        return result
+    if power_w >= 0:
+        result.update(direction="import", eur_per_hour=power_w / 1000 * rate if rate is not None else None)
+    else:
+        result.update(direction="export", eur_per_hour=-power_w / 1000 * feedin if feedin else None)
+    return result
+
+
+def cheapest_window(intervals, first, quarters):
+    """Günstigstes zusammenhängendes Fenster aus `quarters` Viertelstunden, Beginn frühestens bei `first`.
+
+    Mittel über die Zeit (jede Viertelstunde zählt gleich); bei Gleichstand gewinnt das frühere Fenster.
+    """
+    best = None
+    for index in range(len(intervals) - quarters + 1):
+        start = intervals[index]["start"]
+        if start < first or intervals[index + quarters - 1]["start"] != start + (quarters - 1) * 900:
+            continue
+        average = math.fsum(item["eur_kwh"] for item in intervals[index:index + quarters]) / quarters
+        if best is None or average < best["average_eur_kwh"] - 1e-12:
+            best = {"start": start, "end": start + quarters * 900, "average_eur_kwh": average}
+    return best
+
+
+def price_outlook(analytics, now, window_hours):
+    """Bruttopreise je Viertelstunde für heute und morgen (Ortszeit) und das günstigste Fenster ab jetzt.
+
+    Nur bei einem aktuell gültigen dynamischen Tarif; längere Preisintervalle werden auf Viertelstunden verteilt.
+    """
+    zone = analytics.zone
+    today = local_day(now, zone)
+    tomorrow = today + timedelta(days=1)
+    start, middle, end = midnight(today, zone), midnight(tomorrow, zone), midnight(today + timedelta(days=2), zone)
+    current = analytics.tariff(now)
+    result = {"dynamic": bool(current and current["mode"] == "dynamic"), "timezone": zone, "now": now,
+              "current_start": int(now // 900 * 900), "window_hours": window_hours, "start": start, "end": end,
+              "tomorrow_start": middle, "intervals": [], "tomorrow_available": False, "low_eur_kwh": None,
+              "high_eur_kwh": None, "cheapest": None}
+    if not result["dynamic"]:
+        return result
+    analytics.load_prices(start, end)
+    intervals = []
+    for ts in range(int(start), int(end), 900):
+        tariff = analytics.tariff(ts)
+        rate = analytics.rate(ts, tariff) if tariff else None
+        if rate is not None:
+            intervals.append({"start": ts, "end": ts + 900, "eur_kwh": rate})
+    if intervals:
+        rates = [item["eur_kwh"] for item in intervals]
+        result.update(intervals=intervals, low_eur_kwh=min(rates), high_eur_kwh=max(rates),
+                      tomorrow_available=intervals[-1]["start"] >= middle,
+                      cheapest=cheapest_window(intervals, result["current_start"], window_hours * 4))
+    return result

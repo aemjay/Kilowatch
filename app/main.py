@@ -566,10 +566,15 @@ def create_app(config=None):
     @app.get("/api/live")
     def live():
         latest = store.latest()
-        age = time.time() - latest["ts"] if latest else None
-        return {"reading": latest, "age_seconds": age, "stale": age is None or age > 30,
+        now = time.time()
+        age = now - latest["ts"] if latest else None
+        stale = age is None or age > 30
+        # Kostenrate nur aus einer frischen Messung; die Preise der laufenden Viertelstunde immer.
+        power = latest.get("power_w") if latest and not stale else None
+        return {"reading": latest, "age_seconds": age, "stale": stale,
                 "collector": collector.status, "diagnostics": collector.diagnostics,
-                "obis": store.state("last_obis", {}), "demo": config.demo}
+                "obis": store.state("last_obis", {}), "demo": config.demo,
+                "cost": insights.live_cost(Analytics(store), now, power)}
 
     @app.get("/api/discovery/network")
     async def discovery_network(request: Request):
@@ -675,6 +680,12 @@ def create_app(config=None):
         # Gleich abrufen, damit Fehler (Token, Währung, Zuhause) sofort sichtbar sind.
         await feed.refresh()
         return price_feed_state()
+
+    @app.get("/api/prices/outlook")
+    def price_outlook(window_hours: int = 2):
+        if not 1 <= window_hours <= 6:
+            raise ValueError("Fensterlänge: 1 bis 6 Stunden.")
+        return insights.price_outlook(Analytics(store), time.time(), window_hours)
 
     @app.post("/api/prices/refresh")
     async def refresh_prices():
