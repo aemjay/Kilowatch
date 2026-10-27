@@ -848,7 +848,8 @@ def create_app(config=None):
 
     @app.get("/api/meter-readings")
     def meter_readings(dates: str):
-        zone, now = store.settings()["timezone"], time.time()
+        settings = store.settings()
+        zone, now = settings["timezone"], time.time()
         days = []
         for text in dates.split(","):
             try:
@@ -857,14 +858,14 @@ def create_app(config=None):
                 raise ValueError("Datum im Format JJJJ-MM-TT erwarten.") from None
         if not 1 <= len(days) <= 31:
             raise ValueError("1 bis 31 Daten je Abfrage.")
-        max_gap = store.settings()["max_gap_seconds"]
+        max_gap = settings["max_gap_seconds"]
         result = []
         for day in days:
             at = midnight(day, zone)
             if at > now:
                 raise ValueError("Datum liegt in der Zukunft.")
             result.append(dict(insights.meter_reading(store, at, max_gap), date=day.isoformat()))
-        return {"timezone": zone, "readings": result, "raw_retention_days": store.settings()["raw_retention_days"]}
+        return {"timezone": zone, "readings": result, "raw_retention_days": settings["raw_retention_days"]}
 
     @app.get("/api/checklist")
     def checklist():

@@ -641,6 +641,7 @@
  "Schlüssel der lokalen Zugangsdaten fehlt. secrets.key aus der Sicherung wiederherstellen.": "Nøkkelen til de lokale påloggingsdataene mangler. Gjenopprett secrets.key fra sikkerhetskopien.",
  "Schweden": "Sverige",
  "Schwelle Lastanalyse (W)": "Grense for lastanalyse (W)",
+ "Seit dem Start kam noch kein neuer Zählerstand; ein paar Sekunden warten.": "Ingen ny målerstand siden starten ennå; vent noen sekunder.",
  "Seit mehr als 26 Stunden ist kein Preisabruf gelungen. Fehlermeldung unter Kosten & Tarife prüfen.": "Ingen prishenting har lyktes på mer enn 26 timer. Sjekk feilmeldingen under Kostnader og tariffer.",
  "Seit mindestens {seconds} Sekunden fehlen neue Messwerte. Kilowatch versucht die Verbindung weiterherzustellen.": "Det har ikke kommet nye måleverdier på minst {seconds} sekunder. Kilowatch prøver å gjenopprette tilkoblingen.",
  "Setup-Code": "Oppsettkode",

@@ -48,6 +48,9 @@ def test_billing_months():
     assert insights.billing_months(date(2026, 3, 15), date(2026, 10, 14)) == 6
     assert insights.billing_months(date(2026, 3, 15), date(2026, 10, 15)) == 7
     assert insights.billing_months(date(2025, 11, 1), date(2026, 1, 31)) == 2
+    # Beginn am 31.: im April wird am 30. abgebucht.
+    assert insights.billing_months(date(2026, 1, 31), date(2026, 4, 30)) == 3
+    assert insights.billing_months(date(2026, 1, 31), date(2026, 4, 29)) == 2
 
 
 def test_billing_year_requires_data_and_projects(store, monkeypatch):

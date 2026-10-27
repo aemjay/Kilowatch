@@ -69,7 +69,7 @@ Sicherheitshinweise: [Betrieb](BETRIEB.md#api-tokens).
 | GET/PUT `/api/budget` | Monatsbudget, Monatsziel, Abschlag, `billing_start` (`MM-TT`, Beginn des Abrechnungsjahrs; `GET` liefert dazu `billing`) |
 | GET `/api/meter-readings?dates=2026-10-01,2026-09-01` | Zählerstände 1.8.0/2.8.0 um 00:00 Uhr der Tage (1–31): `import_kwh`, `export_kwh`, `measured_at`, `source` (`sample`/`reconstructed`), `approximate`, `reason` |
 | GET/POST `/api/events`, DELETE `/api/events/ID`, GET `/api/events/ID/comparison` | Ereignisse und Vorperiodenvergleich |
-| GET `/api/device-measurements`, POST `/api/device-measurements/start`, `/stop`, PUT/DELETE `/api/device-measurements/ID` | Gerätemessung: laufende Messung, letzte 100 Ergebnisse (`extra_kwh`, `duration_s`, `mean_w`, `cost_eur`, `status` `done`/`incomplete`), Name setzen (`{"name": "…"}`), löschen |
+| GET `/api/device-measurements`, POST `/api/device-measurements/start`, `/stop`, PUT/DELETE `/api/device-measurements/ID` | Gerätemessung: laufende Messung, letzte 100 Ergebnisse (`extra_kwh`, `duration_s`, `mean_w`, `rate_eur_kwh` als Zeitmittel über die Messdauer, `cost_eur`, `status` `done`/`incomplete`), Name setzen (`{"name": "…"}`), löschen |
 | GET/PUT `/api/notifications`, POST `/api/notifications/test/email` | Mail-Regeln und Verlauf, Test |
 | GET/PUT `/api/updates`, POST `/api/updates/check` | Update-Hinweis |
 | GET/PUT `/api/checklist` | offene Einrichtungsschritte (`items` mit `key`, `title`, `text`, `page`) und stummgeschaltete Punkte; `PUT {"muted": ["backup"]}` ersetzt die Liste (`tariff`, `price_source`, `notifications`, `backup`, `update`) |

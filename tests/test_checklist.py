@@ -72,3 +72,32 @@ def test_never_successful_price_source_is_reported(store):
     assert checklist.open_items(store, Mail(), Feed({"fetched_at": None, "error": ""}), Updates()) == []
     demo = checklist.open_items(store, Mail(), Feed({"fetched_at": None, "error": ""}), Updates(), demo=True)
     assert [i["key"] for i in demo] == ["update"]
+
+
+def test_price_source_with_prices_for_the_future_is_not_reported(store):
+    class Feed:
+        def __init__(self, status):
+            self._status = status
+        def config(self):
+            return {"source": "spot"}
+        def status(self):
+            return self._status
+
+    class Mail:
+        def config(self):
+            class C: enabled = email_enabled = True; smtp_host = "h"; email_to = ["a@b.c"]
+            return C()
+
+    class Updates:
+        def status(self):
+            return {"available": False}
+
+    with store.transaction():
+        store.conn.execute("INSERT INTO tariffs VALUES('2020-01-01','D','dynamic',0,0,0)")
+    store.backup()
+    now = time.time()
+    # Nach einem Update ohne succeeded_at scheitert ein Abruf, die Preise reichen aber bis morgen.
+    status = {"fetched_at": now, "error": "HTTP 503", "latest_end": now + 6 * 3600}
+    assert checklist.open_items(store, Mail(), Feed(status), Updates(), now=now) == []
+    status["latest_end"] = now - 3600
+    assert [i["key"] for i in checklist.open_items(store, Mail(), Feed(status), Updates(), now=now)] == ["price_source"]

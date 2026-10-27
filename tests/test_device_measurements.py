@@ -89,3 +89,30 @@ def test_api(authenticated):
     assert authenticated.put("/api/device-measurements/999", json={"name": "x"}).status_code == 404
     assert authenticated.delete(f"/api/device-measurements/{stopped['id']}").status_code == 200
     assert authenticated.post("/api/device-measurements/stop").status_code == 400
+
+
+def test_rate_is_averaged_over_the_measurement_window(store):
+    with store.transaction():
+        store.conn.execute("INSERT INTO tariffs VALUES('2020-01-01','HT/NT','dual',.4,10,0)")
+    store.set_state("tariff_schedules", {"2020-01-01": {"low_eur_kwh": .2, "low_start": "22:00", "low_end": "06:00", "weekend_low": False}})
+    # Montag 21:30 bis 23:30 Ortszeit: 30 Minuten HT, 90 Minuten NT, 2 kWh ohne Grundlastabzug.
+    start = midnight("2026-10-26", "Europe/Berlin") + 21 * 3600 + 1800
+    m = Measurements(store)
+    reading(store, start, 100)
+    m.start(start + 1)
+    reading(store, start + 7200, 102)
+    done = m.stop(start + 7200 + 1)
+    assert done["status"] == "done" and abs(done["rate_eur_kwh"] - .25) < 1e-9 and abs(done["cost_eur"] - .5) < 1e-9
+
+
+def test_stop_needs_a_newer_reading_than_the_start(store):
+    now = time.time()
+    reading(store, now, 10)
+    m = Measurements(store)
+    m.start(now + 1)
+    try:
+        m.stop(now + 2)
+        raise AssertionError("stop without a new reading")
+    except ValueError as error:
+        assert "kein neuer Zählerstand" in str(error)
+    assert m.overview(now + 2)["running"] is not None

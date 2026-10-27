@@ -42,7 +42,7 @@ Oben auf der Übersicht listet Kilowatch offene Einrichtungsschritte, jeweils mi
 
 ## Gerät messen
 
-Unter **Ereignisse → Gerät messen** misst eine Stoppuhr den Mehrverbrauch des Hauses: **Messung starten** merkt Zeitpunkt und Bezugszählerstand, danach das Gerät einschalten; nach dem Gerätelauf **Messung beenden**. Das Ergebnis zeigt Mehrverbrauch, Dauer, mittlere Mehrleistung und Kosten; mit einem Namen bleibt es in der Liste.
+Unter **Ereignisse → Gerät messen** misst eine Stoppuhr den Mehrverbrauch des Hauses: **Messung starten** merkt Zeitpunkt und Bezugszählerstand, danach das Gerät einschalten; nach dem Gerätelauf **Messung beenden**. Das Ergebnis zeigt Mehrverbrauch, Dauer, mittlere Mehrleistung und Kosten mit dem über die Messdauer gemittelten Arbeitspreis (bei HT/NT und dynamischen Tarifen je Viertelstunde anteilig); mit einem Namen bleibt es in der Liste.
 
 - Gemessen wird am Netzanschluss: Alles, was im Zeitraum zusätzlich lief (Kühlschrank, Licht, andere Geräte), zählt mit. Abgezogen wird nur die Nachtgrundlast der letzten sieben Tage. Für belastbare Werte in ruhigen Zeiten messen und mehrfach wiederholen. Bei PV-Einspeisung während der Messung ist das Ergebnis zu niedrig.
 - Start und Ende brauchen einen frischen Zählerstand (höchstens 30 Sekunden alt). Die Genauigkeit hängt von der Auflösung des Zählerstands ab; liefert dein Zähler nur gerundete Werte, eignet sich die Messung nur für größere Verbräuche.

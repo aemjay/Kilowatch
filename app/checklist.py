@@ -27,11 +27,14 @@ def open_items(store, notifier, feed, updates, demo=False, now=None):
                       "text": "Ohne Arbeits- und Grundpreis zeigt Kilowatch keine Kosten."})
     if any(row["mode"] == "dynamic" for row in tariffs):
         config, status = feed.config(), feed.status()
-        succeeded = status.get("succeeded_at") or (status.get("fetched_at") if not status.get("error") else None)
+        last_ok = status.get("succeeded_at") or (status.get("fetched_at") if not status.get("error") else None)
+        stale = last_ok is None or now - last_ok > PRICE_STALE_SECONDS
+        # Reichen die geholten Preise noch in die Zukunft, ist die Quelle nicht gestört, auch wenn ein Abruf scheiterte.
+        covered = (status.get("latest_end") or 0) > now
         if not config["source"]:
             items.append({"key": "price_source", "page": "costs", "title": "Dynamischer Tarif ohne Preisquelle",
                           "text": "Preisquelle wählen oder Preise per CSV importieren; ohne Preise bleibt Energie unbepreist."})
-        elif (succeeded is None and status.get("error")) or (succeeded is not None and now - succeeded > PRICE_STALE_SECONDS):
+        elif stale and (status.get("error") or last_ok is not None) and not covered:
             items.append({"key": "price_source", "page": "costs", "title": "Preisabruf gestört",
                           "text": "Seit mehr als 26 Stunden ist kein Preisabruf gelungen. Fehlermeldung unter Kosten & Tarife prüfen."})
     mail = notifier.config()

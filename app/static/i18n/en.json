@@ -641,6 +641,7 @@
  "Schlüssel der lokalen Zugangsdaten fehlt. secrets.key aus der Sicherung wiederherstellen.": "Key for local credentials is missing. Restore secrets.key from the backup.",
  "Schweden": "Sweden",
  "Schwelle Lastanalyse (W)": "Load analysis threshold (W)",
+ "Seit dem Start kam noch kein neuer Zählerstand; ein paar Sekunden warten.": "No new meter reading since the start yet; wait a few seconds.",
  "Seit mehr als 26 Stunden ist kein Preisabruf gelungen. Fehlermeldung unter Kosten & Tarife prüfen.": "No price retrieval has succeeded for more than 26 hours. Check the error message under Costs & tariffs.",
  "Seit mindestens {seconds} Sekunden fehlen neue Messwerte. Kilowatch versucht die Verbindung weiterherzustellen.": "No new readings for at least {seconds} seconds. Kilowatch keeps trying to reconnect.",
  "Setup-Code": "Setup code",

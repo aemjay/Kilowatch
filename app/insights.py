@@ -4,6 +4,7 @@ Grundsätze: nur aus vorhandenen Messintervallen rechnen, Abdeckung immer mit au
 fehlende Daten nie als null behandeln und keine Geräte- oder PV-Eigenverbrauchsaussagen.
 """
 import bisect
+from calendar import monthrange
 from datetime import datetime, timedelta
 import math
 import statistics
@@ -360,9 +361,10 @@ def meter_reading(store, at, max_gap):
 
 
 def billing_months(start, today):
-    """Volle Monate seit Beginn des Abrechnungsjahrs."""
+    """Volle Monate seit Beginn des Abrechnungsjahrs; ein Beginn am 29.–31. zählt in kürzeren Monaten am Monatsletzten."""
     months = (today.year - start.year) * 12 + today.month - start.month
-    return max(0, months - (1 if today.day < start.day else 0))
+    due = min(start.day, monthrange(today.year, today.month)[1])
+    return max(0, months - (1 if today.day < due else 0))
 
 
 def billing_year(analytics, now, budget):
