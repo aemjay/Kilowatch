@@ -26,6 +26,28 @@ Der **Zeitbalken** unter der Zeitraumleiste zeigt den gesamten erfassten Zeitrau
 
 Das Fenster misst 5 Minuten bis zum gesamten Zeitraum, höchstens zehn Jahre. Die Auflösung passt sich an: bis 30 Minuten einzelne Werte bzw. Minuten, bis drei Tage Viertelstunden, darüber Tage und Monate. Reicht das Fenster bis zur Gegenwart, aktualisiert es sich selbst. Eine Voreinstellung (Heute, 7 Tage …) hebt die freie Auswahl auf. Alle Seiten rechnen mit dem gewählten Zeitraum; der Export nutzt die Datumsfelder, die mitwandern.
 
+## Noch einzurichten
+
+Oben auf der Übersicht listet Kilowatch offene Einrichtungsschritte, jeweils mit Link zur passenden Seite. Erledigte Punkte verschwinden, ist nichts offen, fehlt die Karte.
+
+| Punkt | Erscheint, wenn |
+|---|---|
+| Kein Tarif hinterlegt | es keinen Tarif gibt |
+| Dynamischer Tarif ohne Preisquelle / Preisabruf gestört | ein dynamischer Tarif existiert und keine Preisquelle gewählt ist, oder seit mehr als 26 Stunden kein Abruf gelungen ist |
+| E-Mail-Benachrichtigungen aus | Hauptschalter, E-Mail-Kanal, SMTP-Server oder Empfänger fehlen |
+| Keine aktuelle Sicherung | im Sicherungsordner keine tägliche Sicherung jünger als acht Tage liegt |
+| Update verfügbar | die eingeschaltete Update-Prüfung eine neue Version gefunden hat |
+
+**Ausblenden** schaltet einen Punkt dauerhaft stumm, auch wenn er später wieder zutrifft; **Einstellungen → Hinweise auf der Übersicht → Alle wieder einblenden** hebt das auf. Wer Preise nur per CSV importiert, blendet den Preisquellen-Hinweis so aus. Ob die Bridge noch in die Tibber-Cloud sendet, prüft die Liste nicht: Kilowatch liest aus `/status.json` nur Firmware, MQTT-Status und Laufzeit, nicht das MQTT-Ziel. Im Demo-Modus zeigt der Update-Punkt ein Beispiel.
+
+## Gerät messen
+
+Unter **Ereignisse → Gerät messen** misst eine Stoppuhr den Mehrverbrauch des Hauses: **Messung starten** merkt Zeitpunkt und Bezugszählerstand, danach das Gerät einschalten; nach dem Gerätelauf **Messung beenden**. Das Ergebnis zeigt Mehrverbrauch, Dauer, mittlere Mehrleistung und Kosten mit dem über die Messdauer gemittelten Arbeitspreis (bei HT/NT und dynamischen Tarifen je Viertelstunde anteilig); mit einem Namen bleibt es in der Liste.
+
+- Gemessen wird am Netzanschluss: Alles, was im Zeitraum zusätzlich lief (Kühlschrank, Licht, andere Geräte), zählt mit. Abgezogen wird nur die Nachtgrundlast der letzten sieben Tage. Für belastbare Werte in ruhigen Zeiten messen und mehrfach wiederholen. Bei PV-Einspeisung während der Messung ist das Ergebnis zu niedrig.
+- Start und Ende brauchen einen frischen Zählerstand (höchstens 30 Sekunden alt). Die Genauigkeit hängt von der Auflösung des Zählerstands ab; liefert dein Zähler nur gerundete Werte, eignet sich die Messung nur für größere Verbräuche.
+- Es läuft höchstens eine Messung. Sie liegt in der Datenbank und läuft bei Neustart oder in einem anderen Browser weiter. Nach 24 Stunden wird sie abgebrochen und als unvollständig gespeichert.
+
 ## Sprache und Währung
 
 Die Oberfläche gibt es auf Deutsch, Englisch, Norwegisch (Bokmål), Schwedisch und Niederländisch. Wähle sie auf der Anmeldeseite oder unter **Einstellungen → Sprache und Währung**; ohne Auswahl gilt die Browsersprache, sonst Deutsch. Benachrichtigungen nutzen die gespeicherte Sprache.

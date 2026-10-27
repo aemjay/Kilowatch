@@ -81,6 +81,8 @@ function budgetStatus(data) {
     lines.push(stat(t('Hochrechnung Jahr'),`${unit(a.annual_eur,'€',0)} (${unit(a.low_eur,'€',0)} – ${unit(a.high_eur,'€',0)})`));
     if(a.abschlag_year_eur!=null)lines.push(stat(t('12 × Abschlag'),unit(a.abschlag_year_eur,'€',0)+' · '+(a.difference_eur>0?t('voraussichtlich Nachzahlung ca. {amount}',{amount:unit(a.difference_eur,'€',0)}):t('voraussichtlich Guthaben ca. {amount}',{amount:unit(-a.difference_eur,'€',0)}))));
   } else lines.push(stat(t('Hochrechnung Jahr'),a.reason?t(a.reason):t('Noch nicht möglich')));
+  const b=data.billing;
+  if(b)lines.push(...billingLines(b));
   const ref=data.reference;
   if(ref){
     // Vergleich der eigenen Hochrechnung mit dem typischen Haushalt gleicher Größe.
@@ -89,7 +91,32 @@ function budgetStatus(data) {
   }
   const note=a.available?`<p class="copy-footnote">${esc(t(a.method))} ${esc(t('Grundlage: {count} vollständig erfasste Tage',{count:a.valid_days}))}${a.full_year?'':esc(t(' (weniger als ein Jahr)'))}.</p>`:'';
   const refNote=ref?`<p class="copy-footnote">${esc(t('{household} laut {source}; Gesamtverbrauch, mit eigener PV liegt der Netzbezug darunter.',{household:householdText(ref),source:ref.source}))}</p>`:'';
-  return `<div class="stats-list">${lines.join('')}</div>${note}${refNote}`;
+  const billingNote=b?.available?`<p class="copy-footnote">${esc(t(b.method))}${b.filled_eur>.5?' '+esc(t('Davon für nicht erfasste Zeit hochgerechnet: {amount}.',{amount:unit(b.filled_eur,'€',0)})):''}</p>`:'';
+  return `<div class="stats-list">${lines.join('')}</div>${note}${billingNote}${refNote}`;
+}
+
+// Laufendes Abrechnungsjahr: bisher, Hochrechnung, gezahlte Abschläge, Nachzahlung/Guthaben und Empfehlung.
+function billingLines(b) {
+  const lines=[stat(t('Laufendes Abrechnungsjahr'),t('seit {date}',{date:dateLabel(b.start)}))];
+  lines.push(stat(t('Bisherige Kosten im Abrechnungsjahr'),b.observed_eur==null?t('Tarif fehlt'):unit(b.observed_eur,'€',2)+(b.coverage<.98?' · '+t('{percent} % erfasst',{percent:number(b.coverage*100,0)}):'')));
+  lines.push(stat(t('Hochrechnung bis {date}',{date:dateLabel(shiftDay(b.end,-1))}),b.available?unit(b.projected_eur,'€',0):t(b.reason||'Noch nicht möglich')));
+  if(b.paid_eur!=null)lines.push(stat(t('Gezahlte Abschläge ({count} volle Monate)',{count:b.months_elapsed}),unit(b.paid_eur,'€',0)));
+  if(b.available&&b.difference_eur!=null)lines.push(stat(t('Am Ende des Abrechnungsjahrs'),b.difference_eur>0?t('voraussichtlich Nachzahlung ca. {amount}',{amount:unit(b.difference_eur,'€',0)}):t('voraussichtlich Guthaben ca. {amount}',{amount:unit(-b.difference_eur,'€',0)})));
+  if(b.available)lines.push(stat(t('Empfohlener Abschlag'),t('{amount} pro Monat',{amount:unit(b.recommended_abschlag_eur,'€',0)})));
+  return lines;
+}
+
+function billingFields(value) {
+  const [month,day]=value?value.split('-').map(Number):[0,0];
+  const months=Array.from({length:12},(_,i)=>`<option value="${i+1}"${i+1===month?' selected':''}>${esc(new Date(Date.UTC(2001,i,15)).toLocaleDateString(LOCALE,{month:'long',timeZone:'UTC'}))}</option>`).join('');
+  const days=Array.from({length:31},(_,i)=>`<option value="${i+1}"${i+1===day?' selected':''}>${i+1}.</option>`).join('');
+  return `<fieldset class="field-group"><legend>${t('Abrechnungsjahr beginnt am')}</legend><div class="field-pair"><select name="billing_day" aria-label="${esc(t('Tag'))}"><option value="">—</option>${days}</select><select name="billing_month" aria-label="${esc(t('Monat'))}"><option value="">—</option>${months}</select></div><small>${t('Aus der letzten Jahresabrechnung; leer = aus.')}</small></fieldset>`;
+}
+
+function billingValue(v) {
+  if(!v.billing_day&&!v.billing_month)return null;
+  if(!v.billing_day||!v.billing_month)throw new Error(t('Für das Abrechnungsjahr Tag und Monat wählen.'));
+  return `${String(v.billing_month).padStart(2,'0')}-${String(v.billing_day).padStart(2,'0')}`;
 }
 
 async function mountBudget() {
@@ -97,9 +124,9 @@ async function mountBudget() {
   const data=await api('/api/budget').catch(error=>{toast(error.message,true);return null;});
   if(!data||!slot.isConnected||$('#budget-slot')!==slot)return;
   const s=data.settings,value=v=>v==null?'':esc(v);
-  const form=`<form id="budget-form"><div class="form-grid"><label>${t('Monatsbudget (€)')}<input name="monthly_eur" type="number" step="1" min="1" value="${value(s.monthly_eur)}" placeholder="${esc(t('optional'))}"></label><label>${t('Monatsziel Bezug (kWh)')}<input name="monthly_kwh" type="number" step="1" min="1" value="${value(s.monthly_kwh)}" placeholder="${esc(t('optional'))}">${data.reference?`<small>${esc(t('Typischer Haushalt: etwa {value} pro Monat',{value:unit(data.reference.annual_kwh/12,'kWh',0)}))}</small>`:''}</label><label>${t('Monatlicher Abschlag (€)')}<input name="abschlag_eur" type="number" step=".01" min="1" value="${value(s.abschlag_eur)}" placeholder="${esc(t('optional'))}"></label></div><div class="form-actions"><button type="submit" class="secondary">${t('Speichern')}</button></div></form>`;
+  const form=`<form id="budget-form"><div class="form-grid"><label>${t('Monatsbudget (€)')}<input name="monthly_eur" type="number" step="1" min="1" value="${value(s.monthly_eur)}" placeholder="${esc(t('optional'))}"></label><label>${t('Monatsziel Bezug (kWh)')}<input name="monthly_kwh" type="number" step="1" min="1" value="${value(s.monthly_kwh)}" placeholder="${esc(t('optional'))}">${data.reference?`<small>${esc(t('Typischer Haushalt: etwa {value} pro Monat',{value:unit(data.reference.annual_kwh/12,'kWh',0)}))}</small>`:''}</label><label>${t('Monatlicher Abschlag (€)')}<input name="abschlag_eur" type="number" step=".01" min="1" value="${value(s.abschlag_eur)}" placeholder="${esc(t('optional'))}"></label>${billingFields(s.billing_start)}</div><div class="form-actions"><button type="submit" class="secondary">${t('Speichern')}</button></div></form>`;
   slot.innerHTML=panel(t('Budget & Abschlag'),'',budgetStatus(data)+'<div class="divider"></div>'+form+`<p class="copy-footnote">${t('Eine Benachrichtigung bei erreichtem Monatsbudget lässt sich unter Benachrichtigungen einschalten.')}</p>`);
-  $('#budget-form').addEventListener('submit',safely(async event=>{event.preventDefault();const v=Object.fromEntries(new FormData(event.target));const body={};for(const key of ['monthly_eur','monthly_kwh','abschlag_eur'])body[key]=v[key]===''?null:Number(v[key]);await api('/api/budget','PUT',body);toast(t('Budget gespeichert.'));await mountBudget();}));
+  $('#budget-form').addEventListener('submit',safely(async event=>{event.preventDefault();const v=Object.fromEntries(new FormData(event.target));const body={};for(const key of ['monthly_eur','monthly_kwh','abschlag_eur'])body[key]=v[key]===''?null:Number(v[key]);body.billing_start=billingValue(v);await api('/api/budget','PUT',body);toast(t('Budget gespeichert.'));await mountBudget();}));
 }
 
 function mountCostInsights(data) {
@@ -120,4 +147,63 @@ async function mountUpdates() {
   target.insertAdjacentHTML('beforeend',panel(t('Updates'),'',stats+controls));
   $('#update-enabled').addEventListener('change',safely(async event=>{await api('/api/updates','PUT',{enabled:event.target.value==='true'});toast(event.target.value==='true'?t('Update-Hinweis eingeschaltet.'):t('Update-Hinweis ausgeschaltet.'));}));
   $('#update-check').addEventListener('click',safely(async event=>{event.target.disabled=true;try{await api('/api/updates/check','POST');await loadPage();}finally{event.target.disabled=false;}}));
+}
+
+// Zählerstände zum Monatsersten und zu einem frei gewählten Tag (Berichte & Export).
+function monthFirsts(count) {
+  const [year,month]=today().split('-').map(Number);
+  return Array.from({length:count},(_,i)=>{const date=new Date(Date.UTC(year,month-1-i,1));return date.toISOString().slice(0,10);});
+}
+
+function copyText(value) {
+  return value==null?'':Number(value).toLocaleString(LOCALE,{minimumFractionDigits:3,maximumFractionDigits:3,useGrouping:false});
+}
+
+function readingCell(row, field, label) {
+  const value=row[field];
+  if(value==null)return `<td class="numbers">—</td>`;
+  const mark=row.approximate?`<span class="approx" title="${esc(readingNote(row))}">≈ </span>`:'';
+  return `<td class="numbers">${mark}${number(value,3)} <button type="button" class="copy-button" data-copy="${esc(copyText(value))}" aria-label="${esc(t('{register} am {date} kopieren',{register:label,date:dateLabel(row.date)}))}" title="${esc(t('Kopieren'))}">⧉</button></td>`;
+}
+
+function readingNote(row) {
+  const when=row.measured_at!=null?t('Messwert vom {time}',{time:localTime(row.measured_at,{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}):'';
+  return [when,row.reason?t(row.reason):''].filter(Boolean).join(' · ');
+}
+
+function readingRows(rows) {
+  return rows.map(row=>`<tr><td>${esc(dateLabel(row.date))} 00:00${row.approximate||row.reason?`<br><small class="muted">${esc(readingNote(row))}</small>`:''}</td>${readingCell(row,'import_kwh',t('Bezug'))}${readingCell(row,'export_kwh',t('Einspeisung'))}</tr>`).join('');
+}
+
+function readingTable(rows) {
+  return `<div class="table-wrap"><table><thead><tr><th>${t('Stichtag')}</th><th>${t('Bezug 1.8.0 (kWh)')}</th><th>${t('Einspeisung 2.8.0 (kWh)')}</th></tr></thead><tbody>${readingRows(rows)}</tbody></table></div>`;
+}
+
+async function copyValue(value) {
+  try { await navigator.clipboard.writeText(value); }
+  catch {
+    // Ohne HTTPS gibt es keine Zwischenablage-API; dann über eine unsichtbare Auswahl kopieren.
+    const area=document.createElement('textarea');area.value=value;area.setAttribute('readonly','');area.className='sr-only';document.body.append(area);area.select();
+    const ok=document.execCommand?.('copy');area.remove();if(!ok)throw new Error(t('Kopieren nicht möglich. Wert bitte markieren.'));
+  }
+  toast(t('{value} kopiert.',{value}));
+}
+
+function bindCopy(root) {
+  for(const button of $$('[data-copy]',root))if(!button.dataset.bound){button.dataset.bound='1';button.addEventListener('click',safely(()=>copyValue(button.dataset.copy)));}
+}
+
+async function mountMeterReadings() {
+  const slot=$('#meter-slot');if(!slot)return;
+  const data=await api('/api/meter-readings?dates='+monthFirsts(13).join(',')).catch(error=>{toast(error.message,true);return null;});
+  if(!data||!slot.isConnected)return;
+  const retention=data.raw_retention_days?t('Einzelmessungen werden {days} Tage aufbewahrt; ältere Stände rechnet Kilowatch aus dem letzten Stand und der seither erfassten Energie zurück (≈). Ein Zählerwechsel oder Rücksprung danach macht das unmöglich.',{days:data.raw_retention_days}):t('Einzelmessungen werden unbegrenzt aufbewahrt.');
+  const form=`<form id="reading-form" class="reading-form"><label>${t('Stand am …')}<input type="date" name="date" max="${today()}" required></label><button class="secondary" type="submit">${t('Anzeigen')}</button></form><div id="reading-custom"></div>`;
+  slot.innerHTML=panel(t('Zählerstände'),t('Jeweils 00:00 Uhr am Stichtag · {zone}',{zone:data.timezone}),form+readingTable(data.readings)+`<p class="copy-footnote">${esc(t('Zählerstand zu einem Zeitpunkt = letzter gespeicherter Stand davor. ≈ kennzeichnet einen Stand mit Messlücke davor oder einen zurückgerechneten Wert.'))} ${esc(retention)}</p>`);
+  bindCopy(slot);
+  $('#reading-form').addEventListener('submit',safely(async event=>{
+    event.preventDefault();const day=new FormData(event.target).get('date');
+    const result=await api('/api/meter-readings?dates='+encodeURIComponent(day));
+    const box=$('#reading-custom');box.innerHTML=readingTable(result.readings);bindCopy(box);
+  }));
 }

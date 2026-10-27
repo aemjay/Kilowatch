@@ -221,7 +221,7 @@ class PriceFeed:
                         fetch = self.fetch_tibber if config["source"] == "tibber" else self.fetch_spot
                         prices, deprecated = await fetch(client, config, currency, now)
                 await asyncio.to_thread(self.save, prices)
-                self.store.set_state("price_feed_status", dict(self.status(), fetched_at=now, error="", error_params={}, source=config["source"],
+                self.store.set_state("price_feed_status", dict(self.status(), fetched_at=now, succeeded_at=now, error="", error_params={}, source=config["source"],
                                                                deprecated=deprecated, count=len(prices),
                                                                latest_end=prices[-1][1] if prices else self.status().get("latest_end")))
             except (ValueError, httpx.HTTPError, OSError, asyncio.TimeoutError) as exc:

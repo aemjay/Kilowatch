@@ -97,6 +97,7 @@ const DE_PLURALS = {
   'Letzte {count} Std.': {one: 'Letzte Stunde', other: 'Letzte {count} Std.'},
   '{count} Person(en) im Haus': {one: '{count} Person im Haus', other: '{count} Personen im Haus'},
   '{count} Person(en) in einer Wohnung': {one: '{count} Person in einer Wohnung', other: '{count} Personen in einer Wohnung'},
+  '{count} Hinweis(e) ausgeblendet.': {one: '{count} Hinweis ausgeblendet.', other: '{count} Hinweise ausgeblendet.'},
 };
 
 // Statische Texte in index.html: data-i18n (Text), data-i18n-placeholder, data-i18n-aria-label, data-i18n-title.

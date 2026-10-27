@@ -33,6 +33,12 @@ Lege einen Tarif mit der Preisart **Dynamisch** an und wähle unter **Dynamische
 - Eine geänderte Quelle oder ein geänderter Aufschlag rechnet den Rückblick neu. Automatische Preise ersetzen im abgedeckten Zeitraum CSV-Preise.
 - Fehlende Preise bleiben als unbepreiste Energie sichtbar; es gibt keinen Rückfall auf Null oder einen Festpreis.
 
+## Kostenrate und Preisampel
+
+Die Übersicht zeigt neben der Live-Leistung **Kostet gerade**: aktuelle Netzleistung × Arbeitspreis der laufenden Viertelstunde in €/h, darunter den Arbeitspreis in ct/kWh. Bei HT/NT gilt der Preis der Uhrzeit, bei dynamischen Tarifen der Preis des aktuellen Intervalls. Bei Einspeisung steht dort der Erlös mit der Einspeisevergütung; ist keine hinterlegt (0 ct), steht „—“. Ohne frische Messung gibt es keinen Betrag.
+
+Mit einem aktuell gültigen dynamischen Tarif und vorhandenen Preisen erscheint die **Preisampel**: Bruttopreise je Viertelstunde für heute und, sobald veröffentlicht, morgen. Die drei Farben teilen den Bereich zwischen günstigstem und teuerstem Preis im Diagramm in Drittel; sie sagen nichts über das allgemeine Preisniveau. Darüber steht das günstigste zusammenhängende Fenster (2, 3 oder 4 Stunden) mit Zeitmittel, frühestens ab der laufenden Viertelstunde. Längere Preisintervalle (z. B. Stundenpreise) werden auf Viertelstunden verteilt; Lücken unterbrechen ein Fenster.
+
 ## Tarif simulieren
 
 **Tarif simulieren** rechnet denselben Lastgang mit einem anderen Tarif (Fest, HT/NT oder Börsenpreis + Aufschlag). Verglichen wird gepaart: Arbeitspreise nur über Viertelstunden, die in beiden Tarifen bepreist sind, Grund- und Einspeisepreis über den ganzen Zeitraum. Bei dynamischen Tarifen siehst du den **verbrauchsgewichteten Börsenpreis** neben dem Zeitmittel; liegt er darüber, fällt dein Bezug eher in teure Stunden. Angenommen wird gleicher Verbrauch zur gleichen Zeit, also kein Sparversprechen.
@@ -45,4 +51,5 @@ Unter **Budget & Abschlag** legst du Monatsbudget (€), Monatsziel (kWh) und Ab
 
 - **Monat:** bisherige Kosten und Prognose bis Monatsende (bisherige Kosten + Rest-kWh × mittlerer Arbeitspreis + voller Grundpreis). Die Prognose braucht dieselbe Datenbasis wie die Monatsprognose der Analyse.
 - **Jahr:** Hochrechnung aus vollständig erfassten Tagen der letzten 365 Tage, erst ab 60 solchen Tagen, ohne Jahreszeitbereinigung. Die Spanne zeigt nur die Tagesstreuung, Einspeisung bleibt außen vor.
+- **Abrechnungsjahr:** Mit **Abrechnungsjahr beginnt am** (Tag und Monat aus der letzten Jahresabrechnung) zeigt Kilowatch das laufende Abrechnungsjahr: bisherige erfasste Kosten, Hochrechnung bis zum Ende, gezahlte Abschläge (Abschlag × volle Monate seit Beginn), voraussichtliche Nachzahlung oder Guthaben (Hochrechnung − 12 × Abschlag) und einen empfohlenen Abschlag (Hochrechnung ÷ 12, auf volle Euro). Die Hochrechnung nimmt die erfassten Kosten und ergänzt nicht erfasste Zeit und den Rest des Jahres wie die Jahreshochrechnung; sie gilt daher erst ab denselben 60 vollständigen Tagen und nur, wenn für das ganze bisherige Abrechnungsjahr ein Tarif hinterlegt ist. Der 29. Februar ist als Beginn nicht möglich.
 - Optional meldet die Alarmregel **Monatsbudget** per E-Mail ([Benachrichtigungen](BENACHRICHTIGUNGEN.md)).

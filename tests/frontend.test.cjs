@@ -29,6 +29,9 @@ async function harness(options={}) {
   let priceFeed={source:'',zone:'DE-LU',markup_ct:0,vat_percent:0,tibber_home:'',tibber_token_configured:false,zones:['DE-LU','AT','NL','BE','FR'],spot_source:'Energy-Charts',status:{fetched_at:null,error:'',homes:[]}};
   let tariffs=structuredClone(options.tariffs||[]),market={rows:[],fetched_at:null,error:''};
   let budget={settings:{monthly_eur:null,monthly_kwh:null,abschlag_eur:null},month:{observed_eur:3,observed_kwh:10,forecast_eur:null,forecast_kwh:null,forecast_reason:'Zu wenig Daten'},annual:{available:false,reason:'Mindestens 60 vollständig erfasste Tage erforderlich.'}};
+  const checklistState={muted:structuredClone(options.muted||[])};
+  let tokenList=structuredClone(options.tokens||[]);
+  let measure={running:null,max_seconds:86400,items:[]};
   const vc=new VirtualConsole();vc.on('jsdomError',error=>errors.push(error));
   const dom=new JSDOM(readFileSync(join(root,'index.html'),'utf8'),{
     url:'http://kilowatch.test/#'+(options.page||'settings'),runScripts:'outside-only',virtualConsole:vc});
@@ -54,7 +57,21 @@ async function harness(options={}) {
       saved={...saved,...plain,password_configured:!!bridge_password||saved.password_configured};
       saved.setup_required=!(saved.bridge_host&&saved.bridge_user&&saved.password_configured);
     }else if(path==='/api/settings')data=saved;
-    else if(path==='/api/live')data={collector:{state:'setup'},reading:null,stale:true};
+    else if(path==='/api/tokens'&&config.method==='POST'){const item={id:tokenList.length+1,name:body.name,role:body.role,created:1,last_used:null};tokenList.push(item);data={...item,token:'kw_synthetic-token-value'};}
+    else if(path==='/api/tokens')data={tokens:tokenList,limit:10};
+    else if(path.startsWith('/api/tokens/')&&config.method==='DELETE'){tokenList=tokenList.filter(item=>String(item.id)!==path.split('/').pop());}
+    else if(path==='/api/events')data=[];
+    else if(path==='/api/device-measurements')data=measure;
+    else if(path==='/api/device-measurements/start'){measure={...measure,running:{id:7,start:1000,start_kwh:500.25,status:'running'}};data=measure;}
+    else if(path==='/api/device-measurements/stop'){const done={id:7,name:'',status:'done',start:1000,end:4600,duration_s:3600,total_kwh:1.2,baseline_kwh:.2,extra_kwh:1,mean_w:1000,baseline_w:200,rate_eur_kwh:.3,cost_eur:.3,note:''};measure={...measure,running:null,items:[done]};data=done;}
+    else if(path.startsWith('/api/device-measurements/')&&config.method==='PUT'){measure.items[0]={...measure.items[0],name:body.name};}
+    else if(path==='/api/checklist'){
+      if(config.method==='PUT')checklistState.muted=body.muted;
+      const all=options.checklist||[];
+      data={items:all.filter(i=>!checklistState.muted.includes(i.key)),muted:checklistState.muted,muted_open:all.filter(i=>checklistState.muted.includes(i.key)).length};
+    }
+    else if(path==='/api/live')data=options.live||{collector:{state:'setup'},reading:null,stale:true};
+    else if(path.startsWith('/api/prices/outlook'))data=typeof options.outlook==='function'?options.outlook(path):options.outlook||{dynamic:false,intervals:[]};
     else if(path==='/api/notifications'&&config.method==='PUT'){
       const {smtp_password,...plain}=body;notes.settings=plain;
       if(smtp_password)notes.smtp_password_configured=true;
@@ -69,16 +86,21 @@ async function harness(options={}) {
     else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market,price_feed:priceFeed};
     else if(path==='/api/market/refresh'){market={rows:[{start:1800,end:5400,ct_kwh:-5}],fetched_at:2000000000,error:''};data=market;}
     else if(path==='/api/budget'&&config.method==='PUT'){budget.settings=body;}
-    else if(path==='/api/budget')data={...budget,reference:options.household??null};
+    else if(path==='/api/budget')data={...budget,reference:options.household??null,billing:options.billing??null};
+    else if(path.startsWith('/api/meter-readings?')){
+      const dates=decodeURIComponent(path.split('dates=')[1]).split(',');
+      data={timezone:'Europe/Berlin',raw_retention_days:90,readings:dates.map((date,i)=>i===1?{date,import_kwh:1200.5,export_kwh:null,approximate:true,source:'reconstructed',measured_at:null,reason:'Aus dem letzten Zählerstand und der seither erfassten Energie zurückgerechnet (Rohwerte gelöscht).'}
+        :{date,import_kwh:1234.5678,export_kwh:12,approximate:false,source:'sample',measured_at:0,reason:''})};
+    }
     else if(path==='/api/simulate')data={energy_cost_eur:10,base_cost_eur:2,feedin_eur:0,total_eur:12,actual_total_eur:13,priced_share:.5,average_eur_kwh:.3,comparable:false,paired_share:.5,difference_eur:-1.25,spot_weighted_ct:9,spot_time_average_ct:8};
     else if(path==='/api/updates')data={enabled:false,current:'1.0.0',repository:'example/kilowatch',checked_at:null,error:'',available:false};
     else if(path==='/api/credentials/bridge'){saved.password_configured=false;saved.enabled=false;saved.setup_required=true;}
     else if(path==='/api/bridge/test')data={protocol:'SML',endpoint:'/node_data.json',resolved_addresses:['192.168.1.10'],has_import:true};
     return {ok:status===200,status,json:async()=>structuredClone(data),blob:async()=>new w.Blob(['synthetic-image'],{type:'image/png'})};
   };
-  for(const name of ['theme.js','i18n.js','overlays.js','charts.js','timeline.js','configure.js','extras.js','insights.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
+  for(const name of ['theme.js','i18n.js','overlays.js','charts.js','timeline.js','configure.js','extras.js','insights.js','dashboard.js','app.js'])new Script(readFileSync(join(root,name),'utf8'),{filename:name}).runInContext(dom.getInternalVMContext());
   await until(()=>needsSetup?!w.document.querySelector('#first-start-form').hidden:
-    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards'}[options.page])||'#settings-form'));
+    !!w.document.querySelector(({notifications:'#notification-form',costs:'#tariff-form',history:'#page-history .chart',dashboard:'#page-dashboard .cards',reports:'#page-reports .panel',events:'#event-form'}[options.page])||'#settings-form'));
   return {w,dom,calls,errors,get settings(){return saved;}};
 }
 
@@ -256,7 +278,7 @@ test('budget form saves empty fields as null',async t=>{
   input(w,'budget-form','monthly_eur','90');input(w,'budget-form','abschlag_eur','85.5');
   submit(w,'budget-form');
   await until(()=>h.calls.some(c=>c.path==='/api/budget'&&c.method==='PUT'));
-  assert.deepEqual(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body,{monthly_eur:90,monthly_kwh:null,abschlag_eur:85.5});
+  assert.deepEqual(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body,{monthly_eur:90,monthly_kwh:null,abschlag_eur:85.5,billing_start:null});
   assert.deepEqual(h.errors,[]);
 });
 
@@ -401,6 +423,137 @@ test('background refresh neither dims the page nor redraws unchanged data',async
   assert.deepEqual(h.errors,[]);
 });
 
+test('dashboard shows the live cost rate and a hint without tariff',async t=>{
+  const reading={ts:1,power_w:2000,import_kwh:10,export_kwh:0};
+  const h=await harness({page:'dashboard',settings:{setup_required:false},live:{collector:{state:'online'},reading,stale:false,age_seconds:1,
+    cost:{tariff:true,mode:'fixed',rate_eur_kwh:.3,feedin_eur_kwh:null,direction:'import',eur_per_hour:.6}}});
+  t.after(()=>h.dom.window.close());const {w}=h;
+  assert.equal(w.document.querySelector('#live-cost').textContent,'0,60');
+  assert.match(w.document.querySelector('#live-cost-note').textContent,/Arbeitspreis 30,00 ct\/kWh/);
+  // Einspeisung ohne Vergütung: kein Betrag, Hinweis.
+  w.eval("live={...live,cost:{tariff:true,mode:'fixed',rate_eur_kwh:.3,feedin_eur_kwh:null,direction:'export',eur_per_hour:null}};updateLiveCost()");
+  assert.equal(w.document.querySelector('#live-cost-label').textContent,'Erlös gerade');
+  assert.equal(w.document.querySelector('#live-cost').textContent,'—');
+  w.eval("live={...live,cost:{tariff:false}};updateLiveCost()");
+  assert.equal(w.document.querySelector('#live-cost-note').textContent,'Tarif unter Kosten & Tarife anlegen');
+  assert.equal(w.document.querySelector('#price-outlook-slot').textContent,'');
+  assert.deepEqual(h.errors,[]);
+});
+
+test('price traffic light colours quarters, marks now and switches the window length',async t=>{
+  const start=1792969200,now=start+10*3600;
+  const outlook=path=>{
+    const hours=Number(new URLSearchParams(path.split('?')[1]).get('window_hours'));
+    const intervals=Array.from({length:96},(_,i)=>({start:start+i*900,end:start+i*900+900,eur_kwh:i<40?.3:i<48?.1:.2}));
+    return {dynamic:true,timezone:'Europe/Berlin',now,current_start:now,window_hours:hours,start,end:start+2*86400,tomorrow_start:start+86400,
+      intervals,tomorrow_available:false,low_eur_kwh:.1,high_eur_kwh:.3,cheapest:{start:start+40*900,end:start+40*900+hours*3600,average_eur_kwh:hours===2?.1:.15}};
+  };
+  const h=await harness({page:'dashboard',settings:{setup_required:false},outlook});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#price-window-text'));
+  const slot=w.document.querySelector('#price-outlook-slot');
+  assert.match(w.document.querySelector('#price-window-text').textContent,/Heute 10:00–12:00, Ø 10,0 ct\/kWh/);
+  assert.equal(slot.querySelectorAll('rect.price-low').length,8);
+  assert.equal(slot.querySelectorAll('rect.price-high').length,40);
+  assert.equal(slot.querySelectorAll('rect.price-current').length,1);
+  assert.match(slot.textContent,/Preise für morgen erscheinen am frühen Nachmittag/);
+  slot.querySelector('[data-price-window="3"]').click();
+  await until(()=>/Ø 15,0/.test(w.document.querySelector('#price-window-text')?.textContent||''));
+  assert.ok(h.calls.some(c=>c.path==='/api/prices/outlook?window_hours=3'));
+  assert.equal(w.document.querySelector('[data-price-window="3"]').getAttribute('aria-pressed'),'true');
+  assert.deepEqual(h.errors,[]);
+});
+test('reports list meter readings per month start, mark approximations and copy values',async t=>{
+  const h=await harness({page:'reports',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#meter-slot table'));
+  const request=h.calls.find(c=>c.path.startsWith('/api/meter-readings?'));
+  const dates=decodeURIComponent(request.path.split('dates=')[1]).split(',');
+  assert.equal(dates.length,13);assert.ok(dates.every(d=>d.endsWith('-01')));
+  const rows=w.document.querySelectorAll('#meter-slot tbody tr');
+  assert.equal(rows.length,13);
+  assert.match(rows[0].textContent,/1\.234,568/);
+  assert.match(rows[1].textContent,/≈/);assert.match(rows[1].textContent,/zurückgerechnet/);
+  let copied=null;w.navigator.clipboard={writeText:async value=>{copied=value;}};
+  rows[0].querySelector('[data-copy]').click();
+  await until(()=>copied!==null);
+  assert.equal(copied,'1234,568');
+  const form=w.document.querySelector('#reading-form');form.elements.date.value='2026-02-14';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await until(()=>!!w.document.querySelector('#reading-custom table'));
+  assert.ok(h.calls.some(c=>c.path==='/api/meter-readings?dates=2026-02-14'));
+  assert.deepEqual(h.errors,[]);
+});
+
+test('budget shows the billing year with recommendation and saves its start',async t=>{
+  const billing={start:'2026-03-01',end:'2027-03-01',available:true,months_elapsed:7,abschlag_eur:80,paid_eur:560,observed_eur:500,coverage:1,
+    projected_eur:1100,filled_eur:0,remaining_eur:600,recommended_abschlag_eur:92,difference_eur:140,method:'Synthetic method.'};
+  const h=await harness({page:'costs',settings:{setup_required:false},billing});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#budget-form'));
+  const text=w.document.querySelector('#budget-slot').textContent;
+  assert.match(text,/seit 01\.03\.2026/);assert.match(text,/Hochrechnung bis 28\.02\.2027/);
+  assert.match(text,/Gezahlte Abschläge \(7 volle Monate\)560 €/);
+  assert.match(text,/Nachzahlung ca\. 140 €/);assert.match(text,/92 € pro Monat/);
+  const form=w.document.querySelector('#budget-form');
+  form.elements.billing_day.value='15';form.elements.billing_month.value='4';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await until(()=>h.calls.some(c=>c.path==='/api/budget'&&c.method==='PUT'));
+  assert.equal(h.calls.find(c=>c.path==='/api/budget'&&c.method==='PUT').body.billing_start,'04-15');
+  assert.deepEqual(h.errors,[]);
+});
+test('setup checklist links to pages, mutes items and settings restore them',async t=>{
+  const checklist=[{key:'tariff',page:'costs',title:'Kein Tarif hinterlegt',text:'Ohne Arbeits- und Grundpreis zeigt Kilowatch keine Kosten.'},
+    {key:'update',page:'system',title:'Update verfügbar',text:'Version {version} ist erschienen. Hinweise unter System & Datenqualität.',params:{version:'9.9.9'}}];
+  const h=await harness({page:'dashboard',settings:{setup_required:false},checklist});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>w.document.querySelectorAll('.checklist li').length===2);
+  const slot=w.document.querySelector('#checklist-slot');
+  assert.match(slot.textContent,/Version 9\.9\.9 ist erschienen/);
+  assert.equal(slot.querySelector('a[href="#costs"]').textContent,'Kosten & Tarife');
+  slot.querySelector('[data-checklist-mute="tariff"]').click();
+  await until(()=>w.document.querySelectorAll('.checklist li').length===1);
+  assert.deepEqual(h.calls.find(c=>c.path==='/api/checklist'&&c.method==='PUT').body,{muted:['tariff']});
+  slot.querySelector('[data-checklist-mute="update"]').click();
+  await until(()=>slot.textContent==='');
+  await w.navigate('settings');
+  await until(()=>!!w.document.querySelector('#checklist-restore'));
+  assert.match(w.document.querySelector('#checklist-settings').textContent,/2 Hinweise ausgeblendet/);
+  w.document.querySelector('#checklist-restore').click();
+  await until(()=>h.calls.some(c=>c.path==='/api/checklist'&&c.method==='PUT'&&c.body.muted.length===0));
+  await until(()=>/Keine Hinweise ausgeblendet/.test(w.document.querySelector('#checklist-settings')?.textContent||''));
+  assert.deepEqual(h.errors,[]);
+});
+test('api tokens are created with role, shown once and deleted after confirmation',async t=>{
+  const h=await harness({settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#token-form'));
+  input(w,'token-form','name','Home Assistant');input(w,'token-form','role','full');
+  submit(w,'token-form');
+  await until(()=>!!w.document.querySelector('#token-plain'));
+  assert.deepEqual(h.calls.find(c=>c.path==='/api/tokens'&&c.method==='POST').body,{name:'Home Assistant',role:'full'});
+  assert.equal(w.document.querySelector('#token-plain').textContent,'kw_synthetic-token-value');
+  assert.match(w.document.querySelector('#token-slot tbody').textContent,/Home AssistantLesen und ändern/);
+  // Nach dem Neuzeichnen ist der Klartext weg.
+  w.confirm=()=>false;w.document.querySelector('[data-delete-token="1"]').click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.some(c=>c.method==='DELETE'),false);
+  w.confirm=()=>true;w.document.querySelector('[data-delete-token="1"]').click();
+  await until(()=>/Noch keine API-Tokens/.test(w.document.querySelector('#token-slot').textContent));
+  assert.equal(w.document.querySelector('#token-plain'),null);
+  assert.deepEqual(h.errors,[]);
+});
+test('device measurement starts, stops with result and saves a name',async t=>{
+  const h=await harness({page:'events',settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
+  await until(()=>!!w.document.querySelector('#measure-start'));
+  w.document.querySelector('#measure-start').click();
+  await until(()=>!!w.document.querySelector('#measure-stop'));
+  assert.match(w.document.querySelector('.measure-running').textContent,/500,250 kWh/);
+  w.document.querySelector('#measure-stop').click();
+  await until(()=>!!w.document.querySelector('#measure-name'));
+  const text=w.document.querySelector('#measure-slot').textContent;
+  assert.match(text,/Mehrverbrauch1,000 kWh/);assert.match(text,/Dauer1:00:00/);assert.match(text,/Mittlere Mehrleistung1\.000 W/);
+  assert.match(text,/0,30 € \(30,00 ct\/kWh\)/);assert.match(text,/keine Geräteerkennung/);
+  input(w,'measure-name','name','Waschmaschine');submit(w,'measure-name');
+  await until(()=>/Waschmaschine/.test(w.document.querySelector('#measure-slot tbody')?.textContent||''));
+  assert.deepEqual(h.calls.find(c=>c.method==='PUT'&&c.path==='/api/device-measurements/7').body,{name:'Waschmaschine'});
+  assert.deepEqual(h.errors,[]);
+});
 
 // --- Diagramme: Tooltip, Fadenkreuz, Zoom und Zeitbalken ---
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));

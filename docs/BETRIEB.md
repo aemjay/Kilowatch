@@ -54,6 +54,17 @@ Das Werkzeug prüft Integrität und Schema, sichert die vorhandene Datenbank als
 > [!WARNING]
 > Nie `docker compose down -v` als Wiederherstellungsschritt: Es löscht das Zugangsdaten-Volume.
 
+## API-Tokens
+
+Unter **Einstellungen → API-Tokens** legst du bis zu zehn Tokens für Skripte an ([API](API.md#api-tokens)). Für den sicheren Umgang gilt:
+
+- Der Klartext erscheint nur einmal direkt nach dem Erstellen. Kilowatch speichert nur den SHA-256-Hash in der Datenbank; ein Token lässt sich daraus nicht zurückgewinnen, nur löschen und neu anlegen.
+- Ein Token ist ein Passwortersatz ohne Ablaufdatum. Es gilt nach Neustarts, nach einem Wechsel des App-Passworts und nach `reset-login` weiter. Lege Tokens in Skripten oder Geheimnisspeichern ab, nicht in geteilten Dateien, und lösche nicht mehr benötigte Tokens. Nach einem Verdacht auf Missbrauch: Tokens löschen und App-Passwort ändern.
+- `read` liest alles, was die Oberfläche zeigt, einschließlich Export und Datenbanksicherung. Wähle `full` nur, wenn das Skript Einstellungen ändern muss.
+- Über HTTP geht das Token unverschlüsselt durchs Heimnetz. Nutze außerhalb eines vertrauenswürdigen Netzes nur HTTPS ([Installation](INSTALLATION.md)).
+- Ungültige Tokens zählen wie Fehlanmeldungen: Nach zehn Fehlversuchen einer Adresse (oder 50 insgesamt) sind Token-Anfragen bis zu 15 Minuten gesperrt, auch mit gültigem Token.
+- Eine zurückgespielte Datenbank bringt die Tokens ihres Sicherungsstands mit. Prüfe danach die Liste.
+
 ## App-Passwort vergessen
 
 Mit Docker-Zugriff auf den Host setzt du nur die Anmeldung zurück, Daten und Zugänge bleiben:

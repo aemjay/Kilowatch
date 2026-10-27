@@ -1,6 +1,6 @@
 # Lokale HTTP-API
 
-Die Oberfläche nutzt dieselbe API wie du: `http://<Host>:8088/api/…`. Zeiten sind UTC-Unixsekunden; Exporte enthalten zusätzlich ISO-Zeiten mit Offset. Es gibt keine automatische Anbindung an andere Dienste.
+Die Oberfläche nutzt dieselbe API wie du: `http://<Host>:8088/api/…`, angemeldet per Sitzungs-Cookie oder [API-Token](#api-tokens). Zeiten sind UTC-Unixsekunden; Exporte enthalten zusätzlich ISO-Zeiten mit Offset. Es gibt keine automatische Anbindung an andere Dienste.
 
 ## Anmeldung
 
@@ -15,6 +15,22 @@ curl -b cookies.txt http://<Host>:8088/api/live
 - `POST`, `PUT`, `PATCH` und `DELETE` brauchen den Header `X-Kilowatch-Request: 1`, ein vorhandener `Origin` muss zum Host passen. Cross-Origin-Zugriff gibt es nicht.
 - Nach zehn fehlgeschlagenen Anmeldungen einer Adresse gilt eine Sperre von bis zu 15 Minuten.
 - Fehlertexte (`detail`) kommen in der Sprache aus dem Header `X-Kilowatch-Language`, sonst der gespeicherten, sonst Deutsch.
+
+## API-Tokens
+
+Für Skripte gibt es Tokens statt Cookie (anlegen unter **Einstellungen → API-Tokens**, höchstens zehn). Sie gelten für alle `/api/`-Endpunkte außer Einrichtung und Anmeldung und überleben Neustarts:
+
+```sh
+curl -H 'Authorization: Bearer kw_…' http://<Host>:8088/api/live
+curl -X PUT -H 'Authorization: Bearer kw_…' -H 'Content-Type: application/json' -d '{"monthly_eur": 90}' http://<Host>:8088/api/budget
+```
+
+- Rolle `read` erlaubt nur `GET`, `full` alles außer Token-Verwaltung (`/api/tokens`), Passwortwechsel und Abmelden.
+- Mit Token entfallen `X-Kilowatch-Request` und die `Origin`-Prüfung, weil kein Cookie beteiligt ist; ein mitgesendetes Cookie wird dann ignoriert. Für Cookie-Aufrufe gilt alles wie oben.
+- Ungültige Tokens: `401`; nach zehn Fehlversuchen einer Adresse `429` für bis zu 15 Minuten. Fehlende Rechte: `403`.
+- Verwaltung nur mit Sitzung: `GET /api/tokens`, `POST /api/tokens` mit `{"name": "…", "role": "read"}` (Antwort enthält einmalig `token`), `DELETE /api/tokens/ID`.
+
+Sicherheitshinweise: [Betrieb](BETRIEB.md#api-tokens).
 
 ## Zeitraum
 
@@ -40,24 +56,32 @@ curl -b cookies.txt http://<Host>:8088/api/live
 | DELETE `/api/credentials/bridge` | Bridge-Passwort entfernen, Erfassung pausieren |
 | POST `/api/bridge/test` | Verbindung lesend prüfen, speichert nichts |
 | GET `/api/discovery/network`, POST `/api/discovery/scan` | Netzvorschlag, lokale Suche (`{"network": "192.168.1.0/24"}`) |
-| GET `/api/live` | letzter Messpunkt, Alter, Status |
+| GET `/api/live` | letzter Messpunkt, Alter, Status; `cost` mit Arbeitspreis und Kostenrate der laufenden Viertelstunde |
 | GET `/api/overview` | Summen, Vorperiode, Serien, Lücken, `co2` (bei gesetztem `grid_country`) |
 | GET `/api/analysis`, `/api/insights` | Muster, Lastdauerlinie, Prognose; Grundlast-Entwicklung, Einspeiseprofil |
 | GET `/api/timeline` | gesamter erfasster Zeitraum in groben Abschnitten (für den Zeitbalken) |
 | GET/PUT `/api/tariffs`, DELETE `/api/tariffs/YYYY-MM-DD` | Tarife |
 | POST `/api/prices/import`, DELETE `/api/prices` | Preis-CSV importieren / alle importierten Preise löschen |
 | PUT `/api/prices/source`, POST `/api/prices/refresh` | Preisquelle (`source`: `""`, `tibber`, `spot`; `zone`, `markup_ct`, `vat_percent`, `tibber_home`, `tibber_token`, `clear_tibber_token`), sofort abrufen; Abruf höchstens alle 30 s |
+| GET `/api/prices/outlook?window_hours=2` | Preise je Viertelstunde für heute und morgen und günstigstes Fenster (1–6 h) ab jetzt; nur bei dynamischem Tarif |
 | POST `/api/market/refresh`, `/api/market/history` | Börsenpreise ansehen / nachladen (höchstens 62 Tage) |
 | POST `/api/simulate` | Tarifsimulation: `{"start", "end", "tariff": {"mode": "fixed\|dual\|spot", …}}` |
-| GET/PUT `/api/budget` | Monatsbudget, Monatsziel, Abschlag |
+| GET/PUT `/api/budget` | Monatsbudget, Monatsziel, Abschlag, `billing_start` (`MM-TT`, Beginn des Abrechnungsjahrs; `GET` liefert dazu `billing`) |
+| GET `/api/meter-readings?dates=2026-10-01,2026-09-01` | Zählerstände 1.8.0/2.8.0 um 00:00 Uhr der Tage (1–31): `import_kwh`, `export_kwh`, `measured_at`, `source` (`sample`/`reconstructed`), `approximate`, `reason` |
 | GET/POST `/api/events`, DELETE `/api/events/ID`, GET `/api/events/ID/comparison` | Ereignisse und Vorperiodenvergleich |
+| GET `/api/device-measurements`, POST `/api/device-measurements/start`, `/stop`, PUT/DELETE `/api/device-measurements/ID` | Gerätemessung: laufende Messung, letzte 100 Ergebnisse (`extra_kwh`, `duration_s`, `mean_w`, `rate_eur_kwh` als Zeitmittel über die Messdauer, `cost_eur`, `status` `done`/`incomplete`), Name setzen (`{"name": "…"}`), löschen |
 | GET/PUT `/api/notifications`, POST `/api/notifications/test/email` | Mail-Regeln und Verlauf, Test |
 | GET/PUT `/api/updates`, POST `/api/updates/check` | Update-Hinweis |
+| GET/PUT `/api/checklist` | offene Einrichtungsschritte (`items` mit `key`, `title`, `text`, `page`) und stummgeschaltete Punkte; `PUT {"muted": ["backup"]}` ersetzt die Liste (`tariff`, `price_source`, `notifications`, `backup`, `update`) |
 | GET `/api/export`, `/api/backup`, `/api/diagnostics` | Export, konsistente Sicherung, Diagnose |
 
 **Einstellungen:** `PUT /api/settings` darf einzelne Felder ändern (`bridge_host`, `bridge_user`, `bridge_password`, `node_id`, `enabled`, Aufbewahrung …). `bridge_host` ist eine lokale IPv4-Adresse oder ein Name ohne Schema, Port und Pfad. Ein leeres `bridge_password` behält das gespeicherte; `GET` meldet stattdessen `password_configured`. `language` (`de`, `en`, `nb`, `sv`, `nl`), `currency` (`EUR`, `NOK`, `SEK`) und `grid_country` (`de`, `nl`, `no`, `se`; leer = aus) gehören ebenfalls dazu.
 
 **Benachrichtigungen:** `PUT /api/notifications` **ersetzt die gesamte Konfiguration**: erst `settings` lesen, dann vollständig zurücksenden. Zusätzlich gelten `smtp_password` und `clear_smtp_password`. Felder und Grenzen stehen im Modell `NotificationSettings` in `app/notifications.py`; Einrichtung: [Benachrichtigungen](BENACHRICHTIGUNGEN.md).
+
+**Kostenrate:** `cost` in `/api/live` enthält `tariff` (bool), `mode`, `rate_eur_kwh` (Arbeitspreis jetzt), `feedin_eur_kwh` (`null` bei 0), `direction` (`import`/`export`) und `eur_per_hour` (Kosten bzw. Erlös, `null` ohne frische Messung oder Preis).
+
+**Preisausblick:** `/api/prices/outlook` liefert `dynamic`, `intervals` (`start`, `end`, `eur_kwh`), `tomorrow_available`, `low_eur_kwh`, `high_eur_kwh` und `cheapest` (`start`, `end`, `average_eur_kwh` oder `null`). Ohne dynamischen Tarif ist `dynamic` falsch und `intervals` leer.
 
 ## Tarif
 

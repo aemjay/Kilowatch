@@ -31,3 +31,48 @@
 .timeline svg text{font-family:inherit;font-size:9px;fill:var(--k-text-97a28f)}.timeline-hint{font-size:9px;color:var(--k-text-8d9985);margin:2px 0 6px}
 @media print{.timeline,.chart-tip{display:none!important}}
 
+/* Übersicht mit Kostenkarte: fünf Kennzahlen. */.cards.cards-5{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media(max-width:1250px){.cards.cards-5{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:980px){.cards.cards-5{grid-template-columns:1fr 1fr}.cards.cards-5>:last-child{grid-column:1/-1}}
+/* Preisampel: drei Stufen mit mindestens 3:1 Kontrast zur Fläche in beiden Schemata. */
+:root{--price-low:#3f7a52;--price-mid:#a06d12;--price-high:#b4472f}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--price-low:#6fbf86;--price-mid:#e0a64e;--price-high:#ee8468}}
+:root[data-theme=dark]{--price-low:#6fbf86;--price-mid:#e0a64e;--price-high:#ee8468}
+@media print{:root,:root[data-theme=dark]{--price-low:#3f7a52;--price-mid:#a06d12;--price-high:#b4472f}}
+.chart rect.price-low{fill:var(--price-low)}.chart rect.price-mid{fill:var(--price-mid)}.chart rect.price-high{fill:var(--price-high)}
+.chart rect.price-current{stroke:var(--ink);stroke-width:1.5}
+.chart rect.price-best{fill:var(--price-low);opacity:.14}
+.price-now{stroke:var(--ink);stroke-width:1;stroke-dasharray:2 2}.chart text.price-now-label{fill:var(--ink);font-weight:650}
+.price-day{stroke:var(--k-line-344146);stroke-width:1;opacity:.5}
+.legend i.price-low{background:var(--price-low)}.legend i.price-mid{background:var(--price-mid)}.legend i.price-high{background:var(--price-high)}
+.price-window{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin-bottom:16px;font-size:12px;color:var(--muted)}
+.price-window strong{color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
+.price-window .segments{width:auto}
+.price-window .segments button{padding:5px 11px}
+/* Zählerstände und Abrechnungsjahr. */
+.form-grid fieldset.field-group{border:0;padding:0;margin:0;min-width:0;font-size:11px;color:var(--k-text-6a7b6b);display:flex;flex-direction:column;gap:7px}
+.field-group legend{padding:0;margin-bottom:7px}
+.field-group small{font-size:10px;color:var(--k-text-8b9787)}
+.field-pair{display:flex;gap:8px}
+.reading-form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.reading-form label{font-size:11px;color:var(--k-text-6a7b6b);display:flex;flex-direction:column;gap:7px;margin:0}
+.reading-form input{padding:9px 12px;background:var(--k-bg-fbfcf9);border:1px solid var(--k-line-dce3d6);border-radius:8px;color:var(--k-text-3b503f)}
+#reading-custom .table-wrap{margin-bottom:18px}
+.copy-button{background:none;padding:2px 6px;border-radius:5px;color:var(--k-text-607751);font-size:13px;line-height:1}
+.copy-button:hover{background:var(--k-bg-f0f3e8)}
+.approx{font-weight:650;color:var(--k-text-8c7038)}
+/* Einrichtungsliste der Übersicht. */
+.checklist{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.checklist li{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--border)}
+.checklist li:last-child{border-bottom:0;padding-bottom:0}
+.checklist strong{font-size:13px}
+.checklist p{font-size:11px;color:var(--muted);margin-top:3px}
+.checklist .button-row{flex-shrink:0;align-items:center}
+.checklist .secondary{padding:7px 12px}
+@media(max-width:680px){.checklist li{flex-direction:column;align-items:flex-start}}
+/* Neu erstelltes API-Token. */
+.token-value{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:10px}
+.token-value code{font-family:Consolas,monospace;font-size:12px;word-break:break-all;background:var(--k-bg-fff);border:1px solid var(--border);border-radius:6px;padding:6px 9px;color:var(--ink)}
+#token-form{margin-top:20px}
+.measure-running strong{font-variant-numeric:tabular-nums}#measure-slot h3{margin-bottom:12px}
+#measure-name{margin-top:18px;margin-bottom:0}

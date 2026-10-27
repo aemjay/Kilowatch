@@ -4,7 +4,9 @@ Grundsätze: nur aus vorhandenen Messintervallen rechnen, Abdeckung immer mit au
 fehlende Daten nie als null behandeln und keine Geräte- oder PV-Eigenverbrauchsaussagen.
 """
 import bisect
+from calendar import monthrange
 from datetime import datetime, timedelta
+import math
 import statistics
 from zoneinfo import ZoneInfo
 
@@ -241,3 +243,170 @@ def household_reference(settings):
     kind, hot_water = settings.get("household_type", "apartment"), bool(settings.get("household_hot_water"))
     return {"annual_kwh": STROMSPIEGEL[(kind, hot_water)][persons - 1], "persons": persons, "type": kind,
             "hot_water": hot_water, "source": REFERENCE_SOURCE}
+
+
+def live_cost(analytics, now, power_w):
+    """Kostenrate aus aktueller Netzleistung und dem Arbeitspreis der laufenden Viertelstunde.
+
+    Bezug kostet Arbeitspreis × Leistung, Einspeisung bringt Einspeisevergütung × Leistung. Eine Vergütung
+    von 0 gilt als nicht hinterlegt. Ohne Leistung (keine frische Messung) nur die Preise.
+    """
+    tariff = analytics.tariff(now)
+    result = {"tariff": tariff is not None, "mode": tariff["mode"] if tariff else None, "rate_eur_kwh": None,
+              "feedin_eur_kwh": None, "direction": None, "eur_per_hour": None}
+    if not tariff:
+        return result
+    if tariff["mode"] == "dynamic":
+        analytics.load_prices(now, now + 1)
+    rate = analytics.rate(now, tariff)
+    feedin = tariff["feedin_eur_kwh"] or None
+    result.update(rate_eur_kwh=rate, feedin_eur_kwh=feedin)
+    if power_w is None:
+        return result
+    if power_w >= 0:
+        result.update(direction="import", eur_per_hour=power_w / 1000 * rate if rate is not None else None)
+    else:
+        result.update(direction="export", eur_per_hour=-power_w / 1000 * feedin if feedin else None)
+    return result
+
+
+def cheapest_window(intervals, first, quarters):
+    """Günstigstes zusammenhängendes Fenster aus `quarters` Viertelstunden, Beginn frühestens bei `first`.
+
+    Mittel über die Zeit (jede Viertelstunde zählt gleich); bei Gleichstand gewinnt das frühere Fenster.
+    """
+    best = None
+    for index in range(len(intervals) - quarters + 1):
+        start = intervals[index]["start"]
+        if start < first or intervals[index + quarters - 1]["start"] != start + (quarters - 1) * 900:
+            continue
+        average = math.fsum(item["eur_kwh"] for item in intervals[index:index + quarters]) / quarters
+        if best is None or average < best["average_eur_kwh"] - 1e-12:
+            best = {"start": start, "end": start + quarters * 900, "average_eur_kwh": average}
+    return best
+
+
+def price_outlook(analytics, now, window_hours):
+    """Bruttopreise je Viertelstunde für heute und morgen (Ortszeit) und das günstigste Fenster ab jetzt.
+
+    Nur bei einem aktuell gültigen dynamischen Tarif; längere Preisintervalle werden auf Viertelstunden verteilt.
+    """
+    zone = analytics.zone
+    today = local_day(now, zone)
+    tomorrow = today + timedelta(days=1)
+    start, middle, end = midnight(today, zone), midnight(tomorrow, zone), midnight(today + timedelta(days=2), zone)
+    current = analytics.tariff(now)
+    result = {"dynamic": bool(current and current["mode"] == "dynamic"), "timezone": zone, "now": now,
+              "current_start": int(now // 900 * 900), "window_hours": window_hours, "start": start, "end": end,
+              "tomorrow_start": middle, "intervals": [], "tomorrow_available": False, "low_eur_kwh": None,
+              "high_eur_kwh": None, "cheapest": None}
+    if not result["dynamic"]:
+        return result
+    analytics.load_prices(start, end)
+    intervals = []
+    for ts in range(int(start), int(end), 900):
+        tariff = analytics.tariff(ts)
+        rate = analytics.rate(ts, tariff) if tariff else None
+        if rate is not None:
+            intervals.append({"start": ts, "end": ts + 900, "eur_kwh": rate})
+    if intervals:
+        rates = [item["eur_kwh"] for item in intervals]
+        result.update(intervals=intervals, low_eur_kwh=min(rates), high_eur_kwh=max(rates),
+                      tomorrow_available=intervals[-1]["start"] >= middle,
+                      cheapest=cheapest_window(intervals, result["current_start"], window_hours * 4))
+    return result
+
+
+def meter_reading(store, at, max_gap):
+    """Zählerstände Bezug und Einspeisung zum Zeitpunkt `at`: der letzte gespeicherte Stand davor.
+
+    Gibt es davor keine Einzelmessung mehr (Aufbewahrung abgelaufen), wird vom dauerhaft gespeicherten letzten
+    Stand rückwärts gerechnet: letzter Stand − Viertelstundenenergie und Lückenenergie seit `at`. Das ist nur
+    möglich, wenn danach kein Zählerwechsel, Rücksprung oder unbekannter Zählersprung liegt.
+    """
+    result = {"at": at, "import_kwh": None, "export_kwh": None, "measured_at": None, "source": None, "approximate": False, "reason": ""}
+    latest = store.latest()
+    if latest and latest["ts"] <= at:
+        sample = latest
+    else:
+        rows = store.rows("SELECT ts,import_kwh,export_kwh FROM samples WHERE ts<=? ORDER BY ts DESC LIMIT 1", (at,))
+        sample = rows[0] if rows else None
+    if sample:
+        crossing = store.rows("SELECT 1 FROM gaps WHERE start<? AND end>? LIMIT 1", (at, at))
+        result.update(import_kwh=sample["import_kwh"], export_kwh=sample["export_kwh"], measured_at=sample["ts"], source="sample",
+                      approximate=bool(crossing) or at - sample["ts"] > max_gap)
+        if result["approximate"]:
+            result["reason"] = "Vor diesem Zeitpunkt liegt eine Messlücke; angegeben ist der letzte Stand davor."
+        return result
+    first = store.rows("SELECT MIN(ts) AS ts FROM buckets WHERE resolution=900")[0]["ts"]
+    if not latest or first is None or first > at:
+        result["reason"] = "Keine Messwerte vor diesem Zeitpunkt."
+        return result
+    # Unbekannte Mengen (Zählerwechsel, Rücksprung, Sprung) verhindern eine Rückrechnung.
+    gaps = store.rows("SELECT start,end,import_kwh,export_kwh FROM gaps WHERE end>?", (at,))
+    sums = store.rows("SELECT SUM(import_kwh) AS import_kwh, SUM(export_kwh) AS export_kwh FROM buckets WHERE resolution=900 AND ts>=?", (at,))[0]
+    values = {}
+    for field in ("import_kwh", "export_kwh"):
+        if latest[field] is None or any(gap[field] is None for gap in gaps):
+            values[field] = None
+        else:
+            values[field] = latest[field] - (sums[field] or 0) - sum(gap[field] for gap in gaps)
+    if values["import_kwh"] is None and values["export_kwh"] is None:
+        result["reason"] = "Rohwerte gelöscht und Zählerwechsel oder Rücksprung danach; Stand nicht rekonstruierbar."
+        return result
+    crossing = [gap for gap in gaps if gap["start"] < at]
+    result.update(values, source="reconstructed", approximate=True, measured_at=crossing[0]["start"] if crossing else None)
+    result["reason"] = "Aus dem letzten Zählerstand und der seither erfassten Energie zurückgerechnet (Rohwerte gelöscht)."
+    return result
+
+
+def billing_months(start, today):
+    """Volle Monate seit Beginn des Abrechnungsjahrs; ein Beginn am 29.–31. zählt in kürzeren Monaten am Monatsletzten."""
+    months = (today.year - start.year) * 12 + today.month - start.month
+    due = min(start.day, monthrange(today.year, today.month)[1])
+    return max(0, months - (1 if today.day < due else 0))
+
+
+def billing_year(analytics, now, budget):
+    """Laufendes Abrechnungsjahr: bisherige Kosten, Hochrechnung bis zum Ende, Abschläge und Empfehlung.
+
+    Gemessene Zeit zählt mit ihren erfassten Kosten; nicht erfasste Zeit im bisherigen Jahr und der Rest bis zum
+    Ende werden mit der Jahreshochrechnung (mittlerer Tagesverbrauch × Arbeitspreis der letzten 30 Tage +
+    Grundpreis) ergänzt. Ohne deren Datenbasis gibt es keine Zahlen.
+    """
+    text = budget.get("billing_start")
+    if not text:
+        return None
+    zone = analytics.zone
+    today = local_day(now, zone)
+    month, day = int(text[:2]), int(text[3:])
+    start = today.replace(month=month, day=day) if (month, day) <= (today.month, today.day) else today.replace(year=today.year - 1, month=month, day=day)
+    end = start.replace(year=start.year + 1)
+    start_ts, end_ts = midnight(start, zone), midnight(end, zone)
+    abschlag = budget.get("abschlag_eur")
+    months = billing_months(start, today)
+    result = {"start": start.isoformat(), "end": end.isoformat(), "available": False, "months_elapsed": months,
+              "abschlag_eur": abschlag, "paid_eur": abschlag * months if abschlag else None}
+    observed = analytics.summary(start_ts, now)
+    result.update(observed_eur=observed["known_cost_eur"], observed_kwh=observed["import_kwh"], coverage=observed["coverage"])
+    annual = annual_projection(analytics, now, None)
+    if not annual["available"]:
+        result["reason"] = annual["reason"]
+        return result
+    if observed["tariff_missing"]:
+        result["reason"] = "Für Teile des Abrechnungsjahrs fehlt ein Tarif."
+        return result
+    tariff = analytics.tariff(now)
+    # Energiekosten je Tag aus der Jahreshochrechnung, ohne Grundpreis.
+    daily_eur = (annual["annual_eur"] - tariff["base_month"] * 12) / 365.25
+    missing_days = max(0.0, (now - start_ts) * (1 - observed["coverage"]) / 86400)
+    remaining = max(0.0, end_ts - now) / 86400 * daily_eur + tariff["base_month"] * analytics.base_factor(now, end_ts)
+    filled = missing_days * daily_eur
+    total = observed["known_cost_eur"] + filled + remaining
+    result.update(available=True, projected_eur=total, remaining_eur=remaining, filled_eur=filled, valid_days=annual["valid_days"],
+                  recommended_abschlag_eur=round(total / 12))
+    result["method"] = ("Erfasste Kosten seit Beginn + Hochrechnung für nicht erfasste Zeit und den Rest des Jahres "
+                         "(mittlerer Tagesverbrauch × Arbeitspreis der letzten 30 Tage + Grundpreis). Einspeisung nur im erfassten Teil.")
+    if abschlag:
+        result["difference_eur"] = total - abschlag * 12
+    return result

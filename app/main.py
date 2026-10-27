@@ -23,7 +23,7 @@ from .bridge import Bridge, validate_host
 from .collector import Collector
 from .config import Config
 from .storage import Store
-from .security import Auth, Vault, private_write
+from .security import Auth, Tokens, Vault, private_write
 from .notifications import NotificationSettings, Notifications
 from .discovery import Discovery, suggestions
 from .market import Market
@@ -31,6 +31,8 @@ from .updates import Updates
 from .grid import COUNTRIES, Grid
 from . import prices as price_feed
 from . import insights
+from . import checklist as setup_checklist
+from .measure import Measurements
 from .i18n import CURRENCIES, LANGUAGES, UserError, translate_error
 
 
@@ -268,6 +270,63 @@ class Budget(StrictModel):
     monthly_eur: float | None = Field(default=None, gt=0, le=100000)
     monthly_kwh: float | None = Field(default=None, gt=0, le=1000000)
     abschlag_eur: float | None = Field(default=None, gt=0, le=100000)
+    billing_start: str | None = None
+
+    @field_validator("billing_start")
+    @classmethod
+    def billing_day(cls, value):
+        # MM-DD; der 29. Februar fehlt in den meisten Jahren und ist daher nicht erlaubt.
+        if value is not None:
+            try:
+                if len(value) != 5 or value[2] != "-":
+                    raise ValueError()
+                date(2001, int(value[:2]), int(value[3:]))
+            except ValueError:
+                raise ValueError("Beginn des Abrechnungsjahrs: gültiger Tag und Monat (nicht 29.02.).") from None
+        return value
+
+
+class TokenCreate(StrictModel):
+    name: str = Field(min_length=1, max_length=60)
+    role: str
+
+    @field_validator("name")
+    @classmethod
+    def plain_name(cls, value):
+        value = value.strip()
+        if not value or any(ord(c) < 32 for c in value):
+            raise ValueError("Name ohne Steuerzeichen angeben.")
+        return value
+
+    @field_validator("role")
+    @classmethod
+    def known_role(cls, value):
+        if value not in Tokens.ROLES:
+            raise ValueError("Rolle muss read oder full sein.")
+        return value
+
+
+class MeasurementName(StrictModel):
+    name: str = Field(max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def plain_name(cls, value):
+        value = value.strip()
+        if any(ord(c) < 32 for c in value):
+            raise ValueError("Name ohne Steuerzeichen angeben.")
+        return value
+
+
+class ChecklistMute(StrictModel):
+    muted: list[str] = Field(max_length=len(setup_checklist.KEYS))
+
+    @field_validator("muted")
+    @classmethod
+    def known_keys(cls, value):
+        if any(key not in setup_checklist.KEYS for key in value):
+            raise ValueError("Unbekannter Punkt der Einrichtungsliste.")
+        return sorted(set(value))
 
 
 class HistoryRequest(StrictModel):
@@ -318,6 +377,8 @@ def create_app(config=None):
     store = Store(folder)
     vault = Vault(config.secrets_folder)
     auth = Auth(config.secrets_folder)
+    tokens = Tokens(store)
+    measurements = Measurements(store)
 
     def get_password():
         return vault.get("bridge_password")
@@ -358,18 +419,38 @@ def create_app(config=None):
         Parallele Anfragen zählen sofort mit. Bei Erfolg gibt forget_attempts() die Adresse frei.
         """
         now = time.time()
-        key = (kind, request.client.host if request.client else "unknown")
+        key = attempt_key(kind, request)
         with attempt_lock:
-            # Abgelaufene Einträge entfernen, damit das Dict nicht wächst.
-            for other in list(attempts):
-                attempts[other] = [t for t in attempts[other] if now - t < ATTEMPT_WINDOW]
-                if not attempts[other]:
-                    attempts.pop(other)
-            total = sum(len(times) for (other, _), times in attempts.items() if other == kind)
-            if len(attempts.get(key, [])) >= ATTEMPTS_PER_ADDRESS or total >= ATTEMPTS_TOTAL:
+            if attempts_exhausted(key, now):
                 raise HTTPException(429, message)
             attempts.setdefault(key, []).append(now)
         return key
+
+    def attempt_key(kind, request):
+        return kind, request.client.host if request.client else "unknown"
+
+    def attempts_exhausted(key, now):
+        """Unter attempt_lock aufrufen: zu viele Fehlversuche je Adresse oder insgesamt für diese Art?"""
+        # Abgelaufene Einträge entfernen, damit das Dict nicht wächst.
+        for other in list(attempts):
+            attempts[other] = [t for t in attempts[other] if now - t < ATTEMPT_WINDOW]
+            if not attempts[other]:
+                attempts.pop(other)
+        total = sum(len(times) for (other, _), times in attempts.items() if other == key[0])
+        return len(attempts.get(key, [])) >= ATTEMPTS_PER_ADDRESS or total >= ATTEMPTS_TOTAL
+
+    def check_token(request, value):
+        """API-Token prüfen. Nur Fehlversuche zählen; während einer Sperre wird gar nicht geprüft."""
+        key, now = attempt_key("token", request), time.time()
+        with attempt_lock:
+            if attempts_exhausted(key, now):
+                raise HTTPException(429, "Zu viele ungültige API-Tokens. In 15 Minuten erneut versuchen.")
+        entry = tokens.verify(value, now)
+        if entry is None:
+            with attempt_lock:
+                attempts.setdefault(key, []).append(now)
+            raise HTTPException(401, "API-Token ungültig.")
+        return entry
 
     def forget_attempts(key):
         with attempt_lock:
@@ -423,14 +504,28 @@ def create_app(config=None):
     @app.middleware("http")
     async def guard(request: Request, call_next):
         path = request.url.path
-        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
-            origin = request.headers.get("origin")
-            if request.headers.get("x-kilowatch-request") != "1" or (origin and urlparse(origin).netloc != request.headers.get("host")):
-                return failure(request, 403, "Ungültiger Anfrageursprung.")
-        if path.startswith("/api/") and path not in ("/api/login", "/api/setup/status", "/api/setup"):
-            token = request.cookies.get("kilowatch_session")
-            if sessions.get(token, 0) <= time.time():
-                return failure(request, 401, "Bitte anmelden.")
+        protected = path.startswith("/api/") and path not in ("/api/login", "/api/setup/status", "/api/setup")
+        bearer = request.headers.get("authorization", "")
+        if protected and bearer[:7].lower() == "bearer ":
+            # API-Token statt Cookie: Der Browser sendet diesen Kopf nie von selbst, daher keine CSRF-Prüfung.
+            # Ein zusätzlich mitgesendetes Cookie wird ignoriert.
+            try:
+                entry = await asyncio.to_thread(check_token, request, bearer[7:].strip())
+            except HTTPException as exc:
+                return failure(request, exc.status_code, exc.detail)
+            if path in ("/api/tokens", "/api/account/password", "/api/logout") or path.startswith("/api/tokens/"):
+                return failure(request, 403, "Nur mit angemeldeter Sitzung möglich.")
+            if entry["role"] == "read" and request.method not in ("GET", "HEAD"):
+                return failure(request, 403, "Dieses API-Token darf nur lesen.")
+        else:
+            if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+                origin = request.headers.get("origin")
+                if request.headers.get("x-kilowatch-request") != "1" or (origin and urlparse(origin).netloc != request.headers.get("host")):
+                    return failure(request, 403, "Ungültiger Anfrageursprung.")
+            if protected:
+                token = request.cookies.get("kilowatch_session")
+                if sessions.get(token, 0) <= time.time():
+                    return failure(request, 401, "Bitte anmelden.")
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -508,6 +603,20 @@ def create_app(config=None):
         response.delete_cookie("kilowatch_session")
         return response
 
+    @app.get("/api/tokens")
+    def list_tokens():
+        return {"tokens": tokens.list(), "limit": Tokens.LIMIT}
+
+    @app.post("/api/tokens")
+    def create_token(data: TokenCreate):
+        return tokens.create(data.name, data.role, time.time())
+
+    @app.delete("/api/tokens/{token_id}")
+    def delete_token(token_id: int):
+        if not tokens.delete(token_id):
+            raise HTTPException(404, "API-Token nicht gefunden.")
+        return {"ok": True}
+
     @app.get("/api/settings")
     def settings():
         saved = store.settings()
@@ -566,10 +675,15 @@ def create_app(config=None):
     @app.get("/api/live")
     def live():
         latest = store.latest()
-        age = time.time() - latest["ts"] if latest else None
-        return {"reading": latest, "age_seconds": age, "stale": age is None or age > 30,
+        now = time.time()
+        age = now - latest["ts"] if latest else None
+        stale = age is None or age > 30
+        # Kostenrate nur aus einer frischen Messung; die Preise der laufenden Viertelstunde immer.
+        power = latest.get("power_w") if latest and not stale else None
+        return {"reading": latest, "age_seconds": age, "stale": stale,
                 "collector": collector.status, "diagnostics": collector.diagnostics,
-                "obis": store.state("last_obis", {}), "demo": config.demo}
+                "obis": store.state("last_obis", {}), "demo": config.demo,
+                "cost": insights.live_cost(Analytics(store), now, power)}
 
     @app.get("/api/discovery/network")
     async def discovery_network(request: Request):
@@ -676,6 +790,12 @@ def create_app(config=None):
         await feed.refresh()
         return price_feed_state()
 
+    @app.get("/api/prices/outlook")
+    def price_outlook(window_hours: int = 2):
+        if not 1 <= window_hours <= 6:
+            raise ValueError("Fensterlänge: 1 bis 6 Stunden.")
+        return insights.price_outlook(Analytics(store), time.time(), window_hours)
+
     @app.post("/api/prices/refresh")
     async def refresh_prices():
         if not feed.config()["source"]:
@@ -717,6 +837,7 @@ def create_app(config=None):
         a, now = Analytics(store), time.time()
         return {"settings": Budget(**saved).model_dump(), "month": insights.month_budget(a, now, saved),
                 "annual": insights.annual_projection(a, now, saved.get("abschlag_eur")),
+                "billing": insights.billing_year(a, now, saved),
                 "reference": insights.household_reference(store.settings())}
 
     @app.put("/api/budget")
@@ -724,6 +845,36 @@ def create_app(config=None):
         store.set_state("budget", data.model_dump())
         notifier.wakeup.set()
         return {"ok": True}
+
+    @app.get("/api/meter-readings")
+    def meter_readings(dates: str):
+        settings = store.settings()
+        zone, now = settings["timezone"], time.time()
+        days = []
+        for text in dates.split(","):
+            try:
+                days.append(date.fromisoformat(text.strip()))
+            except ValueError:
+                raise ValueError("Datum im Format JJJJ-MM-TT erwarten.") from None
+        if not 1 <= len(days) <= 31:
+            raise ValueError("1 bis 31 Daten je Abfrage.")
+        max_gap = settings["max_gap_seconds"]
+        result = []
+        for day in days:
+            at = midnight(day, zone)
+            if at > now:
+                raise ValueError("Datum liegt in der Zukunft.")
+            result.append(dict(insights.meter_reading(store, at, max_gap), date=day.isoformat()))
+        return {"timezone": zone, "readings": result, "raw_retention_days": settings["raw_retention_days"]}
+
+    @app.get("/api/checklist")
+    def checklist():
+        return setup_checklist.checklist(store, notifier, feed, updates, config.demo)
+
+    @app.put("/api/checklist")
+    def mute_checklist(data: ChecklistMute):
+        store.set_state("checklist_muted", data.muted)
+        return setup_checklist.checklist(store, notifier, feed, updates, config.demo)
 
     @app.post("/api/market/history")
     async def market_history(data: HistoryRequest):
@@ -797,6 +948,34 @@ def create_app(config=None):
     def delete_event(event_id: int):
         with store.transaction():
             store.conn.execute("DELETE FROM events WHERE id=?", (event_id,))
+        return {"ok": True}
+
+    @app.get("/api/device-measurements")
+    def device_measurements():
+        return measurements.overview()
+
+    @app.post("/api/device-measurements/start")
+    def start_measurement():
+        return measurements.start()
+
+    @app.post("/api/device-measurements/stop")
+    def stop_measurement():
+        return measurements.stop()
+
+    @app.put("/api/device-measurements/{measurement_id}")
+    def name_measurement(measurement_id: int, data: MeasurementName):
+        try:
+            measurements.rename(measurement_id, data.name)
+        except LookupError:
+            raise HTTPException(404, "Messung nicht gefunden.") from None
+        return {"ok": True}
+
+    @app.delete("/api/device-measurements/{measurement_id}")
+    def delete_measurement(measurement_id: int):
+        try:
+            measurements.delete(measurement_id)
+        except LookupError:
+            raise HTTPException(404, "Messung nicht gefunden.") from None
         return {"ok": True}
 
     @app.get("/api/events/{event_id}/comparison")
