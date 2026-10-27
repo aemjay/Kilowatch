@@ -14,12 +14,12 @@ Der [GitHub-Workflow](../.github/workflows/nas-image.yml) führt beides aus, pr�
 | Bereich | Geprüft |
 |---|---|
 | Messung | SML und CRC, Skalierung, Vorzeichen, T1/T2 ohne Doppelzählung, Energiebilanz, Lücken ohne erfundene Werte, Zählerwechsel |
-| Zeit und Kosten | 23-/25-Stunden-Tage, Tarifwechsel, HT/NT, negative und fehlende Preise, dynamische Preisquellen |
-| Sicherheit | Anmeldung, Sitzungen, Sperre, Ursprungsprüfung, verschlüsselte Zugangsdaten, Passwort-Rücksetzung |
+| Zeit und Kosten | 23-/25-Stunden-Tage, Tarifwechsel, HT/NT, negative und fehlende Preise, dynamische Preisquellen, Kostenrate und Preisampel, Zählerstände je Stichtag, Abrechnungsjahr, Gerätemessung |
+| Sicherheit | Anmeldung, Sitzungen, Sperre, Ursprungsprüfung, verschlüsselte Zugangsdaten, Passwort-Rücksetzung, API-Tokens mit Rollen und Sperre |
 | Netzwerk | Gerätenamen mit wechselnden DNS-Antworten, Gerätesuche, Abweisen öffentlicher Ziele |
 | Betrieb | Sicherung und Wiederherstellung, Migrationen mit Vorab-Sicherung, Installations- und Update-Skript inklusive Rollback |
 | Benachrichtigungen | SMTP-Sicherheit, Regeln, Ruhezeiten, Wiederholungen, Test-Begrenzung (mit simulierter Gegenstelle) |
-| Oberfläche | Einrichtung, Formulare, Tooltips, Zeitbalken und Zoom, Farbschema, Sprachen, App-Installation, Dokumentationslinks |
+| Oberfläche | Einrichtung, Checkliste, Formulare, Tooltips, Zeitbalken und Zoom, Farbschema, Sprachen, App-Installation, Dokumentationslinks |
 
 > [!NOTE]
 > Echte E-Mail-Zustellung, Gerätesuche im echten Netz und Touch-Gesten auf echten Geräten deckt die Automatik nicht ab.
