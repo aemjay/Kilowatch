@@ -14,7 +14,7 @@ const settings={name:'Synthetic home',bridge_host:'',bridge_user:'admin',passwor
 const notification={settings:{enabled:false,email_enabled:false,smtp_host:'',smtp_port:587,
   smtp_security:'starttls',smtp_user:'',smtp_from:'',smtp_from_name:'Kilowatch',subject_code:'',email_to:[],quiet_enabled:false,quiet_start:'22:00',
   quiet_end:'07:00',recovery:true,cooldown_minutes:60,offline_enabled:true,offline_seconds:120,
-  load_enabled:false,load_w:3000,load_minutes:10,daily_kwh:0,battery_enabled:true,battery_v:2.7,
+  load_enabled:false,load_minutes:10,daily_kwh:0,battery_enabled:true,battery_v:2.7,
   disk_enabled:true,disk_free_mb:512},history:[],last_error:'',smtp_password_configured:false};
 
 async function until(condition) {
@@ -754,4 +754,34 @@ test('ctrl+wheel and dragging inside the chart zoom and pan the same window',asy
   const dragged=windowCalls(h).slice(-1)[0];
   assert.ok(Number(dragged.since)<Number(call.since),'Ziehen nach rechts zeigt früher Liegendes');
   assert.ok(Math.abs((Number(dragged.until)-Number(dragged.since))-span)<90,'Länge bleibt');
+});
+
+
+test('one high-load limit: settings field, alarm note and no chart line when it is off',async t=>{
+  const h=await harness({page:'settings',settings:{setup_required:false,high_load_w:4500}});t.after(()=>h.dom.window.close());const {w}=h;
+  assert.equal(w.document.querySelector('#settings-form [name="high_load_w"]'),null);
+  const field=w.document.querySelector('#analysis-form [name="high_load_w"]');
+  assert.equal(field.value,'4500');
+  field.value='';submit(w,'analysis-form');
+  const limitSaved=()=>h.calls.find(call=>call.path==='/api/settings'&&call.method==='PUT'&&'high_load_w' in call.body);
+  await until(()=>!!limitSaved());
+  assert.deepEqual(limitSaved().body,{high_load_w:0});
+  await until(()=>h.settings.high_load_w===0);
+  // Ohne Grenze: Benachrichtigungen bieten den Dauerlast-Alarm nicht an und senden ihn als aus.
+  w.location.hash='#notifications';
+  await until(()=>!!w.document.querySelector('#notification-form'));
+  const note=w.document.querySelector('#notification-form .field-note').textContent;
+  assert.match(note,/Grenze hohe Last/);assert.match(note,/aus/);
+  assert.equal(w.document.querySelector('#notification-form select[name="load_enabled"]'),null);
+  assert.equal(w.document.querySelector('#notification-form [name="load_w"]'),null);
+  w.document.getElementById('notification-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await until(()=>h.calls.some(call=>call.path==='/api/notifications'&&call.method==='PUT'));
+  const body=h.calls.find(call=>call.path==='/api/notifications'&&call.method==='PUT').body;
+  assert.equal(body.load_enabled,false);assert.equal('load_w' in body,false);
+  // Diagramme bieten die Linie nicht mehr an.
+  w.location.hash='#history';
+  await until(()=>!!w.document.querySelector('[data-overlay-chart="power"]'));
+  const toggles=[...w.document.querySelectorAll('[data-overlay-chart="power"] input')].map(input=>input.value);
+  assert.equal(toggles.includes('highload'),false);
+  assert.deepEqual(h.errors,[]);
 });

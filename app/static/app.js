@@ -162,9 +162,15 @@ function previousOverlay(data, isShort) {
   return {label,kind:'bars',points:data.series.energy.map((item,i)=>({x:item.ts,y:p.series.energy[i]?.import_kwh??null})).filter(q=>q.y!=null)};
 }
 
+// Grenze hohe Last aus den Einstellungen; ohne Grenze wird weder Linie noch Schalter angeboten.
+function highLoadReference() {
+  const watts=settings.high_load_w||null;
+  return {key:'highload', label:t('Grenze hohe Last {watts}',{watts:unit(watts,'W',0)}), value:watts};
+}
+
 function powerPanel(data) {
   const isShort = ['minute','quarter'].includes(data.series.group), resolution = data.series.power_resolution_seconds, raw = resolution === 0;
-  const highLoad = {key:'highload', label:t('Grenze hohe Last {watts}',{watts:unit(settings.high_load_w,'W',0)}), value:settings.high_load_w};
+  const highLoad = highLoadReference();
   const baseline=data.targets?.baseline_w??null, group=data.series.group;
   const spec = isShort
     ? {chart:'power', data:data.series.power, field:'power_w', xField:'ts', gapLimit:raw?120:resolution*2.5, ...powerWindow(resolution), previous:previousOverlay(data,true),
@@ -294,7 +300,7 @@ function profileChart(rows) {
 function durationChart(data) {
   const spec={chart:'duration', trends:false, data:data.duration_curve, field:'power_w', xField:'hours',
     references:[{key:'baseline', label:t('Nachtgrundlast {watts}',{watts:unit(data.baseline_w,'W',0)}), value:data.baseline_w},
-                {key:'highload', label:t('Grenze hohe Last {watts}',{watts:unit(settings.high_load_w,'W',0)}), value:settings.high_load_w}]};
+                highLoadReference()]};
   return overlayToggles(spec)+lineChart(data.duration_curve,'power_w','W','hours',{overlays:buildOverlays(spec)});
 }
 
@@ -302,7 +308,7 @@ function renderAnalysis(data, base) {
   const forecast=data.forecast;
   const s=base.summary, recorded=s.coverage*(s.end-s.start), meanW=s.allocated_import_kwh!=null&&recorded>0?s.allocated_import_kwh*3600000/recorded:null;
   const band=forecast.available&&forecast.high_kwh-forecast.low_kwh>=1?t('{low} – {high} kWh Band',{low:number(forecast.low_kwh,0),high:number(forecast.high_kwh,0)}):forecast.available?t('Mittel gleicher Wochentage'):t('Noch keine belastbare Datenbasis');
-  const cards=`<div class="cards">${metric(t('Nachtgrundlast (P10)'),number(data.baseline_w,0),'W',t('{count} ausreichend erfasste Nachtintervalle',{count:data.night_quarters}),'☾',true)}${metric(t('Mittlere Leistung'),number(meanW,0),'W',t('Netzbezug je erfasster Stunde im Zeitraum'),'▥')}${metric(t('Hohe Last'),number(s.high_load_hours,2),'h',t('Intervallmittel ≥ {watts}',{watts:unit(settings.high_load_w,'W',0)}),'↗')}${metric(t('Monatsprognose'),number(forecast.available?forecast.expected_kwh:null,0),'kWh',band,'⌁')}</div><p class="copy-footnote cards-note">${esc(t(forecast.available?forecast.method:forecast.reason))}</p>`;
+  const cards=`<div class="cards">${metric(t('Nachtgrundlast (P10)'),number(data.baseline_w,0),'W',t('{count} ausreichend erfasste Nachtintervalle',{count:data.night_quarters}),'☾',true)}${metric(t('Mittlere Leistung'),number(meanW,0),'W',t('Netzbezug je erfasster Stunde im Zeitraum'),'▥')}${s.high_load_w?metric(t('Hohe Last'),number(s.high_load_hours,2),'h',t('Intervallmittel ≥ {watts}',{watts:unit(s.high_load_w,'W',0)}),'↗'):metric(t('Leistungsspitze'),number(s.peak_w==null?null:s.peak_w/1000,2),'kW',t('Höchste erfasste Momentanleistung'),'⌁')}${metric(t('Monatsprognose'),number(forecast.available?forecast.expected_kwh:null,0),'kWh',band,'⌁')}</div><p class="copy-footnote cards-note">${esc(t(forecast.available?forecast.method:forecast.reason))}</p>`;
   const anomaly=data.anomalies.map(a=>`<div class="insight"><span class="insight-icon">◉</span><div><h3>${esc(t(a.title))}</h3><p>${esc(t(a.text,numberParams(a.params)))}</p></div></div>`).join('');
   const profile=profileChart(data.profile);
   $('#page-analysis').innerHTML=cards+panel(t('Stundenmuster'),'',heatmap(data.heatmap))+`<div class="grid-two"><div>${panel(t('Lastdauerlinie'),t('Erfasste Viertelstundenmittel nach Höhe sortiert'),durationChart(data))}${panel(t('Auffälligkeiten'),'',anomaly)}</div><div>${panel(t('Tagesverlauf'),t('Mittlere Netzleistung je Stunde'),profile.html,profile.legend)}</div></div>`;

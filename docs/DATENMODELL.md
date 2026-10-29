@@ -70,7 +70,7 @@ Betrag = **bekannte Energiekosten + zeitanteiliger Grundpreis − Einspeiseerlö
 | Nachtgrundlast | 10. Perzentil der Viertelstundenmittel von 00–05 Uhr, mindestens zwölf Intervalle mit ≥ 80 % Abdeckung |
 | Grundlast-Entwicklung | wie oben je Woche (bei mehr als 120 Tagen Zeitraum je Monat); Jahreswert = Grundlast × 8766 h, Kosten mit dem Arbeitspreis der letzten sieben Tage |
 | Lastdauerlinie | ausreichend erfasste Viertelstundenmittel nach Höhe sortiert |
-| Hohe Last | Summe der Intervalle über der eingestellten Schwelle; ändert sich die Schwelle, bleibt die Vergangenheit unverändert |
+| Hohe Last | erfasste Zeit der Viertelstunden (in Minutenansichten Minuten), deren mittlere Leistung die Grenze hohe Last erreicht; bei jeder Abfrage neu gerechnet, eine geänderte Grenze gilt daher auch rückwirkend. Ohne Grenze entfällt die Auswertung |
 | Tagesprofile | Bezug je erfasster Stunde, getrennt nach Werktag und Wochenende |
 | Nachtauffälligkeit | Nachtmedian der letzten sieben gegen die sieben Tage davor (mind. 24 Viertelstunden je Fenster); Hinweis ab mehr als 80 W und 30 % Anstieg, keine Geräteerkennung |
 | Prognose | Mittel gleicher Wochentage aus 28 Tagen; nötig sind mindestens sieben Tage mit ≥ 98 % Abdeckung. Das Band ist heuristisch |

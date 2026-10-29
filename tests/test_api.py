@@ -210,3 +210,26 @@ def test_overview_offers_baseline_and_previous_series_on_request(authenticated):
     series = compared["previous"]["series"]
     assert series["group"] == "quarter" and series["power"]
     assert compared["previous"]["start"] == int(now - 7200) and all(int(now - 7200) <= p["ts"] < int(now - 3600) for p in series["power"])
+
+
+def test_high_load_hours_follow_the_current_limit_and_can_be_switched_off(authenticated):
+    from app.analytics import midnight
+    db = authenticated.app_store
+    db.update_settings({"max_gap_seconds": 1000})
+    start = midnight("2026-10-20", "Europe/Berlin")
+    kwh = 10.0
+    # Zwei Stunden mit 2 kW, danach zwei Stunden mit 500 W, als Viertelstundenwerte.
+    for index in range(17):
+        watts = 2000 if index < 8 else 500
+        kwh += watts * 900 / 3600000
+        db.ingest(Reading(watts, kwh, 0, "SYNTHETIC"), start + index * 900)
+    query = f"/api/overview?since={int(start)}&until={int(start + 4 * 3600)}"
+    assert authenticated.get(query).json()["summary"]["high_load_hours"] == 0
+    assert authenticated.put("/api/settings", json={"high_load_w": 1500}).status_code == 200
+    summary = authenticated.get(query).json()["summary"]
+    # Sieben Viertelstunden liegen ganz bei 2 kW; der Übergang auf 500 W hat im Mittel 1250 W und zählt nicht.
+    assert summary["high_load_w"] == 1500 and summary["high_load_hours"] == pytest.approx(1.75, abs=.01)
+    assert authenticated.put("/api/settings", json={"high_load_w": 0}).status_code == 200
+    summary = authenticated.get(query).json()["summary"]
+    assert summary["high_load_w"] is None and summary["high_load_hours"] is None
+    assert authenticated.put("/api/settings", json={"high_load_w": 50}).status_code in (400, 422)
