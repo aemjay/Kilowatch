@@ -50,11 +50,12 @@ function simulationResult(r) {
   return `<div class="divider"></div><div class="stats-list">${lines.join('')}</div>${difference}${spotNote}<p class="copy-footnote">${t('Annahme: gleicher Verbrauch zur gleichen Zeit. Eine Verhaltensänderung durch den anderen Tarif ist nicht berücksichtigt.')}</p>`;
 }
 
-// Grundlast-Entwicklung mit gleitendem Ø und Min/Max über vier Wochen bzw. drei Monate.
+// Grundlast-Entwicklung mit Ø und gleitendem Ø über vier Wochen bzw. drei Monate.
 function baselineChart(trend, bars) {
   const week=trend.group==='week';
+  if(!bars.some(bar=>bar.baseline_w!=null))return empty(t('Noch zu wenig Nachtdaten.'),t('Je Woche sind mindestens {count} erfasste Nachtviertelstunden nötig.',{count:trend.min_quarters}));
   const spec={chart:'baseline-'+trend.group, data:bars, field:'baseline_w', xField:'ts', byCount:true, window:week?4:3, windowLabel:week?t('4 Wochen'):t('3 Monate')};
-  return overlayToggles(spec)+barChart(bars,'baseline_w','W',buildOverlays(spec));
+  return overlayToggles(spec)+barChart(bars,'baseline_w','W',buildOverlays(spec),false,{group:week?'day':'month'});
 }
 
 function mountSimulation(data) {
@@ -197,9 +198,12 @@ async function mountMeterReadings() {
   const slot=$('#meter-slot');if(!slot)return;
   const data=await api('/api/meter-readings?dates='+monthFirsts(13).join(',')).catch(error=>{toast(error.message,true);return null;});
   if(!data||!slot.isConnected)return;
+  // Stichtage vor der ersten Messung bringen nichts; nur Stände oder echte Hinweise zeigen.
+  const rows=data.readings.filter(r=>r.import_kwh!=null||r.export_kwh!=null||r.reason!=='Keine Messwerte vor diesem Zeitpunkt.');
+  const hidden=data.readings.length-rows.length;
   const retention=data.raw_retention_days?t('Einzelmessungen werden {days} Tage aufbewahrt; ältere Stände rechnet Kilowatch aus dem letzten Stand und der seither erfassten Energie zurück (≈). Ein Zählerwechsel oder Rücksprung danach macht das unmöglich.',{days:data.raw_retention_days}):t('Einzelmessungen werden unbegrenzt aufbewahrt.');
   const form=`<form id="reading-form" class="reading-form"><label>${t('Stand am …')}<input type="date" name="date" max="${today()}" required></label><button class="secondary" type="submit">${t('Anzeigen')}</button></form><div id="reading-custom"></div>`;
-  slot.innerHTML=panel(t('Zählerstände'),t('Jeweils 00:00 Uhr am Stichtag · {zone}',{zone:data.timezone}),form+readingTable(data.readings)+`<p class="copy-footnote">${esc(t('Zählerstand zu einem Zeitpunkt = letzter gespeicherter Stand davor. ≈ kennzeichnet einen Stand mit Messlücke davor oder einen zurückgerechneten Wert.'))} ${esc(retention)}</p>`);
+  slot.innerHTML=panel(t('Zählerstände'),t('Jeweils 00:00 Uhr am Stichtag · {zone}',{zone:data.timezone}),form+(rows.length?readingTable(rows):empty(t('Noch kein Zählerstand zu einem Monatsersten.'),t('Der erste Stichtag folgt mit dem nächsten Monatsbeginn.')))+(hidden?`<p class="copy-footnote">${esc(t('{count} Stichtag(e) vor der ersten Messung ausgeblendet.',{count:hidden}))}</p>`:'')+`<p class="copy-footnote">${esc(t('Zählerstand zu einem Zeitpunkt = letzter gespeicherter Stand davor. ≈ kennzeichnet einen Stand mit Messlücke davor oder einen zurückgerechneten Wert.'))} ${esc(retention)}</p>`);
   bindCopy(slot);
   $('#reading-form').addEventListener('submit',safely(async event=>{
     event.preventDefault();const day=new FormData(event.target).get('date');

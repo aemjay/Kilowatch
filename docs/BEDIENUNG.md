@@ -4,10 +4,24 @@ Diagramme ablesen, Zeiträume zoomen, Sprache und Währung wählen.
 
 ## Werte ablesen
 
-- **Maus:** Ein Fadenkreuz rastet auf den nächsten Messwert ein. Der Tooltip nennt Zeit und Wert und bei eingeblendeten Trendlinien auch deren Werte. Über Messlücken steht „keine Daten“.
+- **Maus:** Ein Fadenkreuz rastet auf den nächsten Messwert ein. Der Tooltip nennt Zeit und Wert und bei eingeblendeten Vergleichslinien auch deren Werte. Über Messlücken steht „keine Daten“.
 - **Balken:** Der Balken unter dem Zeiger hebt sich ab; der Tooltip nennt Datum, Energie und erfasste Stunden.
 - **Touch:** Antippen oder mit einem Finger streichen zeigt den Wert, senkrechtes Wischen scrollt die Seite.
 - **Tastatur:** Diagramm mit Tab anspringen, dann `←` `→` (Punkt für Punkt), `Bild↑` `Bild↓`, `Pos1` `Ende`, `Esc`. Der Wert wird vorgelesen.
+
+## Vergleichslinien
+
+Über den Diagrammen der Übersicht, des Verlaufs und der Analyse lassen sich Linien einblenden. Die Auswahl merkt sich der Browser je Diagramm.
+
+| Linie | Bedeutung |
+|---|---|
+| **Ø Zeitraum** | Mittelwert aller gezeichneten Werte |
+| **Gleitender Ø** | Mittel über die letzten 5 oder 15 Minuten bzw. 2 Stunden (Leistung), 7 Tage oder 3 Monate (Energie); bricht an Messlücken ab |
+| **Vorperiode** | der gleich lange Zeitraum davor: als gestrichelte Linie über der Leistungskurve, als graue Schatten hinter den Energiebalken. Die Serie wird erst geladen, wenn du sie einschaltest |
+| **Nachtgrundlast**, **Grundlast kWh/Tag** | Nachtgrundlast der letzten sieben Tage, bei Tagesbalken als Energie pro Tag |
+| **Grenze hohe Last**, **Tagesziel**, **Typischer Haushalt** | Schwelle aus den Einstellungen, Monatsziel als Tagesanteil, Stromspiegel-Referenz |
+
+Referenzlinien verändern die Achse nicht: Liegt ein Wert über dem Diagramm, steht nur sein Name mit ▲ am oberen Rand. Der Prozentvergleich zur Vorperiode (Übersicht) erscheint erst, wenn beide Zeiträume zu mindestens 95 % erfasst sind; die Vorperiode selbst ist immer sichtbar.
 
 ## Zeitraum zoomen und verschieben
 

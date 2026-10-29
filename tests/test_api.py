@@ -189,3 +189,24 @@ def test_timeline_summarises_all_recorded_time_for_the_navigator(authenticated):
     assert authenticated.get("/api/timeline").status_code==200
     authenticated.cookies.clear()
     assert authenticated.get("/api/timeline").status_code==401
+
+
+def test_overview_offers_baseline_and_previous_series_on_request(authenticated):
+    from app.analytics import midnight
+    from app.decoder import Reading
+    db = authenticated.app_store
+    db.update_settings({"max_gap_seconds": 1000})
+    now = midnight("2026-10-26", "Europe/Berlin") + 12 * 3600
+    kwh = 100.0
+    # Acht Tage Viertelstundenwerte mit 150 W nachts und 600 W tagsüber.
+    for ts in range(int(now - 8 * 86400) // 900 * 900, int(now), 900):
+        watts = 150 if (ts // 3600) % 24 in (23, 0, 1, 2, 3) else 600
+        kwh += watts * 900 / 3600000
+        db.ingest(Reading(watts, kwh, 0, "SYNTHETIC"), ts)
+    plain = authenticated.get(f"/api/overview?since={int(now - 3600)}&until={int(now)}").json()
+    assert plain["targets"]["baseline_w"] == pytest.approx(150, abs=1)
+    assert "series" not in plain["previous"]
+    compared = authenticated.get(f"/api/overview?since={int(now - 3600)}&until={int(now)}&compare=1").json()
+    series = compared["previous"]["series"]
+    assert series["group"] == "quarter" and series["power"]
+    assert compared["previous"]["start"] == int(now - 7200) and all(int(now - 7200) <= p["ts"] < int(now - 3600) for p in series["power"])

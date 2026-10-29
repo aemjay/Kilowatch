@@ -79,8 +79,14 @@ async function harness(options={}) {
     else if(path==='/api/discovery/network')data={suggestions:[{network:'192.168.1.0/24',reason:'Synthetic network'}]};
     else if(path==='/api/discovery/scan')data={network:body.network,checked:254,devices:[{ip:'192.168.1.10',host:'bridge.example.lan',fqdn:'bridge.example.lan'}]};
     else if(path==='/api/timeline')data=options.timeline||{start:null,end:0,bin_seconds:900,bins:[]};
-    else if(path.startsWith('/api/overview?'))data={summary:{import_kwh:null,coverage:0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start:options.window?.start??0,end:options.window?.end??3600},previous:null,gaps:[],targets:{daily_kwh:null,household:options.household??null},co2:options.co2??null,
-      series:options.series||{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:(options.window?.start??0)+i*60,power_w:i===30?4000:300+i,seconds:60}))}};
+    else if(path.startsWith('/api/overview?')){
+      const start=options.window?.start??0,end=options.window?.end??3600;
+      // Die Serie der Vorperiode gibt es nur mit compare=1, wie beim Server.
+      const previous=options.previous?{...options.previous,...(path.includes('compare=1')&&options.previous.series?{}:{series:undefined})}:null;
+      if(previous&&previous.series===undefined)delete previous.series;
+      data={summary:{import_kwh:options.summary?.import_kwh??null,coverage:options.summary?.coverage??0,cost_complete:false,base_month_factor:1,unpriced_kwh:0,start,end},previous,gaps:[],targets:{daily_kwh:null,household:options.household??null,baseline_w:options.baseline??null},co2:options.co2??null,
+      series:options.series||{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:start+i*60,power_w:i===30?4000:300+i,seconds:60}))}};
+    }
     else if(path==='/api/tariffs'&&config.method==='PUT'){tariffs=tariffs.filter(t=>t.start_date!==body.start_date);tariffs.push(body);}
     else if(path==='/api/prices/source'){priceFeed={...priceFeed,...body,tibber_token_configured:!!body.tibber_token||priceFeed.tibber_token_configured};delete priceFeed.tibber_token;data=priceFeed;}
     else if(path==='/api/tariffs')data={tariffs,prices:{count:0,start:null,end:null},market,price_feed:priceFeed};
@@ -352,29 +358,49 @@ test('minute and hour views request their window and calendar dates switch back'
   assert.deepEqual(h.errors,[]);
 });
 
-test('rolling mean and min/max follow the window and restart after gaps',async t=>{
+test('rolling mean follows the window, ignores nulls and restarts after gaps',async t=>{
   const h=await harness({settings:{setup_required:false}});t.after(()=>h.dom.window.close());const {w}=h;
   const data=[{ts:0,v:1},{ts:60,v:3},{ts:120,v:5},{ts:1000,v:10},{ts:1060,v:null},{ts:1120,v:20}];
   const plain=value=>JSON.parse(JSON.stringify(value));
-  const out=plain(w.rolling(data,'v','ts',150,false,300));
-  assert.deepEqual(out.map(p=>p.mean),[1,2,3,10,null,15]);
-  assert.deepEqual(out.map(p=>[p.low,p.high]),[[1,1],[1,3],[1,5],[10,10],[null,null],[10,20]]);
+  assert.deepEqual(plain(w.rolling(data,'v','ts',150,false,300)).map(p=>p.mean),[1,2,3,10,null,15]);
   assert.deepEqual(plain(w.rolling([{x:1,v:2},{x:2,v:4},{x:3,v:6}],'v','x',2,true)).map(p=>p.mean),[2,3,5]);
+  assert.deepEqual(plain(w.splitAtGaps([{x:0},{x:60},{x:500},{x:560}],120).map(s=>s.length)),[2,2]);
 });
 
-test('chart overlays can be switched on, are drawn and remembered',async t=>{
-  const h=await harness({page:'history',settings:{setup_required:false,high_load_w:3000}});t.after(()=>h.dom.window.close());const {w}=h;
+test('chart overlays can be switched on, are drawn, remembered and never stretch the axis',async t=>{
+  const h=await harness({page:'history',settings:{setup_required:false,high_load_w:9000},baseline:150});t.after(()=>h.dom.window.close());const {w}=h;
   const toggles=[...w.document.querySelectorAll('[data-overlay-chart="power"] input')].map(input=>input.value);
-  assert.deepEqual(toggles,['mean','moving','range','highload']);
+  assert.deepEqual(toggles,['mean','moving','baseline','highload']);
   assert.equal(w.document.querySelector('#page-history .overlay-line'),null);
-  for(const key of ['moving','range','highload']){
+  for(const key of ['moving','baseline','highload']){
     const input=w.document.querySelector(`[data-overlay-chart="power"] input[value="${key}"]`);
     input.checked=true;input.dispatchEvent(new w.Event('change',{bubbles:true}));
   }
-  await until(()=>!!w.document.querySelector('#page-history .overlay-line'));
-  assert.ok(w.document.querySelector('#page-history .overlay-band'));
-  assert.ok(w.document.querySelector('#page-history .overlay-hline.overlay-reference'));
-  assert.deepEqual(JSON.parse(w.localStorage.getItem('kilowatch-overlays-power')),['moving','range','highload']);
+  await until(()=>!!w.document.querySelector('#page-history .overlay-line.overlay-moving'));
+  // Die Grundlast liegt im Bereich und wird als Linie gezeichnet; die Grenze von 9 kW liegt darüber und erscheint nur als Hinweis.
+  assert.equal(w.document.querySelectorAll('#page-history .overlay-hline.overlay-reference').length,1);
+  const labels=[...w.document.querySelectorAll('#page-history .overlay-label')].map(n=>n.textContent);
+  assert.ok(labels.some(text=>text.startsWith('▲')&&text.includes('9.000')));
+  const top=Number(w.document.querySelector('#page-history .chart svg text').textContent.replace('.',''));
+  assert.ok(!labels.includes('9.000')&&w.document.querySelector('#page-history .chart svg').innerHTML.indexOf('>9.000<')<0,'axis labels stay at the data range');
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('kilowatch-overlays-power')),['moving','baseline','highload']);
+  assert.equal(w.document.querySelector('#page-history .overlay-band'),null);
+  assert.deepEqual(h.errors,[]);
+});
+
+test('the previous period is offered as comparison line and its series is loaded only when chosen',async t=>{
+  const previous={start:-3600,end:0,import_kwh:5,coverage:1,series:{group:'quarter',power_resolution_seconds:60,energy:[],power:Array.from({length:60},(_,i)=>({ts:-3600+i*60,power_w:200,seconds:60}))}};
+  const h=await harness({page:'history',settings:{setup_required:false},previous});t.after(()=>h.dom.window.close());const {w}=h;
+  assert.ok(h.calls.every(call=>!call.path.includes('compare=1')));
+  const label=w.document.querySelector('[data-overlay-chart="power"] .overlay-previous span').textContent;
+  assert.match(label,/^Vorperiode · /);
+  const input=w.document.querySelector('[data-overlay-chart="power"] input[value="previous"]');
+  input.checked=true;input.dispatchEvent(new w.Event('change',{bubbles:true}));
+  await until(()=>!!w.document.querySelector('#page-history .overlay-line.overlay-previous'));
+  assert.ok(h.calls.some(call=>call.path.startsWith('/api/overview?')&&call.path.includes('compare=1')));
+  // Die Vergleichslinie liegt auf der Zeitachse des aktuellen Fensters (verschoben um die Fensterlänge).
+  const path=w.document.querySelector('#page-history .overlay-line.overlay-previous').getAttribute('d');
+  assert.match(path,/^M47\.0,/);
   assert.deepEqual(h.errors,[]);
 });
 

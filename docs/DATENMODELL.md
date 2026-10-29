@@ -74,7 +74,7 @@ Betrag = **bekannte Energiekosten + zeitanteiliger Grundpreis − Einspeiseerlö
 | Tagesprofile | Bezug je erfasster Stunde, getrennt nach Werktag und Wochenende |
 | Nachtauffälligkeit | Nachtmedian der letzten sieben gegen die sieben Tage davor (mind. 24 Viertelstunden je Fenster); Hinweis ab mehr als 80 W und 30 % Anstieg, keine Geräteerkennung |
 | Prognose | Mittel gleicher Wochentage aus 28 Tagen; nötig sind mindestens sieben Tage mit ≥ 98 % Abdeckung. Das Band ist heuristisch |
-| Vorperioden | gleich viele Kalendertage; laufende Zeiträume nur bis zur letzten vollen Viertelstunde |
+| Vorperioden | gleich viele Kalendertage (bei Stunden- und Minutenfenstern der gleich lange Abschnitt davor); laufende Zeiträume nur bis zur letzten vollen Viertelstunde. Der Prozentvergleich erscheint erst, wenn beide Zeiträume zu mindestens 95 % erfasst sind |
 | Gerätemessung | Bezugszählerstand bei Ende − bei Start − Nachtgrundlast der letzten sieben Tage × Dauer (ohne bekannte Grundlast kein Abzug); Kosten mit dem Arbeitspreis beim Beenden. Misst den Mehrverbrauch des Hauses in diesem Zeitraum, keine Geräteerkennung |
 | CO₂-Bilanz | Bezug je Viertelstunde × gemessene Netzintensität derselben Viertelstunde; Bezug ohne veröffentlichten Wert wird getrennt ausgewiesen |
 
