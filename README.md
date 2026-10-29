@@ -10,7 +10,7 @@ Kilowatch liest die Bridge in deinem Heimnetz aus und speichert Messwerte und Au
 
 ## Das kann Kilowatch
 
-- 📈 **Verlauf und Live-Werte:** Netzleistung, Bezug und Einspeisung von den letzten 5 Minuten bis zum Jahr. Zeitbalken zum Zoomen, Tooltips und Messlücken ([Bedienung](docs/BEDIENUNG.md)).
+- 📈 **Verlauf und Live-Werte:** Netzleistung, Bezug und Einspeisung von den letzten 5 Minuten bis zum Jahr. Zeitbalken zum Zoomen, Tooltips, Messlücken und Vorperiode als Vergleichslinie ([Bedienung](docs/BEDIENUNG.md)).
 - 🔎 **Analyse:** Stundenmuster, Nachtgrundlast, Lastdauerlinie, Monatsprognose und Vergleich mit typischen Haushalten.
 - 💶 **Kosten:** Fest-, HT/NT- und dynamische Tarife. Dynamische Preise holt Kilowatch automatisch von Tibber oder als Börsenpreis plus Aufschlag. Dazu Kostenrate und Preisampel mit dem günstigsten Fenster, Tarifsimulation, Monatsbudget, Abschlag und Abrechnungsjahr mit Nachzahlungsprognose ([Tarife](docs/TARIFE.md)).
 - 🌱 **CO₂-Bilanz:** Optional für DE, NL, NO und SE aus dem Strommix des Netzes.
