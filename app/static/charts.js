@@ -29,8 +29,8 @@ function lineModel(o) {
   const xs = o.data.map(item => item[o.xField]), ys = o.data.map(item => item[o.field]);
   const tolerance = Number.isFinite(o.gapLimit) ? o.gapLimit / 2 : Infinity;
   const timed = o.xField === 'ts';
-  const format = x => timed ? localTime(x, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', ...(o.seconds ? {second: '2-digit'} : {})}) : unit(x, 'h');
-  const extras = (o.overlays || []).filter(overlay => overlay.type === 'line' || overlay.type === 'band');
+  const format = x => o.xFormat ? o.xFormat(x) : timed ? localTime(x, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', ...(o.seconds ? {second: '2-digit'} : {})}) : unit(x, 'h');
+  const extras = (o.overlays || []).filter(overlay => overlay.type === 'line');
   const near = (points, x) => {
     if (!points.length) return null;
     const point = points[nearestIndex(points.map(p => p.x), x)];
@@ -40,9 +40,7 @@ function lineModel(o) {
     const rows = [{v: unit(ys[index], o.label), cls: 'main'}];
     for (const overlay of extras) {
       const point = near(overlay.points, xs[index]);
-      if (!point) continue;
-      if (overlay.type === 'line') rows.push({v: unit(point.y, o.label), k: overlay.name, cls: overlay.cls});
-      else rows.push({v: `${number(point.low, 0)} – ${unit(point.high, o.label)}`, k: overlay.name, cls: 'overlay-band'});
+      if (point) rows.push({v: unit(point.y, o.label), k: overlay.name, cls: overlay.cls});
     }
     return {index, x: o.X(xs[index]), y: o.Y(ys[index]), head: format(xs[index]), rows};
   };

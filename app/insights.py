@@ -27,6 +27,12 @@ def night_quarters(analytics, rows):
                 yield row["ts"], power
 
 
+def night_baseline(analytics, start, end):
+    """Nachtgrundlast wie in der Analyse: 10. Perzentil der Nachtviertelstunden, mindestens zwölf."""
+    night = sorted(power for _, power in night_quarters(analytics, analytics.store.bucket_rows(start, end)))
+    return night[int((len(night) - 1) * .1)] if len(night) >= 12 else None
+
+
 def average_rate(analytics, end, days=7):
     """Zeitgemitteltes Arbeitspreisniveau des aktuellen Tarifs über die letzten Tage.
 

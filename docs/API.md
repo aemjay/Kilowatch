@@ -57,7 +57,7 @@ Sicherheitshinweise: [Betrieb](BETRIEB.md#api-tokens).
 | POST `/api/bridge/test` | Verbindung lesend prüfen, speichert nichts |
 | GET `/api/discovery/network`, POST `/api/discovery/scan` | Netzvorschlag, lokale Suche (`{"network": "192.168.1.0/24"}`) |
 | GET `/api/live` | letzter Messpunkt, Alter, Status; `cost` mit Arbeitspreis und Kostenrate der laufenden Viertelstunde |
-| GET `/api/overview` | Summen, Vorperiode, Serien, Lücken, `co2` (bei gesetztem `grid_country`) |
+| GET `/api/overview` | Summen, Vorperiode, Serien, Lücken, `targets` (Tagesziel, typischer Haushalt, `baseline_w` der letzten sieben Tage), `co2` (bei gesetztem `grid_country`); mit `compare=1` enthält `previous` auch `series` der Vorperiode |
 | GET `/api/analysis`, `/api/insights` | Muster, Lastdauerlinie, Prognose; Grundlast-Entwicklung, Einspeiseprofil |
 | GET `/api/timeline` | gesamter erfasster Zeitraum in groben Abschnitten (für den Zeitbalken) |
 | GET/PUT `/api/tariffs`, DELETE `/api/tariffs/YYYY-MM-DD` | Tarife |

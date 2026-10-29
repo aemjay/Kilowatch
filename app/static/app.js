@@ -77,13 +77,17 @@ function periodText() { return view?windowText(viewWindow()):rangeMinutes ? t('L
 function query() { return new URLSearchParams(view?(view.to==null?{since:nowSeconds()-view.span}:{since:view.from,until:view.to}):rangeMinutes?{minutes:rangeMinutes}:rangeHours?{hours:rangeHours}:{start:$('#range-start').value,end:$('#range-end').value}).toString(); }
 function totalNote(summary) { return summary.gap_count ? `${t('{count} Lücke(n)',{count:summary.gap_count})} · ${t('{value} nur als Gesamtmenge bekannt',{value:unit(summary.recovered_import_kwh,'kWh')})}` : t('{percent} % zeitlich erfasst',{percent:number(summary.coverage*100,1)}); }
 
+// Achsenbeschriftung: Nachkommastellen passend zur Größe der Werte.
+const axisDecimals = max => max < 1 ? 2 : max < 10 ? 1 : 0;
+
 function lineChart(data, field = 'power_w', label = 'W', xField = 'ts', options = {}) {
   data = data.filter(item => item[field] != null && Number.isFinite(item[field]));
   if (data.length < 2) return empty(t('Noch zu wenige Messpunkte.'),t('Für diesen Zeitraum sind mindestens zwei Werte erforderlich.'));
   const w = 760, h = 245, left = 47, right = 12, top = 15, bottom = 34;
   const x0 = options.start ?? data[0][xField], x1 = options.end ?? data[data.length-1][xField];
   const overlays = options.overlays || [];
-  const extra = overlays.flatMap(o => o.type === 'hline' ? [o.y] : o.type === 'band' ? o.points.flatMap(p => [p.low, p.high]) : o.points.map(p => p.y));
+  // Nur Linien (Vorperiode, gleitender Ø) dehnen die Achse; Referenzlinien nie.
+  const extra = overlays.flatMap(o => o.type === 'line' ? o.points.map(p => p.y) : []);
   const low = Math.min(0,...data.map(item => item[field]),...extra), high = Math.max(1,...data.map(item => item[field]),...extra) * 1.12;
   const X = val => left + (val-x0)/Math.max(1,x1-x0)*(w-left-right);
   const Y = val => top+(high-val)/Math.max(1,high-low)*(h-top-bottom);
@@ -93,62 +97,86 @@ function lineChart(data, field = 'power_w', label = 'W', xField = 'ts', options 
   data.forEach((item,index) => { if(index && item[xField]-data[index-1][xField]>gapLimit) { if(segment.length)paths.push(segment); segment=[]; } segment.push(item); });
   if(segment.length) paths.push(segment);
   let grid = '';
-  for(let i=0;i<=4;i++) { const val = low+(high-low)*i/4, y = Y(val); grid += `<line class="grid-line" x1="${left}" x2="${w-right}" y1="${y}" y2="${y}"/><text x="${left-9}" y="${y+3}" text-anchor="end">${number(val,0)}</text>`; }
+  const decimals = axisDecimals(high);
+  for(let i=0;i<=4;i++) { const val = low+(high-low)*i/4, y = Y(val); grid += `<line class="grid-line" x1="${left}" x2="${w-right}" y1="${y}" y2="${y}"/><text x="${left-9}" y="${y+3}" text-anchor="end">${number(val,decimals)}</text>`; }
   let xLabels = '';
-  for(let i=0;i<=5;i++) { const val=x0+(x1-x0)*i/5; const text=xField==='ts'?localTime(val,{hour:'2-digit',minute:'2-digit',...(x1-x0>86400?{day:'2-digit',month:'2-digit'}:{})}):`${number(val,0)} h`; xLabels+=`<text x="${X(val)}" y="${h-8}" text-anchor="${i===0?'start':i===5?'end':'middle'}">${esc(text)}</text>`; }
+  const xText = options.xFormat || (val => xField==='ts'?localTime(val,{hour:'2-digit',minute:'2-digit',...(x1-x0>86400?{day:'2-digit',month:'2-digit'}:{})}):`${number(val,0)} h`);
+  const ticks = options.ticks || Array.from({length:6},(_,i)=>x0+(x1-x0)*i/5);
+  ticks.forEach((val,i) => { xLabels+=`<text x="${X(val)}" y="${h-8}" text-anchor="${i===0?'start':i===ticks.length-1?'end':'middle'}">${esc(xText(val))}</text>`; });
   const pathsSvg = paths.map(items=>{ const line=items.map((item,i)=>`${i?'L':'M'}${X(item[xField]).toFixed(1)},${Y(item[field]).toFixed(1)}`).join(' '); return `<path d="${line} L${X(items.at(-1)[xField]).toFixed(1)},${Y(0)} L${X(items[0][xField]).toFixed(1)},${Y(0)} Z" fill="url(#energy-fill)"/><path class="chart-line" d="${line}"/>`; }).join('');
-  const id = registerChart(lineModel({data,field,xField,X,Y,x0,x1,w,h,left,right,top,bottom,gapLimit,label,overlays,zoomable:!!options.zoomable,seconds:xField==='ts'&&(times[Math.floor(times.length/2)]||60)<60}));
-  return `<div class="chart" data-chart="${id}" tabindex="0"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('{label} im ausgewählten Zeitraum',{label}))}"><defs><linearGradient id="energy-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#d3eb65" stop-opacity=".34"/><stop offset="100%" stop-color="#d3eb65" stop-opacity=".01"/></linearGradient></defs>${grid}${overlaySvg(overlays.filter(o=>o.type==='band'),X,Y,left,w-right)}${pathsSvg}${overlaySvg(overlays.filter(o=>o.type!=='band'),X,Y,left,w-right)}${xLabels}<text x="${left}" y="7">${esc(label)}</text></svg></div>`;
+  const id = registerChart(lineModel({data,field,xField,X,Y,x0,x1,w,h,left,right,top,bottom,gapLimit,label,overlays,zoomable:!!options.zoomable,seconds:xField==='ts'&&(times[Math.floor(times.length/2)]||60)<60,xFormat:options.xFormat}));
+  const range={low,high,top};
+  return `<div class="chart" data-chart="${id}" tabindex="0"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(options.ariaLabel||t('{label} im ausgewählten Zeitraum',{label}))}"><defs><linearGradient id="energy-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#d3eb65" stop-opacity=".34"/><stop offset="100%" stop-color="#d3eb65" stop-opacity=".01"/></linearGradient></defs>${grid}${overlaySvg(overlays.filter(o=>o.cls==='overlay-previous'),X,Y,left,w-right,range)}${pathsSvg}${overlaySvg(overlays.filter(o=>o.cls!=='overlay-previous'),X,Y,left,w-right,range)}${xLabels}<text x="${left}" y="7">${esc(label)}</text></svg></div>`;
 }
 
-// Overlays zeichnen: Band (Min/Max), Linie (gleitender Ø) und waagerechte Referenzlinie mit Beschriftung.
-function overlaySvg(overlays, X, Y, x0, x1) {
+// Overlays zeichnen: Linien (Vorperiode, gleitender Ø) brechen an Lücken ab; Referenzlinien verändern die Achse
+// nicht und stehen außerhalb des Bereichs nur als Hinweis am Rand.
+function overlaySvg(overlays, X, Y, x0, x1, range) {
   return overlays.map(o => {
-    if (o.type === 'hline') { const y=Y(o.y).toFixed(1); return `<line class="overlay-hline ${o.cls}" x1="${x0}" x2="${x1}" y1="${y}" y2="${y}"/><text class="overlay-label ${o.cls}" x="${x1-2}" y="${Number(y)-4}" text-anchor="end">${esc(o.label)}</text>`; }
-    if (o.points.length < 2) return '';
-    if (o.type === 'band') { const top=o.points.map((p,i)=>`${i?'L':'M'}${X(p.x).toFixed(1)},${Y(p.high).toFixed(1)}`).join(' '), bottom=o.points.slice().reverse().map(p=>`L${X(p.x).toFixed(1)},${Y(p.low).toFixed(1)}`).join(' '); return `<path class="overlay-band" d="${top} ${bottom} Z"/>`; }
-    return `<path class="overlay-line ${o.cls}" d="${o.points.map((p,i)=>`${i?'L':'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')}"/>`;
+    if (o.type === 'hline') {
+      if (o.y > range.high) return `<text class="overlay-label ${o.cls}" x="${x1-2}" y="${range.top+8}" text-anchor="end">▲ ${esc(o.label)}</text>`;
+      if (o.y < range.low) return `<text class="overlay-label ${o.cls}" x="${x1-2}" y="${Y(range.low)-4}" text-anchor="end">▼ ${esc(o.label)}</text>`;
+      const y=Y(o.y).toFixed(1); return `<line class="overlay-hline ${o.cls}" x1="${x0}" x2="${x1}" y1="${y}" y2="${y}"/><text class="overlay-label ${o.cls}" x="${x1-2}" y="${Number(y)-4}" text-anchor="end">${esc(o.label)}</text>`;
+    }
+    if (o.type === 'bars') return o.points.map(p => `<rect class="overlay-ghost" x="${(X(p.x)-o.width/2).toFixed(1)}" y="${Y(p.y).toFixed(1)}" width="${o.width.toFixed(1)}" height="${Math.max(0,Y(0)-Y(p.y)).toFixed(1)}" rx="2"/>`).join('');
+    return splitAtGaps(o.points, o.gap ?? Infinity).filter(segment => segment.length > 1).map(segment => `<path class="overlay-line ${o.cls}" d="${segment.map((p,i)=>`${i?'L':'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')}"/>`).join('');
   }).join('');
 }
 
-function barChart(data, field = 'import_kwh', label = 'kWh', overlays = [], zoomable = false) {
+// Balkendiagramm; options.group 'month' beschriftet Monate, sonst Tage. Vorperioden-Balken stehen als graue
+// Schatten hinter den Balken.
+function barChart(data, field = 'import_kwh', label = 'kWh', overlays = [], zoomable = false, options = {}) {
   if(!data.length) return empty();
-  const w=760,h=245,left=42,top=18,bottom=36,right=9;
-  const extra=overlays.flatMap(o=>o.type==='hline'?[o.y]:o.type==='band'?o.points.map(p=>p.high):o.points.map(p=>p.y));
-  const max=Math.max(.1,...data.map(item=>item[field]||0),...extra)*1.15;
+  const w=760,h=245,left=42,top=18,bottom=36,right=9, month=options.group==='month';
+  const extra=overlays.flatMap(o=>o.type==='line'||o.type==='bars'?o.points.map(p=>p.y):[]);
+  const max=Math.max(.1,...data.map(item=>item[field]||0),...extra)*1.15, decimals=axisDecimals(max);
   // Kleine Abstände zeigen fehlende Zeitfenster; keine nullgefüllten Balken.
   const width=(w-left-right)/Math.max(1,data.length), skip=Math.max(1,Math.ceil(data.length/9));
+  const head=ts=>month?localTime(ts,{month:'long',year:'numeric'}):localDate(ts), tick=ts=>localTime(ts,month?{month:'short',year:'2-digit'}:{day:'2-digit',month:'2-digit'});
   let grid='';
-  for(let i=0;i<=4;i++){const y=h-bottom-(h-top-bottom)*i/4;grid+=`<line class="grid-line" x1="${left}" x2="${w-right}" y1="${y}" y2="${y}"/><text x="${left-8}" y="${y+3}" text-anchor="end">${number(max*i/4,1)}</text>`;}
+  for(let i=0;i<=4;i++){const y=h-bottom-(h-top-bottom)*i/4;grid+=`<line class="grid-line" x1="${left}" x2="${w-right}" y1="${y}" y2="${y}"/><text x="${left-8}" y="${y+3}" text-anchor="end">${number(max*i/4,decimals)}</text>`;}
   const items=data.map((item,index)=>{
     const value=item[field], y=h-bottom-(value||0)/max*(h-top-bottom);
     const rows=value==null?[{v:t('keine Daten')}]:[{v:unit(value,label,3),cls:'main'},...(item.import_s!=null?[{v:t('{hours} h erfasst',{hours:number(item.import_s/3600,1)}),k:''}]:[])];
     for(const overlay of overlays){
-      if(overlay.type!=='line'&&overlay.type!=='band')continue;
-      const point=overlay.points.find(p=>p.x===item.ts);if(!point)continue;
-      rows.push(overlay.type==='line'?{v:unit(point.y,label,3),k:overlay.name,cls:overlay.cls}:{v:`${number(point.low,2)} – ${unit(point.high,label,2)}`,k:overlay.name,cls:'overlay-band'});
+      if(overlay.type!=='line'&&overlay.type!=='bars')continue;
+      const point=overlay.points.find(p=>p.x===item.ts);
+      if(point)rows.push({v:unit(point.y,label,3),k:overlay.name,cls:overlay.cls});
     }
-    return {head:localDate(item.ts),rows,y};
+    return {head:head(item.ts),rows,y};
   });
-  const bars=data.map((item,index)=>{const value=item[field],x=left+index*width,y=items[index].y;return `${value==null?'':`<rect class="bar" data-i="${index}" x="${x+width*.18}" y="${y}" width="${Math.max(1,width*.64)}" height="${h-bottom-y}" rx="${Math.min(4,width*.2)}" fill="#bfd559"/>`}${index%skip===0?`<text x="${x+width/2}" y="${h-9}" text-anchor="middle">${esc(localTime(item.ts,{day:'2-digit',month:'2-digit'}))}</text>`:''}`;}).join('');
+  const bars=data.map((item,index)=>{const value=item[field],x=left+index*width,y=items[index].y;return `${value==null?'':`<rect class="bar" data-i="${index}" x="${x+width*.18}" y="${y}" width="${Math.max(1,width*.64)}" height="${h-bottom-y}" rx="${Math.min(4,width*.2)}" fill="#bfd559"/>`}${index%skip===0?`<text x="${x+width/2}" y="${h-9}" text-anchor="middle">${esc(tick(item.ts))}</text>`:''}`;}).join('');
   // Overlay-Punkte tragen den Zeitstempel ihres Balkens; gezeichnet wird in der Balkenmitte.
   const index=new Map(data.map((item,i)=>[item.ts,i])), X=ts=>left+(index.get(ts)??0)*width+width/2, Y=value=>h-bottom-(value||0)/max*(h-top-bottom);
+  const drawn=overlays.map(o=>o.type==='bars'?{...o,width:Math.max(1,width*.84)}:o), range={low:0,high:max,top};
   const id=registerChart(barModel({w,h,left,right,top,bottom,width,items,zoomable}));
-  return `<div class="chart" data-chart="${id}" tabindex="0"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('Verbrauch in {unit}',{unit:label}))}">${grid}${overlaySvg(overlays.filter(o=>o.type==='band'),X,Y,left,w-right)}${bars}${overlaySvg(overlays.filter(o=>o.type!=='band'),X,Y,left,w-right)}<text x="${left}" y="8">${label}</text></svg></div>`;
+  return `<div class="chart" data-chart="${id}" tabindex="0"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(t('Verbrauch in {unit}',{unit:label}))}">${grid}${overlaySvg(drawn.filter(o=>o.type==='bars'),X,Y,left,w-right,range)}${bars}${overlaySvg(drawn.filter(o=>o.type!=='bars'),X,Y,left,w-right,range)}<text x="${left}" y="8">${label}</text></svg></div>`;
+}
+
+// Vorperiode als Vergleichsserie: Leistungskurve zeitlich verschoben, Energiebalken Balken für Balken.
+function previousOverlay(data, isShort) {
+  const p=data.previous;if(!p)return null;
+  const label=`${t('Vorperiode')} · ${isShort?windowText({from:p.start,to:p.end}):`${localDate(p.start)} – ${localDate(p.end-1)}`}`;
+  if(!p.series)return {label,kind:isShort?'line':'bars',points:[]};
+  if(isShort){const offset=data.summary.start-p.start;return {label,kind:'line',points:p.series.power.filter(q=>q.power_w!=null).map(q=>({x:q.ts+offset,y:q.power_w}))};}
+  return {label,kind:'bars',points:data.series.energy.map((item,i)=>({x:item.ts,y:p.series.energy[i]?.import_kwh??null})).filter(q=>q.y!=null)};
 }
 
 function powerPanel(data) {
   const isShort = ['minute','quarter'].includes(data.series.group), resolution = data.series.power_resolution_seconds, raw = resolution === 0;
   const highLoad = {key:'highload', label:t('Grenze hohe Last {watts}',{watts:unit(settings.high_load_w,'W',0)}), value:settings.high_load_w};
+  const baseline=data.targets?.baseline_w??null, group=data.series.group;
   const spec = isShort
-    ? {chart:'power', data:data.series.power, field:'power_w', xField:'ts', gapLimit:raw?120:resolution*2.5, ...powerWindow(resolution), references:[highLoad]}
+    ? {chart:'power', data:data.series.power, field:'power_w', xField:'ts', gapLimit:raw?120:resolution*2.5, ...powerWindow(resolution), previous:previousOverlay(data,true),
+       references:[{key:'baseline', label:t('Nachtgrundlast {watts}',{watts:unit(baseline,'W',0)}), value:baseline}, highLoad]}
     // Der laufende Tag oder Monat ist unvollständig und würde Ø und Trend nach unten ziehen.
-    : {chart:'energy-'+data.series.group, data:Date.now()/1000-data.summary.end<300?data.series.energy.slice(0,-1):data.series.energy, field:'import_kwh', xField:'ts', byCount:true,
-       window:data.series.group==='day'?7:3, windowLabel:data.series.group==='day'?t('7 Tage'):t('3 Monate'),
-       references:[...(data.series.group==='day'?[{key:'target', label:t('Tagesziel {value}',{value:unit(data.targets?.daily_kwh,'kWh',1)}), value:data.targets?.daily_kwh??null}]:[]),
-         ...householdReference(data.targets?.household, data.series.group)]};
+    : {chart:'energy-'+group, data:Date.now()/1000-data.summary.end<300?data.series.energy.slice(0,-1):data.series.energy, field:'import_kwh', xField:'ts', byCount:true,
+       window:group==='day'?7:3, windowLabel:group==='day'?t('7 Tage'):t('3 Monate'), previous:previousOverlay(data,false),
+       references:[...(group==='day'?[{key:'target', label:t('Tagesziel {value}',{value:unit(data.targets?.daily_kwh,'kWh',1)}), value:data.targets?.daily_kwh??null},
+           {key:'baseline', label:t('Grundlast {value} kWh/Tag',{value:unit(baseline==null?null:baseline*24/1000,'kWh',1)}), value:baseline==null?null:baseline*24/1000}]:[]),
+         ...householdReference(data.targets?.household, group)]};
   const overlays = buildOverlays(spec);
-  const chart = overlayToggles(spec) + (isShort ? lineChart(data.series.power,'power_w','W','ts',{start:data.summary.start,end:data.summary.end,overlays,zoomable:true}) : barChart(data.series.energy,'import_kwh','kWh',overlays,true));
+  const chart = overlayToggles(spec) + (isShort ? lineChart(data.series.power,'power_w','W','ts',{start:data.summary.start,end:data.summary.end,overlays,zoomable:true}) : barChart(data.series.energy,'import_kwh','kWh',overlays,true,{group}));
   return panel(isShort?t('So fließt dein Strom.'):t('Dein Verbrauch im Verlauf.'),raw?t('Einzelne Messwerte im Abfrageintervall · positive Werte = Bezug'):isShort?t('Mittlere Netzleistung je Zeitabschnitt · positive Werte = Bezug'):t('Verbrauch aus den Zählerständen · zeitlich zugeordnete Energie'),chart+`<div class="chart-note"><span>${isShort?t('Leere Stellen zeigen fehlende Messdaten.'):t('Nicht zeitlich zuordenbare Lückenenergie ist separat ausgewiesen.')}</span><span>${isShort?t('ZEIT'):t('DATUM')}</span></div>`,`<div class="legend"><span><i${isShort?' class="line"':''}></i>${isShort?t('Netzleistung'):t('Netzbezug')}</span></div>`);
 }
 
@@ -196,21 +224,32 @@ function co2Panel(co2) {
   return panel(t('Strommix und CO₂'),periodText(),`${alerts}<div class="stats-list">${lines.join('')}</div>${notes.map(n=>`<p class="copy-footnote">${esc(n)}</p>`).join('')}`);
 }
 
+// Vergleich mit der Vorperiode: ein Prozentwert erst, wenn beide Zeiträume gut erfasst sind (gleiche Regel überall).
+const COMPARE_COVERAGE=.95;
+function comparison(s, p) {
+  if(!p||p.import_kwh==null)return {text:t('Noch keine Vergleichsdaten')};
+  if(s.import_kwh==null||!(p.import_kwh>0)||s.coverage<COMPARE_COVERAGE||p.coverage<COMPARE_COVERAGE)return {text:t('Vergleich erst ab {percent} % Datenabdeckung beider Zeiträume',{percent:number(COMPARE_COVERAGE*100,0)})};
+  const percent=(s.import_kwh/p.import_kwh-1)*100;
+  return {percent,text:t('{percent} % zur Vorperiode',{percent:(percent>0?'+':'')+number(percent,1)})};
+}
+// Überschrift der Datenqualität nach Abdeckung; die Zeile darunter nennt Lücken und Lückenenergie.
+function qualityTitle(s) {
+  if(s.import_kwh==null&&!s.coverage)return t('Deine Historie entsteht ab jetzt.');
+  return s.coverage>.98?t('Dein Zeitraum ist gut erfasst.'):s.coverage>.8?t('Dein Zeitraum ist mit Lücken erfasst.'):t('Dein Zeitraum ist nur teilweise erfasst.');
+}
+
 function renderDashboard(data) {
-  const s=data.summary,p=data.previous;
-  let comparison=t('Noch keine Vergleichsdaten');
-  if(s.import_kwh!=null&&p?.import_kwh>0&&s.coverage>.98&&p.coverage>.98)comparison=t('{percent} % zur Vorperiode',{percent:number((s.import_kwh/p.import_kwh-1)*100,1)});
-  else if(p)comparison=t('Vergleich erst bei guter Datenabdeckung');
+  const s=data.summary,p=data.previous,compared=comparison(s,p);
   const valid=live.reading&&!live.stale;
-  const cards=`<div class="cards cards-5">${metric(t('Aktuell zu Hause'),`<span id="live-power">${number(valid?live.reading.power_w:null,0)}</span>`,'W',t('Lokale Netzleistung'),'↯',true)}${liveCostCard()}${metric(t('Netzbezug'),number(s.import_kwh,2),'kWh',comparison,'↗')}${metric(t('Erfasste Kosten'),number(s.known_cost_eur,2),'€',s.cost_complete?t('Inklusive anteiligem Grundpreis'):s.tariff_missing?t('Tarif fehlt oder Preisimport unvollständig'):t('Teilbetrag · Datenabdeckung beachten'),'€')}${metric(t('Leistungsspitze'),number(s.peak_w==null?null:s.peak_w/1000,2),'kW',t('Höchste erfasste Momentanleistung'),'⌁')}</div>`;
+  const cards=`<div class="cards cards-5">${metric(t('Aktuell zu Hause'),`<span id="live-power">${number(valid?live.reading.power_w:null,0)}</span>`,'W',t('Lokale Netzleistung'),'↯',true)}${liveCostCard()}${metric(t('Netzbezug'),number(s.import_kwh,2),'kWh',compared.text,'↗')}${metric(t('Erfasste Kosten'),number(s.known_cost_eur,2),'€',s.cost_complete?t('Inklusive anteiligem Grundpreis'):s.tariff_missing?t('Tarif fehlt oder Preisimport unvollständig'):t('Teilbetrag · Datenabdeckung beachten'),'€')}${metric(t('Leistungsspitze'),number(s.peak_w==null?null:s.peak_w/1000,2),'kW',t('Höchste erfasste Momentanleistung'),'⌁')}</div>`;
   const reading=live.reading;
   const flow=`<div class="flow"><div class="flow-end"><div class="flow-icon">♧</div><small>${t('STROMNETZ')}</small></div><div class="flow-line"></div><div class="flow-end"><div class="flow-icon">⌂</div><small>${t('ZU HAUSE')}</small></div></div><div class="stats-list">${stat(t('Bezug im Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Einspeisung'),unit(s.export_kwh,'kWh',2))}${stat(t('Bezugszähler'),unit(reading?.import_kwh,'kWh',3))}${stat(t('Einspeisezähler'),unit(reading?.export_kwh,'kWh',3))}</div><div class="divider"></div>${coverage(s)}<p id="live-age" class="copy-footnote">${reading?t('Letzte Messung vor {seconds} s',{seconds:number(live.age_seconds,0)}):t('Noch keine Messung')}</p>`;
-  const quality=panel(t('Datenqualität'),'',`<div class="insight"><span class="insight-icon">◉</span><div><h3>${s.coverage>.98?t('Dein Zeitraum ist gut erfasst.'):t('Deine Historie entsteht ab jetzt.')}</h3><p>${esc(totalNote(s))}. ${s.crossing_gaps?t('Eine Lücke reicht über die Zeitraumgrenze. Ihre Energiemenge bleibt außerhalb dieser Summe.'):''}</p></div></div>`);
+  const quality=panel(t('Datenqualität'),'',`<div class="insight"><span class="insight-icon">◉</span><div><h3>${esc(qualityTitle(s))}</h3><p>${esc(totalNote(s))}. ${s.crossing_gaps?t('Eine Lücke reicht über die Zeitraumgrenze. Ihre Energiemenge bleibt außerhalb dieser Summe.'):''}</p></div></div>`);
   const household=data.targets?.household;
   const typical=household?`<div class="divider"></div><div class="stats-list">${stat(t('Typischer Haushalt im Zeitraum'),unit(householdShare(household,s.end-s.start),'kWh',2))}</div><p class="copy-footnote">${esc(t('{household} laut {source}; Gesamtverbrauch, mit eigener PV liegt der Netzbezug darunter.',{household:householdText(household),source:household.source}))}</p>`:'';
-  const compare=panel(t('Vorperiode'),'',(p?`<div class="stats-list">${stat(t('Ausgewählter Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Vorperiode'),unit(p.import_kwh,'kWh',2))}${stat(t('Abdeckung der Vorperiode'),unit(p.coverage*100,'%',1))}${stat(t('Vergleich bis'),localTime(p.end,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))}</div>`:empty(t('Vergleich noch nicht verfügbar.')))+typical);
+  const compare=panel(t('Vorperiode'),p?windowText({from:p.start,to:p.end}):'',(p?`<div class="stats-list">${stat(t('Ausgewählter Zeitraum'),unit(s.import_kwh,'kWh',2))}${stat(t('Vorperiode'),unit(p.import_kwh,'kWh',2))}${stat(t('Veränderung'),compared.percent==null?compared.text:(compared.percent>0?'+':'')+unit(compared.percent,'%',1))}${stat(t('Abdeckung der Vorperiode'),unit(p.coverage*100,'%',1))}</div>`:empty(t('Vergleich noch nicht verfügbar.')))+typical);
   $('#page-dashboard').innerHTML=`<div id="checklist-slot"></div>`+cards+`<div id="price-outlook-slot"></div><div class="grid-main"><div>${powerPanel(data)}${quality}</div><div>${panel(t('Bezug und Einspeisung'),'',flow)}${co2Panel(data.co2)}${compare}</div></div>`;
-  mountOverlayToggles($('#page-dashboard'),()=>renderDashboard(overview));
+  mountOverlayToggles($('#page-dashboard'),()=>overlayReload(()=>renderDashboard(overview)));
   mountPriceOutlook().catch(error=>toast(error.message,true));
   mountChecklist().catch(error=>toast(error.message,true));
 }
@@ -220,23 +259,35 @@ function renderHistory(data) {
   const table=rows.length?`<div class="table-wrap"><table><thead><tr><th>${t('Zeitpunkt / Zeitraum')}</th><th>${t('Bezug kWh')}</th><th>${t('Einspeisung kWh')}</th><th>${t('Erfasster Bezug')}</th><th>${t('Spitze W')}</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${esc(['minute','quarter'].includes(data.series.group)?localTime(row.ts,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}):localDate(row.ts))}</td><td>${number(row.import_kwh,3)}</td><td>${number(row.export_kwh,3)}</td><td>${unit(row.import_s/3600,'h',2)}</td><td>${number(row.peak_w,0)}</td></tr>`).join('')}</tbody></table></div>`:empty();
   const gaps=data.gaps.length?`<div class="table-wrap"><table><thead><tr><th>${t('Beginn')}</th><th>${t('Ende')}</th><th>${t('Bezug gesamt')}</th><th>${t('Grund')}</th></tr></thead><tbody>${data.gaps.slice(0,100).map(g=>`<tr><td>${esc(localTime(g.start))}</td><td>${esc(localTime(g.end))}</td><td>${unit(g.import_kwh,'kWh',3)}</td><td>${esc(String(g.reason).split('; ').map(part=>t(part)).join('; '))}</td></tr>`).join('')}</tbody></table></div><p class="copy-footnote">${t('Max. 100 angezeigt; vollständig unter Export → Lücken.')}</p>`:`<p class="muted">${t('Keine Messlücken in diesem Zeitraum.')}</p>`;
   $('#page-history').innerHTML=powerPanel(data)+panel(t('Verbrauch im Detail.'),periodText(),table)+panel(t('Messlücken'),'',gaps);
-  mountOverlayToggles($('#page-history'),()=>renderHistory(overview));
+  mountOverlayToggles($('#page-history'),()=>overlayReload(()=>renderHistory(overview)));
+}
+
+// Nach einem Overlay-Wechsel neu zeichnen; fehlt die Serie der Vorperiode noch, neu laden.
+function overlayReload(redraw) {
+  if(comparisonWanted()&&overview?.previous&&!overview.previous.series)loadPage();else redraw();
 }
 
 function heatmap(cells) {
   if(!cells.length)return empty(t('Dein Tagesmuster wird hier sichtbar.'));
-  const days=[...new Set(cells.map(c=>c.day))].slice(-62), lookup=new Map(cells.map(c=>[`${c.day}:${c.hour}`,c]));
+  const allDays=[...new Set(cells.map(c=>c.day))], days=allDays.slice(-62), lookup=new Map(cells.map(c=>[`${c.day}:${c.hour}`,c]));
+  const scope=allDays.length>62?t('letzte 62 Tage des Zeitraums'):t('{count} Tag(e) im Zeitraum',{count:days.length});
   const maximum=Math.max(.01,...cells.map(c=>c.seconds?c.kwh*3600/c.seconds:0));
   let html='<div class="heat-scroll"><div class="heat-grid"><span></span>'+Array.from({length:24},(_,i)=>`<span class="heat-label">${String(i).padStart(2,'0')}</span>`).join('');
   for(const day of days){html+=`<span class="heat-label">${esc(dateLabel(day).slice(0,5))}</span>`;for(let h=0;h<24;h++){const cell=lookup.get(`${day}:${h}`), strength=cell?.seconds?Math.min(1,cell.kwh*3600/cell.seconds/maximum):null; const dark=window.kilowatchTheme?.isDark(); const color=strength==null?(dark?'#1d2622':'#eff2eb'):dark?`hsl(${83-strength*6} ${35+strength*30}% ${24+strength*38}%)`:`hsl(${83-strength*6} ${35+strength*20}% ${92-strength*54}%)`;html+=`<div class="heat-cell" style="background:${color}" title="${esc(dateLabel(day))} ${String(h).padStart(2,'0')}:00 · ${cell?t('{energy} / {hours} erfasst',{energy:unit(cell.kwh,'kWh',3),hours:unit(cell.seconds/3600,'h',2)}):t('keine Daten')}"></div>`;}}
-  return html+'</div></div><div class="heat-key">'+esc(t('Wenig'))+' '+(window.kilowatchTheme?.isDark()?['#34472a','#4c6a30','#6f9433','#a3c94a']:['#eff4dd','#dce9ab','#b9d164','#86aa31']).map(c=>`<i style="background:${c}"></i>`).join('')+' '+esc(t('Viel · Farbe: Verbrauch je erfasster Stunde · letzte 62 Tage'))+'</div>';
+  return html+'</div></div><div class="heat-key">'+esc(t('Wenig'))+' '+(window.kilowatchTheme?.isDark()?['#34472a','#4c6a30','#6f9433','#a3c94a']:['#eff4dd','#dce9ab','#b9d164','#86aa31']).map(c=>`<i style="background:${c}"></i>`).join('')+' '+esc(t('Viel · Farbe: Verbrauch je erfasster Stunde · {scope}',{scope}))+'</div>';
 }
 
+// Tagesverlauf: mittlere Leistung je Stunde, Mo–Fr als Linie, Sa–So als zweite Linie; die Tabelle zum Nachlesen.
 function profileChart(rows) {
-  const weekday=Array.from({length:24},(_,hour)=>({hours:hour,power_w:rows.find(r=>r.type==='weekday'&&r.hour===hour)?.average_kw*1000})).filter(r=>Number.isFinite(r.power_w));
-  const weekend=Array.from({length:24},(_,hour)=>({hours:hour,power_w:rows.find(r=>r.type==='weekend'&&r.hour===hour)?.average_kw*1000})).filter(r=>Number.isFinite(r.power_w));
-  const table=`<div class="table-wrap"><table><thead><tr><th>${t('Stunde')}</th><th>${t('Mo–Fr Ø W')}</th><th>${t('Sa–So Ø W')}</th></tr></thead><tbody>${Array.from({length:24},(_,h)=>`<tr><td>${String(h).padStart(2,'0')}:00</td><td>${number(weekday.find(r=>r.hours===h)?.power_w,0)}</td><td>${number(weekend.find(r=>r.hours===h)?.power_w,0)}</td></tr>`).join('')}</tbody></table></div>`;
-  return table;
+  const series=type=>Array.from({length:24},(_,hour)=>({hours:hour,power_w:rows.find(r=>r.type===type&&r.hour===hour)?.average_kw*1000})).filter(r=>Number.isFinite(r.power_w));
+  const weekday=series('weekday'),weekend=series('weekend');
+  const clock=value=>`${String(Math.round(value)).padStart(2,'0')}:00`;
+  const main=weekday.length>1?weekday:weekend, other=main===weekday?weekend:[];
+  const overlays=other.length>1?[{type:'line',cls:'overlay-weekend',name:t('Sa–So'),points:other.map(r=>({x:r.hours,y:r.power_w})),gap:1.5}]:[];
+  const chart=lineChart(main,'power_w','W','hours',{start:0,end:23,ticks:[0,6,12,18,23],xFormat:clock,overlays,ariaLabel:t('Mittlere Leistung nach Tageszeit')});
+  const table=`<details class="table-details"><summary>${t('Als Tabelle')}</summary><div class="table-wrap"><table><thead><tr><th>${t('Stunde')}</th><th>${t('Mo–Fr Ø W')}</th><th>${t('Sa–So Ø W')}</th></tr></thead><tbody>${Array.from({length:24},(_,h)=>`<tr><td>${clock(h)}</td><td>${number(weekday.find(r=>r.hours===h)?.power_w,0)}</td><td>${number(weekend.find(r=>r.hours===h)?.power_w,0)}</td></tr>`).join('')}</tbody></table></div></details>`;
+  const legend=`<div class="legend"><span><i class="line"></i>${main===weekday?t('Mo–Fr'):t('Sa–So')}</span>${other.length>1?`<span><i class="weekend"></i>${t('Sa–So')}</span>`:''}</div>`;
+  return {html:chart+table,legend};
 }
 
 // Lastdauerlinie mit Nachtgrundlast und Grenze für hohe Last als Bezug.
@@ -249,10 +300,12 @@ function durationChart(data) {
 
 function renderAnalysis(data, base) {
   const forecast=data.forecast;
-  const cards=`<div class="cards">${metric(t('Nachtgrundlast (P10)'),number(data.baseline_w,0),'W',t('{count} ausreichend erfasste Nachtintervalle',{count:data.night_quarters}),'☾',true)}${metric(t('Hohe Last'),number(base.summary.high_load_hours,2),'h',t('Intervallmittel ≥ {watts}',{watts:unit(settings.high_load_w,'W',0)}),'↗')}${metric(t('Zeitlich zugeordnet'),number(base.summary.allocated_import_kwh,2),'kWh',t('Aus Zählerstandsdifferenzen oder Schätzung'),'▥')}${metric(t('Monatsprognose'),number(forecast.available?forecast.expected_kwh:null,0),'kWh',forecast.available?t('{low} – {high} kWh Band',{low:number(forecast.low_kwh,0),high:number(forecast.high_kwh,0)}):t('Noch keine belastbare Datenbasis'),'⌁')}</div>`;
-  const forecastText=t(forecast.available?forecast.method:forecast.reason);
+  const s=base.summary, recorded=s.coverage*(s.end-s.start), meanW=s.allocated_import_kwh!=null&&recorded>0?s.allocated_import_kwh*3600000/recorded:null;
+  const band=forecast.available&&forecast.high_kwh-forecast.low_kwh>=1?t('{low} – {high} kWh Band',{low:number(forecast.low_kwh,0),high:number(forecast.high_kwh,0)}):forecast.available?t('Mittel gleicher Wochentage'):t('Noch keine belastbare Datenbasis');
+  const cards=`<div class="cards">${metric(t('Nachtgrundlast (P10)'),number(data.baseline_w,0),'W',t('{count} ausreichend erfasste Nachtintervalle',{count:data.night_quarters}),'☾',true)}${metric(t('Mittlere Leistung'),number(meanW,0),'W',t('Netzbezug je erfasster Stunde im Zeitraum'),'▥')}${metric(t('Hohe Last'),number(s.high_load_hours,2),'h',t('Intervallmittel ≥ {watts}',{watts:unit(settings.high_load_w,'W',0)}),'↗')}${metric(t('Monatsprognose'),number(forecast.available?forecast.expected_kwh:null,0),'kWh',band,'⌁')}</div><p class="copy-footnote cards-note">${esc(t(forecast.available?forecast.method:forecast.reason))}</p>`;
   const anomaly=data.anomalies.map(a=>`<div class="insight"><span class="insight-icon">◉</span><div><h3>${esc(t(a.title))}</h3><p>${esc(t(a.text,numberParams(a.params)))}</p></div></div>`).join('');
-  $('#page-analysis').innerHTML=cards+panel(t('Stundenmuster'),'',heatmap(data.heatmap))+`<div class="grid-two"><div>${panel(t('Lastdauerlinie'),'',durationChart(data))}${panel(t('Auffälligkeiten'),'',anomaly)}</div><div>${panel(t('Tagesverlauf'),'',profileChart(data.profile))}</div></div>`+panel(t('Prognose'),'',`<p class="muted">${esc(forecastText)}</p>`);
+  const profile=profileChart(data.profile);
+  $('#page-analysis').innerHTML=cards+panel(t('Stundenmuster'),'',heatmap(data.heatmap))+`<div class="grid-two"><div>${panel(t('Lastdauerlinie'),t('Erfasste Viertelstundenmittel nach Höhe sortiert'),durationChart(data))}${panel(t('Auffälligkeiten'),'',anomaly)}</div><div>${panel(t('Tagesverlauf'),t('Mittlere Netzleistung je Stunde'),profile.html,profile.legend)}</div></div>`;
   mountOverlayToggles($('#page-analysis'),()=>loadPage());
   mountAnalysisInsights().catch(error=>toast(error.message,true));
 }
@@ -330,7 +383,8 @@ async function loadPage({background=false}={}) {
   try {
     const q=query();
     if(['dashboard','history','analysis','costs','reports'].includes(selected)) {
-      const requests=[api('/api/overview?'+q)];
+      // Die Serie der Vorperiode nur, wenn ein Diagramm sie als Vergleichslinie zeigt.
+      const requests=[api('/api/overview?'+q+(comparisonWanted()?'&compare=1':''))];
       if(selected==='analysis')requests.push(api('/api/analysis?'+q));
       if(selected==='costs')requests.push(api('/api/tariffs'));
       const result=await Promise.all(requests);if(version!==requestVersion)return;

@@ -729,7 +729,7 @@ def create_app(config=None):
 
     @app.get("/api/overview")
     def overview(start: str | None = None, end: str | None = None, hours: int | None = None, minutes: int | None = None,
-                 since: int | None = None, until: int | None = None):
+                 since: int | None = None, until: int | None = None, compare: bool = False):
         s, e = range_for(start, end, hours, minutes, since, until)
         a = Analytics(store)
         # Minutenfenster rechnen mit Minutenwerten, alles andere mit Viertelstunden.
@@ -746,10 +746,14 @@ def create_app(config=None):
         # Historische Teilviertelstunden nicht als zeitgenau rekonstruieren.
         previous_end = int(previous_end // step) * step
         previous = a.summary(previous_start, previous_end, step) if previous_end > previous_start else None
-        # Referenzwert für Tagesbalken: Monatsziel als durchschnittlicher Tagesanteil.
+        # Die Vorperiode als Serie nur auf Wunsch (Vergleichslinie im Diagramm), sie kostet einen zweiten Durchlauf.
+        if previous and compare:
+            previous["series"] = a.series(previous_start, previous_end)
+        # Referenzwerte für die Diagramme: Monatsziel als Tagesanteil, Nachtgrundlast der letzten sieben Tage.
         monthly_kwh = store.state("budget", {}).get("monthly_kwh")
         targets = {"daily_kwh": monthly_kwh * 12 / 365.25 if monthly_kwh else None,
-                   "household": insights.household_reference(store.settings())}
+                   "household": insights.household_reference(store.settings()),
+                   "baseline_w": insights.night_baseline(a, e - 7 * 86400, e)}
         # CO₂-Werte gibt es je Viertelstunde; Minutenwerte der jeweiligen Viertelstunde zuordnen.
         buckets = [dict(row, ts=row["ts"] // 900 * 900) for row in store.bucket_rows(s, e, step)]
         return {"summary": a.summary(s, e, step), "previous": previous, "series": a.series(s, e),

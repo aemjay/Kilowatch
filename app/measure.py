@@ -8,7 +8,7 @@ import time
 
 from .analytics import Analytics
 from .i18n import _
-from .insights import night_quarters
+from .insights import night_baseline
 
 MAX_SECONDS = 24 * 3600
 FRESH_SECONDS = 30
@@ -21,12 +21,6 @@ def fresh_import(store, now):
     if not latest or now - latest["ts"] > FRESH_SECONDS or latest.get("import_kwh") is None:
         raise ValueError("Kein frischer Bezugszählerstand. Erfassung und Bridge prüfen.")
     return latest
-
-
-def night_baseline(analytics, start, end):
-    """Nachtgrundlast wie in der Analyse: 10. Perzentil der Nachtviertelstunden, mindestens zwölf."""
-    night = sorted(power for _, power in night_quarters(analytics, analytics.store.bucket_rows(start, end)))
-    return night[int((len(night) - 1) * .1)] if len(night) >= 12 else None
 
 
 def window_rate(analytics, start, end):
