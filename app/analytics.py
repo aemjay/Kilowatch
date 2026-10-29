@@ -52,7 +52,10 @@ def period(start, end, zone, now, hours=None, minutes=None, since=None, until=No
 class Analytics:
     def __init__(self, store):
         self.store = store
-        self.zone = store.settings()["timezone"]
+        settings = store.settings()
+        self.zone = settings["timezone"]
+        # Grenze hohe Last; 0 oder leer = aus.
+        self.high_load_w = settings.get("high_load_w") or None
         self.tariffs = store.rows("SELECT * FROM tariffs ORDER BY start_date")
         schedules = store.state("tariff_schedules", {})
         self.tariffs = [dict(row, **schedules.get(row["start_date"], {})) for row in self.tariffs]
@@ -151,13 +154,23 @@ class Analytics:
             "coverage": coverage, "export_coverage": min(1, exp_s / seconds) if seconds > 0 else 0,
             "estimated_import_kwh": sum(r["estimated_import"] for r in rows),
             "estimated_export_kwh": sum(r["estimated_export"] for r in rows),
-            "peak_w": peak, "high_load_hours": sum(r["high_s"] for r in rows) / 3600,
+            "peak_w": peak, "high_load_hours": self.high_load_hours(rows), "high_load_w": self.high_load_w,
             "energy_cost_eur": energy_cost, "base_cost_eur": base, "feedin_eur": revenue,
             "base_month_factor": self.base_factor(start, end),
             "known_cost_eur": energy_cost + base - revenue if self.tariffs else None,
             "cost_complete": complete, "unpriced_kwh": unpriced_kwh + recovered_import,
             "tariff_missing": tariff_missing or base_missing,
         }
+
+    def high_load_hours(self, rows):
+        """Erfasste Zeit der Intervalle, deren mittlere Leistung die Grenze hohe Last erreicht; ohne Grenze None.
+
+        Gerechnet wird bei jeder Abfrage aus den Intervallmitteln (Viertelstunden, in Minutenansichten Minuten),
+        daher gilt eine geänderte Grenze auch für die Vergangenheit.
+        """
+        if not self.high_load_w:
+            return None
+        return sum(r["power_s"] for r in rows if r["power_s"] and r["power_ws"] / r["power_s"] >= self.high_load_w) / 3600
 
     def series(self, start, end):
         # Energie immer aus permanenten Viertelstundenwerten, Leistung für kurze

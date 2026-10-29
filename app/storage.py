@@ -252,7 +252,7 @@ class Store:
                                       (pmean or 0) * duration, duration if pmean is not None else 0,
                                       min(p0, p1) if pmean is not None else None,
                                       max(p0, p1) if pmean is not None else None,
-                                      duration if pmean is not None and pmean >= settings["high_load_w"] else 0)
+                                      duration if pmean is not None and settings["high_load_w"] and pmean >= settings["high_load_w"] else 0)
                             self.conn.execute("""INSERT INTO buckets VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                                 ON CONFLICT(resolution,ts) DO UPDATE SET
                                 import_kwh=import_kwh+excluded.import_kwh,

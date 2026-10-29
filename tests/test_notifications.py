@@ -81,8 +81,11 @@ def test_quiet_hours_also_cover_repeated_dst_hour(stamp,expected):
     assert quiet_now(config,datetime.fromisoformat(stamp).timestamp(),"Europe/Berlin")==expected
 
 
-def prepare_engine(client,monkeypatch,**extra):
+def prepare_engine(client,monkeypatch,high_load_w=None,**extra):
     engine=client.app.state.notifier
+    # Die Grenze der Dauerlast ist die gemeinsame Grenze hohe Last aus den Einstellungen.
+    if high_load_w is not None:
+        client.app_store.update_settings({"high_load_w":high_load_w})
     engine.save(NotificationSettings(**email_config(**extra)))
     client.app_store.update_settings({"bridge_host":"bridge.example.lan","bridge_user":"synthetic-user"})
     client.app.state.vault.update({"bridge_password":"synthetic-password"})
@@ -136,7 +139,7 @@ def test_retry_is_bounded_and_survives_restart(authenticated,monkeypatch):
 
 
 def test_high_load_requires_configured_duration(authenticated,monkeypatch):
-    engine=prepare_engine(authenticated,monkeypatch,load_enabled=True,load_minutes=1,load_w=3000)
+    engine=prepare_engine(authenticated,monkeypatch,load_enabled=True,load_minutes=1,high_load_w=3000)
     now=2000000000
     engine.started=now
     for offset in [0,20,40,60]:
@@ -174,7 +177,7 @@ def test_saving_unchanged_config_does_not_repeat_alarm(authenticated,monkeypatch
 
 
 def test_measurement_gap_does_not_prove_continuous_high_load(authenticated,monkeypatch):
-    engine=prepare_engine(authenticated,monkeypatch,load_enabled=True,load_minutes=1,load_w=3000)
+    engine=prepare_engine(authenticated,monkeypatch,load_enabled=True,load_minutes=1,high_load_w=3000)
     now=2000000000
     engine.started=now
     authenticated.app_store.ingest(Reading(4000,None,None,"SYNTHETIC"),now)
@@ -222,7 +225,7 @@ def test_disabling_rule_cancels_pending_alert_without_fresh_measurement(authenti
 
 
 def test_load_below_threshold_restarts_delay_before_first_alarm(authenticated,monkeypatch):
-    engine=prepare_engine(authenticated,monkeypatch,load_enabled=True,load_minutes=1,load_w=3000)
+    engine=prepare_engine(authenticated,monkeypatch,load_enabled=True,load_minutes=1,high_load_w=3000)
     now=2000000000
     engine.started=now
     for offset,power in [(0,4000),(20,2900),(40,4000),(60,4000),(80,4000)]:
@@ -286,3 +289,39 @@ def test_sender_name_and_subject_code(authenticated,monkeypatch):
     assert authenticated.get("/api/notifications").json()["settings"]["subject_code"]=="Kuckuck-17"
     assert authenticated.post("/api/notifications/test/email").status_code==200
     assert sent[-1]["Subject"].startswith("[Kuckuck-17] Kilowatch")
+
+
+def test_load_alarm_uses_the_shared_limit_and_needs_one(authenticated,monkeypatch):
+    engine=prepare_engine(authenticated,monkeypatch,load_enabled=True,load_minutes=1,high_load_w=5000)
+    now=2000000000
+    engine.started=now
+    for offset in [0,20,40,60]:
+        engine.store.ingest(Reading(4000,None,None,"SYNTHETIC"),now+offset)
+        engine.evaluate(now+offset)
+    # 4 kW liegt unter der gemeinsamen Grenze von 5 kW: kein Alarm, auch wenn die frühere Vorgabe 3 kW war.
+    assert not engine.store.rows("SELECT * FROM notifications WHERE rule_key='load'")
+    # Grenze aus: Alarm lässt sich nicht einschalten, und das Ausschalten der Grenze schaltet ihn ab.
+    assert authenticated.put("/api/settings",json={"high_load_w":0}).status_code==200
+    assert engine.config().load_enabled is False and authenticated.get("/api/settings").json()["high_load_w"]==0
+    response=authenticated.put("/api/notifications",json=dict(engine.config().model_dump(),load_enabled=True))
+    assert response.status_code==400 and "Grenze hohe Last" in response.json()["detail"]
+    assert authenticated.put("/api/notifications",json=dict(engine.config().model_dump(),load_w=3000)).status_code==422
+
+
+def test_old_separate_alarm_limit_is_adopted_once(tmp_path):
+    from app.config import Config
+    from app.main import create_app
+    app=create_app(Config(tmp_path,testing=True))
+    store=app.state.store
+    store.set_state("notification_settings",{**email_config(),"load_enabled":True,"load_w":4500})
+    store.set_state("load_threshold_unified",False)
+    store.close()
+    app=create_app(Config(tmp_path,testing=True))
+    assert app.state.store.settings()["high_load_w"]==4500
+    assert app.state.notifier.config().load_enabled is True
+    # Danach gilt nur noch die gemeinsame Grenze; ein späterer Start übernimmt nichts mehr.
+    app.state.store.update_settings({"high_load_w":2500})
+    app.state.store.close()
+    app=create_app(Config(tmp_path,testing=True))
+    assert app.state.store.settings()["high_load_w"]==2500
+    app.state.store.close()

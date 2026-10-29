@@ -20,7 +20,7 @@ Zertifikate werden geprüft, einen unverschlüsselten Rückfall gibt es nicht. �
 | Regel | Vorgabe | Verhalten |
 |---|---|---|
 | Keine frischen Zählerdaten | 120 s (an) | meldet ausbleibende Messungen |
-| Hohe Dauerlast | 3000 W für 10 min (aus) | nur bei frischen, durchgehenden Daten; Entwarnung unter 90 % der Schwelle |
+| Hohe Dauerlast | Grenze hohe Last aus **Einstellungen → Auswertung** (Standard 3000 W) für 10 min (aus) | nur bei frischen, durchgehenden Daten; Entwarnung unter 90 % der Grenze. Ohne Grenze lässt sich die Regel nicht einschalten; wer die Grenze leert, schaltet sie mit aus |
 | Tagesbudget Netzbezug | 0 kWh = aus | einmal pro Tag bei Erreichen; bei Lücken kann mehr verbraucht worden sein |
 | Monatsbudget | aus | meldet, wenn die erfassten Kosten das [Budget](TARIFE.md#budget-und-abschlag) erreichen |
 | Batteriespannung | 2,7 V (an) | nur bei aktueller Diagnose; ein Hinweis, keine Restlaufzeit |

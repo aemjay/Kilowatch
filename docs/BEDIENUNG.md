@@ -19,7 +19,9 @@ Diagramme ablesen, Zeiträume zoomen, Sprache und Währung wählen.
 | **Gleitender Ø** | Mittel über die letzten 5 oder 15 Minuten bzw. 2 Stunden (Leistung), 7 Tage oder 3 Monate (Energie); bricht an Messlücken ab |
 | **Vorperiode** | der gleich lange Zeitraum davor: als gestrichelte Linie über der Leistungskurve, als graue Schatten hinter den Energiebalken. Die Serie wird erst geladen, wenn du sie einschaltest |
 | **Nachtgrundlast**, **Grundlast kWh/Tag** | Nachtgrundlast der letzten sieben Tage, bei Tagesbalken als Energie pro Tag |
-| **Grenze hohe Last**, **Tagesziel**, **Typischer Haushalt** | Schwelle aus den Einstellungen, Monatsziel als Tagesanteil, Stromspiegel-Referenz |
+| **Grenze hohe Last**, **Tagesziel**, **Typischer Haushalt** | Grenze aus **Einstellungen → Auswertung** (leer = aus, dann wird die Linie nicht angeboten), Monatsziel als Tagesanteil, Stromspiegel-Referenz |
+
+Die **Grenze hohe Last** ist eine einzige Einstellung für alle Anzeigen: die Linie in den Diagrammen, die Karte „Hohe Last“ der Analyse (ohne Grenze steht dort die Leistungsspitze) und den Alarm „Hohe Dauerlast“. Eine Änderung gilt auch rückwirkend.
 
 Referenzlinien verändern die Achse nicht: Liegt ein Wert über dem Diagramm, steht nur sein Name mit ▲ am oberen Rand. Der Prozentvergleich zur Vorperiode (Übersicht) erscheint erst, wenn beide Zeiträume zu mindestens 95 % erfasst sind; die Vorperiode selbst ist immer sichtbar.
 

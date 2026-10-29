@@ -94,6 +94,21 @@ class NotificationUpdate(NotificationSettings):
     clear_smtp_password: bool = False
 
 
+def unify_load_threshold(store):
+    """Bis 1.7.0 hatte der Alarm „Hohe Dauerlast“ eine eigene Grenze (load_w). Einmalig in die gemeinsame Grenze übernehmen.
+
+    Übernommen wird sie, wenn sie vom Standard abweicht und die Analyse-Schwelle noch auf dem Standard steht, oder wenn
+    der Alarm eingeschaltet ist: Dann bleibt sein Verhalten gleich.
+    """
+    if store.state("load_threshold_unified", False):
+        return
+    saved = store.state("notification_settings", {})
+    old, current = saved.get("load_w"), store.settings()["high_load_w"]
+    if isinstance(old, int) and 100 <= old <= 100000 and old != current and (current == 3000 or saved.get("load_enabled")):
+        store.update_settings({"high_load_w": old})
+    store.set_state("load_threshold_unified", True)
+
+
 class SettingsUpdate(StrictModel):
     bridge_host: str | None = None
     bridge_user: str | None = Field(default=None, min_length=1, max_length=80)
@@ -104,7 +119,8 @@ class SettingsUpdate(StrictModel):
     max_power_w: int | None = Field(default=None, ge=1000, le=1000000)
     raw_retention_days: int | None = Field(default=None, ge=0, le=3650)
     minute_retention_days: int | None = Field(default=None, ge=0, le=10000)
-    high_load_w: int | None = Field(default=None, ge=100, le=100000)
+    # Grenze hohe Last für Diagramme, Analyse und den Alarm „Hohe Dauerlast“; 0 = aus.
+    high_load_w: int | None = Field(default=None, ge=0, le=100000)
     enabled: bool | None = None
     name: str | None = Field(default=None, min_length=1, max_length=80)
     language: str | None = None
@@ -113,6 +129,13 @@ class SettingsUpdate(StrictModel):
     household_persons: int | None = Field(default=None, ge=0, le=5)
     household_type: str | None = None
     household_hot_water: bool | None = None
+
+    @field_validator("high_load_w")
+    @classmethod
+    def valid_high_load(cls, v):
+        if v is not None and 0 < v < 100:
+            raise ValueError("Grenze hohe Last: mindestens 100 W oder leer für aus.")
+        return v
 
     @field_validator("household_type")
     @classmethod
@@ -388,6 +411,7 @@ def create_app(config=None):
     if vault.get("signal_token", None) is not None:
         # Reste des in 1.2 entfernten Signal-Kanals.
         vault.update({"signal_token": None})
+    unify_load_threshold(store)
     discovery = Discovery()
     market = Market(store, config.demo)
     updates = Updates(store, config.update_repository, config.demo)
@@ -638,6 +662,9 @@ def create_app(config=None):
         if password:
             vault.update({"bridge_password": password})
         store.update_settings(values)
+        if values.get("high_load_w") == 0 and notifier.config().load_enabled:
+            # Ohne Grenze gibt es keine Dauerlast; der Alarm wird mit ausgeschaltet statt still wirkungslos zu bleiben.
+            notifier.save(notifier.config().model_copy(update={"load_enabled": False}))
         collector.wakeup.set()
         if "grid_country" in values:
             grid.wakeup.set()

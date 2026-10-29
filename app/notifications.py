@@ -37,8 +37,8 @@ class NotificationSettings(BaseModel):
     cooldown_minutes: int = Field(default=60, ge=5, le=1440)
     offline_enabled: bool = True
     offline_seconds: int = Field(default=120, ge=30, le=3600)
+    # Die Grenze kommt aus den Einstellungen (high_load_w), gemeinsam mit Diagrammen und Analyse.
     load_enabled: bool = False
-    load_w: int = Field(default=3000, ge=100, le=1000000)
     load_minutes: int = Field(default=10, ge=1, le=240)
     daily_kwh: float = Field(default=0, ge=0, le=10000)
     budget_enabled: bool = False
@@ -132,6 +132,7 @@ class Notifications:
         self.demo = demo
         self.started = time.time()
         self.high_since = None
+        self.high_limit = None
         self.wakeup = asyncio.Event()
         self.rule_state = store.state("notification_rules", {})
         self.last_error = ""
@@ -151,6 +152,8 @@ class Notifications:
         return NotificationSettings(**{key: value for key, value in saved.items() if key in NotificationSettings.model_fields})
 
     def validate(self, config):
+        if config.load_enabled and not self.store.settings().get("high_load_w"):
+            raise ValueError("Für den Alarm „Hohe Dauerlast“ zuerst unter Einstellungen → Auswertung eine Grenze hohe Last festlegen.")
         if not config.enabled:
             return
         if not self.channels(config):
@@ -174,7 +177,7 @@ class Notifications:
             # Reines Speichern oder Testen setzt die Entprellung nicht zurück.
             self.rule_state = {key: {"active": False, "notified": [], "last_alert": value["last_alert"]}
                                for key, value in self.rule_state.items()}
-        if old.load_w != config.load_w or old.load_minutes != config.load_minutes or not config.load_enabled:
+        if old.load_minutes != config.load_minutes or not config.load_enabled:
             self.high_since = None
         for key in list(self.rule_state):
             rule_enabled = {"offline": config.offline_enabled, "load": config.load_enabled,
@@ -252,17 +255,25 @@ class Notifications:
         offline |= self.rule_state.get("offline", {}).get("active", False) and (latest is None or latest["ts"] < self.started)
         self.rule("offline", offline, "Keine frischen Zählerdaten", "Seit mindestens {seconds} Sekunden fehlen neue Messwerte. Kilowatch versucht die Verbindung weiterherzustellen.", now, config, config.offline_enabled,
                   params={"seconds": config.offline_seconds})
-        if latest and now - latest["ts"] <= 30 and latest["power_w"] is not None:
+        limit = settings.get("high_load_w") or None
+        if limit != self.high_limit:
+            # Eine geänderte Grenze beginnt die Dauer neu.
+            self.high_since, self.high_limit = None, limit
+        if not limit:
+            # Ohne Grenze keine Dauerlast; ein offener Alarm wird wie bei einer ausgeschalteten Regel verworfen.
+            self.high_since = None
+            self.rule("load", False, "Hohe Dauerlast", "", now, config, False)
+        elif latest and now - latest["ts"] <= 30 and latest["power_w"] is not None:
             watts = latest["power_w"]
             old_load = self.rule_state.get("load", {}).get("active", False)
-            if watts >= config.load_w:
+            if watts >= limit:
                 self.high_since = self.high_since if self.high_since is not None else now
-            elif not old_load or watts < config.load_w * .9:
+            elif not old_load or watts < limit * .9:
                 self.high_since = None
-            active = ((old_load and watts >= config.load_w * .9) or
+            active = ((old_load and watts >= limit * .9) or
                       (self.high_since is not None and now - self.high_since >= config.load_minutes * 60))
             self.rule("load", active, "Hohe Dauerlast", "Netzleistung seit mindestens {minutes} Minuten über {limit} W. Aktuell {watts} W. Eine Gerätezuordnung ist daraus nicht möglich.", now, config, config.load_enabled,
-                      params={"minutes": config.load_minutes, "limit": config.load_w, "watts": (watts, 0)})
+                      params={"minutes": config.load_minutes, "limit": limit, "watts": (watts, 0)})
         else:
             # Eine Messlücke beweist keine durchgehende hohe Last.
             self.high_since = None
